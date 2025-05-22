@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+
+# Logs
+logs/
+*.log
+
+
+
+# Optional npm cache directory
+.npm/
+
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# parcel-bundler cache files
+.cache/
+dist/
+
+
+
+
+
+# Bun
+.bun/
+bun.lockb
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Ensure these directories are tracked
+!src/
+!examples/
+!drafts/
