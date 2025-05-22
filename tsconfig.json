@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", // הגדרת גרסת היעד של JavaScript
+    "module": "commonjs", // הגדרת מערכת המודולים
+    "esModuleInterop": true, // מאפשר תאימות טובה יותר עם מודולים של CommonJS
+    "forceConsistentCasingInFileNames": true, // מוודא שימוש עקבי באותיות גדולות/קטנות בשמות קבצים
+    "strict": true, // מפעיל את כל בדיקות הטיפוסים המחמירות
+    "skipLibCheck": true, // מדלג על בדיקת טיפוסים בקבצי הצהרה (d.ts)
+    "allowImportingTsExtensions": true, // מאפשר ייבוא קבצים עם סיומת .ts
+    "downlevelIteration": true, // מאפשר איטרציה נכונה על אובייקטים איטרביליים בגרסאות ישנות של JavaScript
+    "noEmit": true, // מונע יצירת קבצי פלט JavaScript (שימושי אם משתמשים בכלי אחר לבנייה, כמו Babel או bun)
+    "resolveJsonModule": true // מאפשר ייבוא קבצי JSON
+  },
+  "include": [
+    "**/*.ts" // כולל את כל קבצי ה-TypeScript בפרויקט
+, "drafts/wake-on-lan-test.mjs"  ],
+  "exclude": [
+    "node_modules" // לא כולל את תיקיית node_modules
+  ]
+}

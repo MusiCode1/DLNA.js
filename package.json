@@ -1,0 +1,25 @@
+{
+  "dependencies": {
+    "@achingbrain/ssdp": "^4.2.2",
+    "@types/xml2js": "^0.4.14",
+    "axios": "^1.9.0",
+    "dlna-browser-utils": "^0.0.2",
+    "node-ssdp": "^4.0.1",
+    "strong-soap": "^4.1.12",
+    "upnp-mediarenderer-client": "^1.4.0",
+    "wake-on-lan": "^0.1.0",
+    "wake_on_lan": "^1.0.0",
+    "winston": "^3.17.0",
+    "xml2js": "^0.6.2",
+    "xmlbuilder2": "^3.1.1"
+  },
+  "scripts": {
+    "example:custom-discovery": "node node_modules/ts-node/dist/bin.js examples/testCustomDiscovery.ts",
+    "example:comprehensive": "node node_modules/ts-node/dist/bin.js examples/comprehensiveUpnpExample.ts"
+  },
+  "devDependencies": {
+    "@types/node-ssdp": "^4.0.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}

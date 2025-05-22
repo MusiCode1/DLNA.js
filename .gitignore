@@ -1,12 +1,12 @@
 # Dependencies
 node_modules/
-
-
+.venv/
+.*/
 # Logs
 logs/
 *.log
 
-
+temp/
 
 # Optional npm cache directory
 .npm/
