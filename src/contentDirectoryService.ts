@@ -1,5 +1,5 @@
 import { createModuleLogger } from './logger'; // הוספת ייבוא הלוגר
-import { UpnpSoapClient } from './upnpSoapClient';
+import { sendUpnpCommand } from './upnpSoapClient';
 import {
     ServiceDescription,
     Action,
@@ -29,7 +29,7 @@ import * as xml2js from 'xml2js';
 export class ContentDirectoryService {
     private controlURL: string;
     private serviceType: string;
-    private soapClient: UpnpSoapClient;
+    // private soapClient: UpnpSoapClient; // הוסר מכיוון שנשתמש ישירות ב-sendUpnpCommand
     private serviceDescription: ServiceDescription; // מכיל actionList ו-stateVariables
     private xmlParser: xml2js.Parser;
     private logger: ReturnType<typeof createModuleLogger>; // שימוש ב-ReturnType
@@ -38,10 +38,9 @@ export class ContentDirectoryService {
      * @constructor
      * @param {ServiceDescription} serviceInfo - אובייקט ServiceDescription המכיל את פרטי השירות,
      *                                         כולל `controlURL`, `serviceType`, `actionList` ורצוי גם `stateVariables`.
-     * @param {UpnpSoapClient} soapClient - אינסטנס של UpnpSoapClient.
      * @throws {Error} אם `actionList` חסר ב-`serviceInfo`.
      */
-    constructor(serviceInfo: ServiceDescription, soapClient: UpnpSoapClient) {
+    constructor(serviceInfo: ServiceDescription) {
         // נבדוק אם actionList קיים, הוא חיוני לדעת אילו פעולות קיימות
         if (!serviceInfo.actionList) {
             throw new Error("ContentDirectoryService requires ServiceDescription to have an actionList (from parsed SCPD data).");
@@ -56,7 +55,7 @@ export class ContentDirectoryService {
         this.serviceDescription = serviceInfo;
         this.controlURL = serviceInfo.controlURL;
         this.serviceType = serviceInfo.serviceType;
-        this.soapClient = soapClient;
+        // this.soapClient = soapClient; // הוסר
         this.logger = createModuleLogger('contentDirectoryService'); // אתחול הלוגר
  
         // אופציות לפרסר של DIDL-Lite, כפי שהומלץ בתכנון
@@ -82,7 +81,9 @@ export class ContentDirectoryService {
      */
     private getAction(actionName: string): Action | undefined {
         // actionList מובטח להיות קיים מהקונסטרקטור
-        return this.serviceDescription.actionList!.find((a: Action) => a.name === actionName);
+        // חיפוש case-insensitive לשם הפעולה
+        const lowerCaseActionName = actionName.toLowerCase();
+        return this.serviceDescription.actionList!.find((a: Action) => a.name.toLowerCase() === lowerCaseActionName);
     }
 
     /**
@@ -205,6 +206,44 @@ export class ContentDirectoryService {
         }
     }
 
+    /**
+     * @method _invokeSoapAction
+     * @private
+     * @async
+     * @description עוטפת את הקריאה ל-sendUpnpCommand וממירה את התוצאה או השגיאה לפורמט SoapResponse.
+     * @param {string} actionName - שם הפעולה לביצוע.
+     * @param {Record<string, any>} params - פרמטרים לפעולה.
+     * @returns {Promise<SoapResponse>}
+     */
+    private async _invokeSoapAction(actionName: string, params: Record<string, any>): Promise<SoapResponse> {
+        this.logger.debug(`Invoking ${actionName} via _invokeSoapAction with params`, { params: JSON.stringify(params) });
+        try {
+            const actionResult = await sendUpnpCommand(
+                this.controlURL,
+                this.serviceType,
+                actionName,
+                params
+            );
+            // הנחה: התוצאה הגולמית היא התוצאה עצמה, כפי ש-sendUpnpCommand מחזיר את actionResponse ישירות.
+            // אם sendUpnpCommand היה מחזיר את כל ה-parsedXml, היינו צריכים לחלץ את actionResponse ואת raw.
+            return { success: true, data: { actionResponse: actionResult, raw: actionResult } };
+        } catch (error: any) {
+            if (error.soapFault) {
+                this.logger.warn(`SOAP fault received for action ${actionName}`, { fault: error.soapFault });
+                return { success: false, fault: error.soapFault };
+            } else {
+                this.logger.error(`Client-side error during SOAP action ${actionName}`, { message: error.message, stack: error.stack });
+                return {
+                    success: false,
+                    fault: {
+                        faultCode: 'ClientError',
+                        faultString: error.message || `Unknown client error during ${actionName}`,
+                        detail: error.stack
+                    }
+                };
+            }
+        }
+    }
 
     /**
      * @method browse
@@ -252,13 +291,7 @@ export class ContentDirectoryService {
             params[scpdArg ? scpdArg.name : stdName] = value; // השתמש בשם מה-SCPD אם קיים, אחרת בשם הסטנדרטי
         }
         
-        this.logger.debug(`Invoking ${actionName} with params`, { params: JSON.stringify(params) });
-        const soapResponse: SoapResponse = await this.soapClient.invokeAction(
-            this.controlURL,
-            this.serviceType,
-            actionName,
-            params
-        );
+        const soapResponse: SoapResponse = await this._invokeSoapAction(actionName, params);
 
         if (soapResponse.success && soapResponse.data && soapResponse.data.actionResponse) {
             const responseData = soapResponse.data.actionResponse;
@@ -334,14 +367,8 @@ export class ContentDirectoryService {
             const scpdArg = actionArguments.find((arg: ActionArgument) => arg.name === stdName && arg.direction === 'in');
             params[scpdArg ? scpdArg.name : stdName] = value;
         }
- 
-        this.logger.debug(`Invoking ${actionName} with params`, { params: JSON.stringify(params) });
-        const soapResponse: SoapResponse = await this.soapClient.invokeAction(
-            this.controlURL,
-            this.serviceType,
-            actionName,
-            params
-        );
+  
+        const soapResponse: SoapResponse = await this._invokeSoapAction(actionName, params);
 
         if (soapResponse.success && soapResponse.data && soapResponse.data.actionResponse) {
             const responseData = soapResponse.data.actionResponse;

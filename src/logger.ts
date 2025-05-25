@@ -87,7 +87,32 @@ const createTextFormat = (moduleLabel?: string) => winston.format.combine(
 
     if (filteredMeta.length > 0 && !(info instanceof Error && info.stack)) {
       const metaString = filteredMeta
-        .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+        .map(([key, value]) => {
+          if (value instanceof Error) {
+            return `${key}=Error: ${value.message}${value.stack ? `\nStack: ${value.stack}` : ''}`;
+          } else if (typeof value === 'object' && value !== null &&
+                     ('message' in value || 'code' in value || 'stack' in value || 'errno' in value || 'syscall' in value || 'address' in value || 'port' in value)
+                    ) {
+            let errMsg = `${key}=PotentialError: { `;
+            if ('message' in value && (value as any).message) errMsg += `message: "${(value as any).message}", `;
+            if ('code' in value) errMsg += `code: "${(value as any).code}", `;
+            if ('errno' in value) errMsg += `errno: ${(value as any).errno}, `;
+            if ('syscall' in value) errMsg += `syscall: "${(value as any).syscall}", `;
+            if ('address' in value) errMsg += `address: "${(value as any).address}", `;
+            if ('port' in value) errMsg += `port: ${(value as any).port}, `;
+            errMsg = errMsg.replace(/, $/, ''); // הסרת פסיק אחרון אם קיים
+            errMsg += ` }`;
+            if ('stack' in value && (value as any).stack) {
+                 errMsg += `\nStack: ${(value as any).stack}`;
+            }
+            return errMsg;
+          }
+          try {
+            return `${key}=${JSON.stringify(value)}`;
+          } catch (e) {
+            return `${key}=[UnstringifiableObject]`;
+          }
+        })
         .join(' ');
       if (metaString) {
         logMessage += ` ${metaString}`;
@@ -129,7 +154,32 @@ export const consoleFormat = (moduleLabel?: string) => winston.format.combine(
     const filteredRest = Object.entries(rest);
     if (filteredRest.length > 0) {
       const metaString = filteredRest
-        .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+        .map(([key, value]) => {
+          if (value instanceof Error) {
+            return `${key}=Error: ${value.message}${value.stack ? `\nStack: ${value.stack}` : ''}`;
+          } else if (typeof value === 'object' && value !== null &&
+                     ('message' in value || 'code' in value || 'stack' in value || 'errno' in value || 'syscall' in value || 'address' in value || 'port' in value)
+                    ) {
+            let errMsg = `${key}=PotentialError: { `;
+            if ('message' in value && (value as any).message) errMsg += `message: "${(value as any).message}", `;
+            if ('code' in value) errMsg += `code: "${(value as any).code}", `;
+            if ('errno' in value) errMsg += `errno: ${(value as any).errno}, `;
+            if ('syscall' in value) errMsg += `syscall: "${(value as any).syscall}", `;
+            if ('address' in value) errMsg += `address: "${(value as any).address}", `;
+            if ('port' in value) errMsg += `port: ${(value as any).port}, `;
+            errMsg = errMsg.replace(/, $/, ''); // הסרת פסיק אחרון אם קיים
+            errMsg += ` }`;
+            if ('stack' in value && (value as any).stack) {
+                 errMsg += `\nStack: ${(value as any).stack}`;
+            }
+            return errMsg;
+          }
+          try {
+            return `${key}=${JSON.stringify(value)}`;
+          } catch (e) {
+            return `${key}=[UnstringifiableObject]`;
+          }
+        })
         .join(' ');
       if (metaString) {
         logMessage += ` ${metaString}`;

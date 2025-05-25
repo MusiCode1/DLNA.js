@@ -1,5 +1,6 @@
 // קובץ זה מכיל את כל הגדרות הממשקים והטיפוסים הקשורים ל-UPnP.
 import type { ContentDirectory, AVTransport, RenderingControl } from './specificTypes';
+// AbortSignal זמין גלובלית ב-Node.js מודרני, אין צורך בייבוא.
 
 /**
  * @hebrew אפשרויות עבור פונקציית הגילוי.
@@ -23,28 +24,60 @@ export interface DiscoveryOptions {
     /**
      * @hebrew פונקציית קולבק שתוזמן מיד עם קבלת תגובה ייחודית מהתקן SSDP.
      */
-    onDeviceFound?: (device: BasicSsdpDevice) => void;
+    onDeviceFound?: (device: ProcessedDevice) => void; // שים לב: הטיפוס ProcessedDevice יוגדר בשלב מאוחר יותר
     /**
      * @hebrew האם לנסות לבצע גילוי גם על ממשקי IPv6 Link-Local.
      * @default false
      */
     includeIPv6?: boolean;
-    /**
-     * @hebrew מאפשר העברת פונקציית לוגינג מותאמת אישית.
-     * @default console
-     */
-    customLogger?: (level: 'debug' | 'warn' | 'error', message: string, ...optionalParams: any[]) => void;
+    // customLogger הוסר כחלק מאיחוד הלוגר
+    // /**
+    //  * @hebrew מאפשר העברת פונקציית לוגינג מותאמת אישית.
+    //  * @default console
+    //  */
+    // customLogger?: (level: 'debug' | 'warn' | 'error', message: string, ...optionalParams: any[]) => void;
     /**
      * @hebrew רשימת ממשקי רשת ידועה מראש (אופציונלי), במבנה זהה לזה המוחזר מ-`os.networkInterfaces()`.
      * אם לא יסופק, הפונקציה תשתמש ב-`os.networkInterfaces()`.
      */
     networkInterfaces?: NodeJS.Dict<import('os').NetworkInterfaceInfo[]>; // Added import('os') for clarity
+    /**
+     * @hebrew רמת הפירוט הרצויה עבור כל התקן שיימצא.
+     * @default 'full'
+     */
+    detailLevel?: DiscoveryDetailLevel;
+    /**
+     * @hebrew אובייקט AbortSignal חיצוני לביטול תהליך הגילוי.
+     */
+    abortSignal?: AbortSignal;
+}
+
+/**
+ * @hebrew רמות פירוט אפשריות לגילוי התקנים.
+ * - `basic`: רק מידע בסיסי מ-SSDP.
+ * - `description`: כולל ניתוח של קובץ התיאור של ההתקן.
+ * - `services`: כולל ניתוח של קבצי התיאור של השירותים (SCPD).
+ * - `full`: כולל את כל המידע הנ"ל.
+ */
+export enum DiscoveryDetailLevel {
+  /** @hebrew מחזיר רק מידע בסיסי מ-SSDP (כמו USN, location, server). */
+  Basic = 'basic',
+  /** @hebrew כולל ניתוח של קובץ התיאור של ההתקן (XML), אך לא את פרטי השירותים. */
+  Description = 'description',
+  /** @hebrew כולל ניתוח של קבצי התיאור של השירותים (SCPD), אך ללא יצירת פונקציות invoke/query. */
+  Services = 'services',
+  /** @hebrew כולל את כל המידע: תיאור התקן, תיאורי שירותים, ופונקציות invoke/query מוכנות לשימוש. */
+  Full = 'full',
 }
 
 /**
  * @hebrew מייצג התקן SSDP בסיסי שנמצא.
  */
 export interface BasicSsdpDevice {
+    /** @hebrew שגיאה אפשרית שקרתה במהלך עיבוד ההתקן ברמה זו. */
+    error?: string;
+    /** @hebrew רמת הפירוט שהושגה בפועל עבור התקן זה. */
+    detailLevelAchieved?: DiscoveryDetailLevel;
     /**
      * @hebrew USN (Unique Service Name) של ההתקן.
      */
@@ -58,32 +91,64 @@ export interface BasicSsdpDevice {
      */
     server: string;
     /**
-     * @hebrew ST (Service Type) של ההתקן.
+     * @hebrew ST (Search Target) או NT (Notification Type) של ההתקן.
      */
-    st: string;
+    st: string; // Search Target or Notification Type
     /**
-     * @hebrew כתובת ה-IP של ההתקן המגיב.
+     * @hebrew כתובת ה-IP של ההתקן השולח/מגיב.
      */
-    address: string;
+    remoteAddress: string;
     /**
-     * @hebrew כל כותרות התגובה מההתקן.
+     * @hebrew הפורט של ההתקן השולח/מגיב.
      */
-    responseHeaders: Record<string, string>;
+    remotePort: number;
     /**
-     * @hebrew חותמת זמן של מציאת ההתקן.
+     * @hebrew כל הכותרות שפורסרו מהודעת ה-SSDP.
+     */
+    headers: Record<string, string>;
+    /**
+     * @hebrew חותמת זמן של קבלת/עיבוד ההודעה.
      */
     timestamp: number;
+    /**
+     * @hebrew סוג הודעת ה-SSDP (בקשה או תגובה).
+     */
+    messageType: 'REQUEST' | 'RESPONSE';
+    /**
+     * @hebrew שיטת ה-HTTP (עבור בקשות כמו NOTIFY, M-SEARCH).
+     */
+    httpMethod?: string;
+    /**
+     * @hebrew קוד הסטטוס של HTTP (עבור תגובות).
+     */
+    httpStatusCode?: number;
+    /**
+     * @hebrew הודעת הסטטוס של HTTP (עבור תגובות).
+     */
+    httpStatusMessage?: string;
+    /**
+     * @hebrew ערך ה-max-age מכותרת ה-Cache-Control, אם קיים.
+     */
+    cacheControlMaxAge?: number;
+    /**
+     * @hebrew כותרת NTS (Notification Sub Type), רלוונטית להודעות NOTIFY.
+     */
+    nts?: string;
+    /**
+     * @hebrew גרסת ה-HTTP של ההודעה (למשל, "1.1").
+     */
+    httpVersion?: string;
 }
 
 /**
  * @hebrew מייצג אייקון של התקן.
  */
 export interface DeviceIcon {
-    mimetype: string;
+    mimetype?: string;
     width: number;
     height: number;
     depth: number;
-    url: string;
+    url?: string;
 }
 
 /**
@@ -95,8 +160,19 @@ export interface BaseServiceDescription {
     SCPDURL: string;
     controlURL: string;
     eventSubURL: string;
-    actions?: Record<string, Action | undefined>; // ברירת מחדל גנרית, מאפשר undefined כדי להתאים לממשקים ספציפיים
-    stateVariables?: StateVariable[];
+    /**
+     * @hebrew רשימת הפעולות הזמינות בשירות.
+     * מאוכלס לאחר ניתוח SCPD. בפאזה של `DeviceWithServicesDescription`,
+     * הפונקציה `invoke` על כל `Action` עדיין לא תהיה מוגדרת.
+     */
+    actionList?: Action[];
+    /**
+     * @hebrew רשימת משתני המצב של השירות.
+     * מאוכלס לאחר ניתוח SCPD. בפאזה של `DeviceWithServicesDescription`,
+     * הפונקציה `query` על כל `StateVariable` עדיין לא תהיה מוגדרת.
+     */
+    stateVariableList?: StateVariable[];
+    /** @hebrew שגיאה אפשרית שקרתה במהלך טעינת או ניתוח ה-SCPD. */
     scpdError?: string;
 }
 
@@ -158,10 +234,9 @@ export interface StateVariable {
     /** @hebrew רשימת ערכים מותרים למשתנה (אופציונלי). */
     allowedValueList?: string[];
     /**
-     * @hebrew מציין האם המשתנה שולח אירועים.
-     * @description במקור 'sendEvents' ב-XML, שונה ל-camelCase.
+     * @hebrew מציין האם המשתנה שולח אירועים. הערכים האפשריים הם "yes" או "no".
      */
-    sendEventsAttribute?: boolean;
+    sendEvents?: "yes" | "no";
     /**
      * @hebrew פונקציה לשאילתת ערך משתנה המצב (אם נתמך על ידי השירות).
      * @returns הבטחה שתתממש עם ערך משתנה המצב.
@@ -176,7 +251,8 @@ export interface StateVariable {
 /**
  * @hebrew מייצג תיאור מלא של התקן (מניתוח XML).
  */
-export interface DeviceDescription {
+export interface DeviceDescription extends BasicSsdpDevice {
+    // error ו-detailLevelAchieved כבר מוגדרים ב-BasicSsdpDevice
     deviceType: string;
     friendlyName: string;
     manufacturer: string;
@@ -189,13 +265,63 @@ export interface DeviceDescription {
     UDN: string; // Unique Device Name
     presentationURL?: string;
     iconList?: DeviceIcon[];
-    services?: Record<string, ServiceDescription>; // אובייקט של שירותים, המפתח הוא serviceId
+    serviceList?: ServiceDescription[]; // שונה מ-services: Record<string, ServiceDescription> כדי להתאים לשימוש בפועל
     deviceList?: DeviceDescription[]; // התקנים משוננים (נשאר כמערך)
     // שדות שנוספו כדי לשמר מידע מהגילוי הראשוני או מה-location URL
-    descriptionUrl?: string; // ה-URL המקורי של קובץ התיאור
     baseURL?: string; // כתובת הבסיס של ההתקן (נגזר מ-locationUrl)
-    sourceIpAddress?: string; // כתובת ה-IP של ההתקן כפי שזוהתה בתגובת ה-SSDP
+    URLBase?: string; // כתובת בסיס נוספת מה-XML לפתרון URL-ים יחסיים
     // שדות נוספים אפשריים מה-XML
+    UPC?: string; // Universal Product Code
+}
+
+// =======================================================================
+
+/**
+ * @hebrew מייצג תיאור התקן שבו פרטי ה-SCPD של שירותיו נטענו.
+ * בשלב זה, `actionList` ו-`stateVariableList` של כל שירות מאוכלסים,
+ * אך הפונקציות הדינמיות (`Action.invoke`, `StateVariable.query`) עדיין לא נוצרו.
+ */
+export interface DeviceWithServicesDescription extends DeviceDescription {
+    // error ו-detailLevelAchieved כבר מוגדרים ב-BasicSsdpDevice
+
+    /**
+     * @hebrew רשימת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם.
+     * כל `ServiceDescription` ברשימה זו יכיל `actionList` ו-`stateVariableList`
+     * עם הנתונים שפורסרו מה-SCPD, אך הפונקציות `invoke`/`query` בתוך
+     * ה-`Action`ים וה-`StateVariable`ים יהיו `undefined`.
+     */
+    // השדות שהיו כאן זהים לאלו שב-DeviceDescription ולכן הוסרו בעקבות ההרחבה.
+    // ההבדל העיקרי הוא בתיאור הסמנטי של serviceList.
+    /**
+     * @hebrew רשימת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם.
+     * כל `ServiceDescription` ברשימה זו יכיל `actionList` ו-`stateVariableList`
+     * עם הנתונים שפורסרו מה-SCPD, אך הפונקציות `invoke`/`query` בתוך
+     * ה-`Action`ים וה-`StateVariable`ים יהיו `undefined`.
+     */
+    serviceList: ServiceDescription[]; // serviceList כבר מוגדר ב-DeviceDescription, אך כאן הוא צפוי להיות מאוכלס יותר.
+}
+
+/**
+ * @hebrew מייצג תיאור התקן מלא, כולל שירותים עם פונקציונליות מלאה.
+ * בשלב זה, הפונקציות `invoke` על `Action` ו-`query` על `StateVariable`
+ * צפויות להיות מוגדרות וזמינות לשימוש.
+ */
+export interface FullDeviceDescription extends DeviceWithServicesDescription {
+    // error ו-detailLevelAchieved כבר מוגדרים ב-BasicSsdpDevice
+
+    /**
+     * @hebrew רשימת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם,
+     * ועם פונקציות `invoke` ו-`query` מוגדרות וזמינות לשימוש.
+     * בשונה מ-`DeviceWithServicesDescription`, כאן הפונקציות הללו צפויות להיות מאוכלסות.
+     */
+    // השדות שהיו כאן זהים לאלו שב-DeviceWithServicesDescription ולכן הוסרו בעקבות ההרחבה.
+    // ההבדל העיקרי הוא בציפייה שהפונקציות invoke/query יהיו מאוכלסות.
+    /**
+     * @hebrew רשימת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם,
+     * ועם פונקציות `invoke` ו-`query` מוגדרות וזמינות לשימוש.
+     * בשונה מ-`DeviceWithServicesDescription`, כאן הפונקציות הללו צפויות להיות מאוכלסות.
+     */
+    serviceList: ServiceDescription[]; // serviceList כבר מוגדר, אך כאן הוא צפוי להיות מאוכלס במלואו.
 }
 
 // =======================================================================
@@ -358,13 +484,42 @@ export interface SoapResponse {
     fault?: SoapFault;
 }
 
-/**
- * @interface ParsedDidlLite
- * @description ממשק פנימי לתוצאת ניתוח DIDL-Lite לפני המיפוי הסופי.
- */
-export interface ParsedDidlLite {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    container?: any[];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    item?: any[];
+// =======================================================================
+// UPnP Schema Constants and Builders (from upnpDiscoveryService.ts)
+// =======================================================================
+
+const UPNP_ORG_SCHEMA = "urn:schemas-upnp-org";
+export const UPNP_ORG_SERVICE_SCHEMA = UPNP_ORG_SCHEMA + ":service";
+export const UPNP_ORG_DEVICE_SCHEMA = UPNP_ORG_SCHEMA + ":device";
+
+export function buildUpnpServiceTypeIdentifier(serviceType: string, version: number = 1): string {
+  return `${UPNP_ORG_SERVICE_SCHEMA}:${serviceType}:${version}`;
 }
+
+export function buildUpnpDeviceTypeIdentifier(deviceType: string, version: number = 1): string {
+  return `${UPNP_ORG_DEVICE_SCHEMA}:${deviceType}:${version}`;
+}
+
+export const AVTRANSPORT_SERVICE = buildUpnpServiceTypeIdentifier("AVTransport", 1);
+export const CONTENT_DIRECTORY_SERVICE = buildUpnpServiceTypeIdentifier("ContentDirectory", 1);
+export const CONNECTION_MANAGER_SERVICE = buildUpnpServiceTypeIdentifier("ConnectionManager", 1);
+export const RENDERING_CONTROL_SERVICE = buildUpnpServiceTypeIdentifier("RenderingControl", 1);
+
+export const MEDIA_SERVER_DEVICE = buildUpnpDeviceTypeIdentifier("MediaServer", 1);
+export const MEDIA_RENDERER_DEVICE = buildUpnpDeviceTypeIdentifier("MediaRenderer", 1);
+
+
+/**
+ * @hebrew טיפוס מאוחד המייצג התקן בכל אחד משלבי העיבוד האפשריים שלו,
+ * בהתאם לרמת הפירוט (`DiscoveryDetailLevel`) שנדרשה או הושגה.
+ *
+ * - אם `detailLevel` הוא 'basic', הטיפוס יהיה {@link BasicSsdpDevice}.
+ * - אם `detailLevel` הוא 'description', הטיפוס יהיה {@link DeviceDescription}.
+ * - אם `detailLevel` הוא 'services', הטיפוס יהיה {@link DeviceWithServicesDescription}.
+ * - אם `detailLevel` הוא 'full', הטיפוס יהיה {@link FullDeviceDescription}.
+ */
+export type ProcessedDevice =
+  | BasicSsdpDevice
+  | DeviceDescription
+  | DeviceWithServicesDescription
+  | FullDeviceDescription;

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UPnP Devices</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #333;
+        }
+        #device-list {
+            list-style-type: none; /* הסרת נקודות הרשימה */
+            padding: 0;
+        }
+        #device-list li {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            margin-bottom: 10px; /* מרווח בין הפריטים */
+            padding: 15px; /* ריווח פנימי לפריט */
+            display: flex; /* שימוש ב-Flexbox ליישור */
+            align-items: center; /* יישור אנכי למרכז */
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #device-list li img {
+            width: 40px; /* הגדלת התמונה */
+            height: 40px;
+            margin-right: 15px; /* הגדלת המרווח מימין לתמונה */
+            border-radius: 4px; /* עיגול פינות התמונה */
+        }
+        #error-message {
+            color: #d9534f; /* צבע אדום לשגיאות */
+            background-color: #f2dede;
+            border: 1px solid #ebccd1;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        /* Style for the browse button */
+        .browse-button {
+            padding: 5px 10px;
+            background-color: #5cb85c;
+            color: white;
+            text-decoration: none;
+            border-radius: 3px;
+            margin-left: 10px;
+        }
+        .browse-button:hover {
+            background-color: #4cae4c;
+        }
+        /* Container for device info and services to allow better layout */
+        .device-info-container {
+            display: flex;
+            align-items: center; /* Vertically align icon, name, and browse button */
+            flex-grow: 1; /* Allow this container to grow */
+        }
+        .services-container ul {
+            list-style-type: none;
+            padding-left: 20px; /* Indent service list slightly */
+            font-size: 0.9em;
+            color: #555;
+            margin: 20px;
+        }
+         #device-list li { /* Override for li to allow block layout inside */
+            display: block; /* Change from flex to block to stack children */
+        }
+    </style>
+</head>
+<body>
+    <h1>Discovered UPnP Devices</h1>
+    <ul id="device-list">
+        <!-- רשימת המכשירים תוצג כאן -->
+    </ul>
+    <p id="error-message" style="color: red; display: none;"></p> <!-- הוספת display: none כברירת מחדל -->
+
+    <script>
+        // פונקציה לשליפת ועדכון רשימת המכשירים
+        async function fetchDevices() {
+            const deviceListElement = document.getElementById('device-list');
+            const errorMessageElement = document.getElementById('error-message');
+            
+            // הסתרת הודעת שגיאה בתחילת כל קריאה
+            errorMessageElement.style.display = 'none';
+            errorMessageElement.textContent = '';
+
+            try {
+                const response = await fetch('/api/devices');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const devices = await response.json();
+                
+                // ניקוי הרשימה הקיימת
+                deviceListElement.innerHTML = '';
+
+                if (devices.length === 0) {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = 'No devices found.';
+                    deviceListElement.appendChild(listItem);
+                } else {
+                    devices.forEach(device => {
+                        const listItem = document.createElement('li'); // Main li element
+
+                        const deviceInfoContainer = document.createElement('div');
+                        deviceInfoContainer.className = 'device-info-container';
+
+                        // יצירת אלמנט תמונה אם קיים URL ללוגו
+                        if (device.iconUrl) {
+                            const img = document.createElement('img');
+                            img.src = device.iconUrl;
+                            img.alt = device.friendlyName + ' logo';
+                            deviceInfoContainer.appendChild(img);
+                        }
+                        
+                        // הוספת הטקסט של שם המכשיר
+                        const textNode = document.createTextNode(`${device.friendlyName} (${device.modelName || 'N/A'})`);
+                        deviceInfoContainer.appendChild(textNode);
+
+                        // Check if the device supports ContentDirectory and add browse button
+                        if (device.supportedServices && device.supportedServices.includes('urn:schemas-upnp-org:service:ContentDirectory:1')) {
+                            const browseButton = document.createElement('a');
+                            browseButton.href = 'browser.html?udn=' + device.udn;
+                            browseButton.textContent = 'Browse';
+                            browseButton.className = 'browse-button'; // Apply CSS class
+                            // browseButton.style.marginLeft = '10px'; // Margin is now handled by class or general layout
+                            deviceInfoContainer.appendChild(browseButton);
+                        }
+                        listItem.appendChild(deviceInfoContainer);
+
+
+                        // Display supported services in a separate container
+                        if (device.supportedServices && device.supportedServices.length > 0) {
+                            const servicesContainer = document.createElement('div');
+                            servicesContainer.className = 'services-container';
+                            const servicesList = document.createElement('ul');
+                            device.supportedServices.forEach(service => {
+                                const serviceItem = document.createElement('li');
+                                serviceItem.textContent = service;
+                                servicesList.appendChild(serviceItem);
+                            });
+                            servicesContainer.appendChild(servicesList)
+                            listItem.appendChild(servicesContainer);
+                        }
+                        
+                        deviceListElement.appendChild(listItem);
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching devices:', error);
+                errorMessageElement.textContent = 'Error fetching devices. Please check the server.';
+                errorMessageElement.style.display = 'block'; // הצגת הודעת השגיאה
+                // מנקה את הרשימה במקרה של שגיאה כדי לא להציג מידע ישן
+                deviceListElement.innerHTML = '';
+            }
+        }
+
+        // טעינה ראשונית של המכשירים
+        fetchDevices();
+
+        // רענון הרשימה כל 5 שניות
+        setInterval(fetchDevices, 5000);
+    </script>
+</body>
+</html>

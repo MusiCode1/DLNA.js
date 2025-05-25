@@ -180,7 +180,9 @@ export async function sendUpnpCommand(
             (error as any).soapFault = parsedResult;
             throw error;
         } else {
-            moduleLogger.info(`[sendUpnpCommand] Successfully executed action ${actionName}. Result:`, parsedResult.actionResponse);
+            moduleLogger.info(`[sendUpnpCommand] Successfully executed action ${actionName}`);
+            moduleLogger.debug(`[sendUpnpCommand] Result:`, parsedResult.actionResponse);
+
             return parsedResult.actionResponse || {};
         }
 

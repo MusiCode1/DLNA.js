@@ -4,148 +4,198 @@
 
 מודול זה מאפשר גילוי התקני UPnP (Universal Plug and Play) ברשת המקומית. הוא מספק פונקציונליות לאיתור התקנים באמצעות פרוטוקול SSDP (Simple Service Discovery Protocol), אחזור תיאור מפורט של כל התקן (כולל השירותים שהוא מציע), אחזור תיאור מלא של כל שירות (SCPD), ואף מאפשר הפעלה ישירה של פעולות (actions) ושאילתת משתני מצב (state variables) של השירותים.
 
-המודול בנוי בצורה שכבתית, כאשר [`src/upnpDiscoveryService.ts`](../src/upnpDiscoveryService.ts:1) מספק ממשק ברמה גבוהה ונוח לשימוש, בעוד ש-[`src/upnpDeviceExplorer.ts`](../src/upnpDeviceExplorer.ts:1) חושף פונקציות ברמה נמוכה יותר לשליטה פרטנית. קובץ [`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts:1) מכיל את הלוגיקה לשליחת בקשות SOAP. קובץ [`src/types.ts`](../src/types.ts:1) מכיל את כל הגדרות הטיפוסים והממשקים הרלוונטיים. כל אלו מיוצאים כעת דרך קובץ האינדקס המרכזי [`src/index.ts`](../src/index.ts) לנוחות השימוש.
+הספרייה בנויה כעת ממספר מודולים מרכזיים:
+*   [`src/upnpDeviceExplorer.ts`](../src/upnpDeviceExplorer.ts): מתזמר את תהליך הגילוי ומייצא את ה-API הראשי (`discoverSsdpDevices`, `discoverSsdpDevicesIterable`).
+*   [`src/upnpDeviceProcessor.ts`](../src/upnpDeviceProcessor.ts): אחראי על עיבוד וחקר התקנים לאחר גילוי ראשוני (אחזור XML, SCPD, והוספת פונקציות `invoke`/`query`).
+*   [`src/ssdpSocketManager.ts`](../src/ssdpSocketManager.ts): מנהל את סוקטי ה-UDP לתקשורת SSDP.
+*   [`src/genericHttpParser.ts`](../src/genericHttpParser.ts): מספק פונקציונליות גנרית לפירסור תגובות HTTP (משמש בעיקר לפירסור תגובות SSDP).
+*   [`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts): מכיל את הפונקציה `sendUpnpCommand` לשליחת בקשות SOAP.
+*   [`src/types.ts`](../src/types.ts): מכיל את כל הגדרות הטיפוסים והממשקים הרלוונטיים.
+*   [`src/contentDirectoryService.ts`](../src/contentDirectoryService.ts): מספק ממשק נוח לעבודה עם שירותי ContentDirectory.
+
+כל הייצואים המרכזיים של הספרייה נעשים דרך קובץ האינדקס המרכזי [`src/index.ts`](../src/index.ts) לנוחות השימוש.
 
 ## התקנה/הכנות
 
-המודול הוא חלק אינטגרלי מהפרויקט הנוכחי. יש לוודא שהקבצים הבאים קיימים בפרויקט:
-*   [`src/upnpDeviceExplorer.ts`](../src/upnpDeviceExplorer.ts:1)
-*   [`src/types.ts`](../src/types.ts:1)
-*   [`src/upnpDiscoveryService.ts`](../src/upnpDiscoveryService.ts:1)
+המודול הוא חלק אינטגרלי מהפרויקט הנוכחי. יש לוודא שהקבצים הבאים (ונוספים) קיימים בפרויקט כחלק ממבנה המודולים:
+*   [`src/index.ts`](../src/index.ts) (נקודת הכניסה הראשית)
+*   [`src/upnpDeviceExplorer.ts`](../src/upnpDeviceExplorer.ts)
+*   [`src/upnpDeviceProcessor.ts`](../src/upnpDeviceProcessor.ts)
+*   [`src/ssdpSocketManager.ts`](../src/ssdpSocketManager.ts)
+*   [`src/genericHttpParser.ts`](../src/genericHttpParser.ts)
+*   [`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts)
+*   [`src/types.ts`](../src/types.ts)
+*   [`src/contentDirectoryService.ts`](../src/contentDirectoryService.ts)
+*   [`src/logger.ts`](../src/logger.ts)
 
 כמו כן, יש לוודא שכל התלויות של הפרויקט מותקנות (לדוגמה, על ידי הרצת `npm install` או `bun install`).
 
 ## שימוש בסיסי - גילוי התקנים
 
-הדרך הפשוטה ביותר לגלות התקנים היא באמצעות הפונקציה `discoverAndProcessDevices` המיובאת מ-[`src/index.ts`](../src/index.ts) (במקור מ-[`src/upnpDiscoveryService.ts`](../src/upnpDiscoveryService.ts:1)).
+הדרך העיקרית לגלות התקנים היא באמצעות הפונקציה `discoverSsdpDevices` המיובאת מ-[`src/index.ts`](../src/index.ts).
 
-### ייבוא הפונקציה
+### ייבוא הפונקציה והטיפוסים הרלוונטיים
 
 ```typescript
-import { discoverAndProcessDevices, UpnpDevice, UpnpService } from '../src/index'; // ייבוא מקובץ האינדקס המאוחד
+import {
+  discoverSsdpDevices,
+  DiscoveryDetailLevel,
+  type ProcessedDevice, // טיפוס גנרי, יכול להיות אחד מהבאים
+  type FullDeviceDescription, // אם detailLevel הוא Full
+  type BasicSsdpDevice,       // אם detailLevel הוא Basic
+  type DeviceDescription      // אם detailLevel הוא Description
+  // וטיפוסים נוספים לפי הצורך, כמו ServiceDescription, Action, StateVariable
+} from '../src/index';
 ```
 
 ### דוגמת קוד לגילוי התקנים
 
-הפונקציה `discoverAndProcessDevices` מקבלת את הפרמטרים הבאים:
+הפונקציה `discoverSsdpDevices` מקבלת אובייקט `DiscoveryOptions` המאפשר להגדיר:
 *   `searchTarget` (אופציונלי, ברירת מחדל: `"ssdp:all"`): מחרוזת המגדירה את סוג ההתקנים או השירותים לחפש.
 *   `timeoutMs` (אופציונלי, ברירת מחדל: `5000`): משך זמן מקסימלי (במילישניות) להמתנה לתגובות מהתקנים.
-*   `onDeviceFoundCallback` (אופציונלי): פונקציית callback שתקרא עבור כל התקן שמתגלה ועונה על הקריטריונים, לאחר שאוחזר תיאור המכשיר המלא שלו (כולל SCPD).
-*   `discoveryOptions` (אופציונלי): אובייקט המכיל אופציות נוספות עבור מנוע הגילוי ברמה הנמוכה יותר (כמו `includeIPv6`, `customLogger` וכו').
+*   `onDeviceFound` (אופציונלי): פונקציית callback שתקרא עבור כל התקן שמתגלה ומעובד לרמת הפירוט המבוקשת.
+*   `detailLevel` (אופציונלי, ברירת מחדל: `DiscoveryDetailLevel.Basic`): קובע את רמת הפירוט של המידע שיוחזר עבור כל התקן.
+    *   `DiscoveryDetailLevel.Basic`: מחזיר `BasicSsdpDevice` (מידע בסיסי מהודעת SSDP).
+    *   `DiscoveryDetailLevel.Description`: מחזיר `DeviceDescription` (כולל תיאור XML של ההתקן).
+    *   `DiscoveryDetailLevel.Services`: מחזיר `DeviceDescription` עם רשימת שירותים בסיסית (ללא SCPD).
+    *   `DiscoveryDetailLevel.Full`: מחזיר `FullDeviceDescription` (כולל תיאור XML, רשימת שירותים עם SCPD מלא, ופונקציות `invoke`/`query`).
+*   אופציות נוספות כמו `customLogger`, `headers`, `sourcePort`, `maxRetries`.
 
 ```typescript
-async function findDevices() {
+async function findDevicesExample() {
   console.log('Starting UPnP device discovery...');
   try {
-    // קריאה עם ערכי ברירת מחדל ל-searchTarget ו-timeoutMs
-    await discoverAndProcessDevices(
-      undefined, // searchTarget (ישתמש ב-"ssdp:all")
-      undefined, // timeoutMs (ישתמש ב-5000)
-      (device: UpnpDevice) => { // onDeviceFoundCallback
-        console.log(`Found device: ${device.friendlyName} (${device.deviceType})`);
-        console.log(`  UDN: ${device.UDN}`);
-        if (device.services) { // שונה ל-services
-            console.log(`  Services: ${Object.keys(device.services).length}`);
-            // כאן ניתן לגשת לפרטי השירותים המלאים, כולל SCPD
-            // למשל, להדפיס את רשימת הפעולות של השירות הראשון (אם קיים):
-            const firstServiceKey = Object.keys(device.services)[0];
-            if (firstServiceKey) {
-                const firstService = device.services[firstServiceKey];
-                if (firstService.actions) { // שונה ל-actions
-                    console.log(`    Actions for ${firstService.serviceId}:`);
-                    Object.values(firstService.actions).forEach(action => {
-                        console.log(`      - ${action.name} ${action.invoke ? '(invokable)' : ''}`);
-                    });
-                }
+    await discoverSsdpDevices({
+      // searchTarget: "ssdp:all", // ברירת מחדל
+      timeoutMs: 5000,
+      detailLevel: DiscoveryDetailLevel.Full, // בקש את כל הפרטים
+      onDeviceFound: (device: ProcessedDevice) => {
+        // כאן device הוא כבר ברמת הפירוט המבוקשת
+        // אם detailLevel הוא Full, אפשר לבצע המרה בטוחה ל-FullDeviceDescription
+        const fullDevice = device as FullDeviceDescription;
+        console.log(`Found device: ${fullDevice.friendlyName} (Type: ${fullDevice.deviceType})`);
+        console.log(`  UDN: ${fullDevice.UDN}`);
+        console.log(`  Location: ${fullDevice.location}`);
+        console.log(`  Remote Address: ${fullDevice.remoteAddress}:${fullDevice.remotePort}`);
+
+        if (fullDevice.serviceList && fullDevice.serviceList.length > 0) {
+          console.log(`  Services: ${fullDevice.serviceList.length}`);
+          fullDevice.serviceList.forEach(service => {
+            console.log(`    - ${service.serviceId} (${service.serviceType})`);
+            if (service.actionList && service.actionList.length > 0) {
+                console.log(`      Actions: ${service.actionList.map(a => a.name).join(', ')}`);
             }
+          });
         }
       }
-      // ניתן להוסיף כאן אובייקט discoveryOptions אם יש צורך
-      // למשל: { includeIPv6: true }
-    );
+    });
     console.log('Device discovery finished.');
   } catch (error) {
     console.error('Error during device discovery:', error);
   }
 }
 
-findDevices();
+findDevicesExample();
 ```
 
-### הסבר על `onDeviceFoundCallback`
+## הסבר על `onDeviceFound` (קולבק)
 
-פונקציית ה-callback `onDeviceFoundCallback` היא הדרך העיקרית לקבל ולעבד את ההתקנים המתגלים. היא מקבלת כפרמטר אובייקט מסוג `UpnpDevice` (מיוצא מ-[`src/index.ts`](../src/index.ts), במקור מ-[`src/upnpDiscoveryService.ts`](../src/upnpDiscoveryService.ts:1) ככינוי ל-`DeviceDescription` מ-[`src/types.ts`](../src/types.ts:1)) המכיל את כל המידע על ההתקן, כולל פרטי SCPD (כפי שיוסבר בהמשך).
+פונקציית ה-callback `onDeviceFound`, המועברת דרך `DiscoveryOptions` לפונקציה `discoverSsdpDevices`, היא דרך נוחה לקבל ולעבד התקנים ברגע שהם מתגלים ומעובדים לרמת הפירוט שצוינה ב-`detailLevel`.
+הטיפוס המועבר לקולבק הוא `ProcessedDevice`. טיפוס זה הוא איחוד (union) של `BasicSsdpDevice`, `DeviceDescription`, ו-`FullDeviceDescription`. הטיפוס הספציפי של האובייקט `device` בתוך הקולבק יהיה תואם לערך של `detailLevel` שהוגדר ב-`DiscoveryOptions`.
+לדוגמה, אם `detailLevel` הוא `DiscoveryDetailLevel.Full`, אז `device` יהיה מסוג `FullDeviceDescription`.
 
-### מבנה האובייקט `UpnpDevice`
+## מבנה אובייקטי ההתקן (`BasicSsdpDevice`, `DeviceDescription`, `FullDeviceDescription`)
 
-האובייקט `UpnpDevice` מכיל מידע מקיף על ההתקן שהתגלה. השדות העיקריים כוללים:
-*   `UDN` (Unique Device Name): מזהה ייחודי של ההתקן.
-*   `friendlyName`: שם ידידותי למשתמש של ההתקן.
-*   `deviceType`: סוג ההתקן (למשל, `urn:schemas-upnp-org:device:MediaServer:1`).
-*   `manufacturer`: יצרן ההתקן.
-*   `modelName`: שם הדגם של ההתקן.
-*   `presentationURL` (אופציונלי): כתובת URL לממשק אינטרנטי של ההתקן.
-*   `services` (אופציונלי): אובייקט (מפה) של שירותים, כאשר המפתח הוא ה-`serviceId` של השירות והערך הוא אובייקט `UpnpService` (שהוא `ServiceDescription`).
-*   `iconList` (אופציונלי): רשימת אייקונים עבור ההתקן.
-*   `descriptionUrl` (אופציונלי): כתובת ה-URL המקורית של קובץ תיאור ההתקן (כפי שהתקבלה מה-SSDP).
-*   `baseURL` (אופציונלי): כתובת ה-URL הבסיסית של ההתקן, שנגזרה לטובת פתרון כתובות יחסיות.
-*   `sourceIpAddress` (אופציונלי): כתובת ה-IP של ההתקן ממנו התקבלה תגובת ה-SSDP.
+הספרייה מחזירה סוגים שונים של אובייקטי התקן בהתאם ל-`detailLevel` המבוקש:
+
+*   **`BasicSsdpDevice`**: מכיל את המידע הגולמי שהתקבל מהודעת ה-SSDP.
+    *   `usn`: ה-Unique Service Name.
+    *   `location`: כתובת ה-URL לקובץ תיאור ה-XML של ההתקן.
+    *   `st`: ה-Search Target / Service Type.
+    *   `server`: מחרוזת השרת ששלח את התגובה.
+    *   `cacheControl`: ערך ה-Cache-Control.
+    *   `remoteAddress`: כתובת ה-IP של ההתקן.
+    *   `remotePort`: הפורט של ההתקן.
+    *   `headers`: כל הכותרות שהתקבלו בהודעת ה-SSDP.
+
+*   **`DeviceDescription`** (מרחיב את `BasicSsdpDevice`): כולל את המידע מנותח מקובץ ה-XML של ההתקן.
+    *   `UDN` (Unique Device Name): מזהה ייחודי של ההתקן.
+    *   `friendlyName`: שם ידידותי למשתמש של ההתקן.
+    *   `deviceType`: סוג ההתקן (למשל, `urn:schemas-upnp-org:device:MediaServer:1`).
+    *   `manufacturer`: יצרן ההתקן.
+    *   `manufacturerURL` (אופציונלי).
+    *   `modelName`: שם הדגם של ההתקן.
+    *   `modelNumber` (אופציונלי).
+    *   `modelURL` (אופציונלי).
+    *   `serialNumber` (אופציונלי).
+    *   `presentationURL` (אופציונלי): כתובת URL לממשק אינטרנטי של ההתקן.
+    *   `iconList` (אופציונלי): מערך של אייקונים עבור ההתקן.
+    *   `serviceList` (אופציונלי): מערך של אובייקטים `ServiceDescription` (בסיסי, ללא פרטי SCPD מלאים אלא אם `detailLevel` גבוה יותר).
+    *   `deviceList` (אופציונלי): מערך של התקנים משוננים (nested devices).
+    *   `baseURL`: כתובת ה-URL הבסיסית של ההתקן, שנגזרה לטובת פתרון כתובות יחסיות.
+    *   `xmlString` (אופציונלי): מחרוזת ה-XML המקורית של תיאור ההתקן.
+
+*   **`FullDeviceDescription`** (מרחיב את `DeviceDescription`): כולל את כל המידע, כולל פרטי SCPD מלאים עבור כל שירות, ופונקציות `invoke` ו-`query` מוכנות לשימוש.
+    *   השדה `serviceList` יכיל אובייקטי `ServiceDescription` שבהם `actionList` ו-`stateVariableList` מאוכלסים, ולכל `Action` תהיה פונקציית `invoke` ולכל `StateVariable` רלוונטי תהיה פונקציית `query`.
 
 ## אחזור פרטי שירותים מלאים (SCPD)
 
-כאשר משתמשים בפונקציה `discoverAndProcessDevices` מ-[`src/index.ts`](../src/index.ts) (במקור מ-[`src/upnpDiscoveryService.ts`](../src/upnpDiscoveryService.ts:1)), אחזור פרטי ה-SCPD (Service Control Protocol Description) מתבצע באופן אוטומטי עבור כל שירות של כל התקן מתגלה (אם האופציה `includeScpdDetails` מוגדרת כ-`true`, שהיא ברירת המחדל ב-`discoverAndProcessDevices`).
+כאשר משתמשים בפונקציה `discoverSsdpDevices` עם `detailLevel` של `DiscoveryDetailLevel.Full` (או `DiscoveryDetailLevel.Services` עבור מידע חלקי על השירותים), פרטי ה-SCPD (Service Control Protocol Description) מאוכלסים אוטומטית.
+*   עבור `DiscoveryDetailLevel.Full`, המידע המלא על כל שירות, כולל רשימת הפעולות (`actionList`) ורשימת המשתנים (`stateVariableList`), נשמר באובייקט `ServiceDescription` המתאים בתוך `device.serviceList`.
+*   בנוסף, לכל `Action` ב-`actionList` מתווספת פונקציית `invoke` להפעלה ישירה, ולכל `StateVariable` רלוונטי ב-`stateVariableList` מתווספת פונקציית `query` לשאילתת ערכו.
+*   אם הייתה שגיאה באחזור או ניתוח ה-SCPD עבור שירות מסוים, השדה `scpdError` באותו `ServiceDescription` יכיל הודעת שגיאה.
 
-המידע המלא על השירות, כולל הפעולות (`Action`) והמשתנים (`StateVariable`), נשמר ישירות תחת השדות `actions` (אובייקט שהמפתח הוא שם הפעולה) ו-`stateVariables` (מערך) באובייקט `UpnpService` (שהוא `ServiceDescription`) המתאים בתוך `device.services`. לכל פעולה מתווספת פונקציית `invoke` להפעלה ישירה, ולמשתני מצב רלוונטיים מתווספת פונקציית `query`. אם הייתה שגיאה באחזור או ניתוח ה-SCPD, השדה `scpdError` יכיל הודעת שגיאה.
+האופציה `includeScpdDetails` שהייתה קיימת בעבר הוסרה, והתנהגות זו נשלטת כעת באופן בלעדי על ידי `detailLevel`.
 
-### מבנה `ServiceDescription`, `Action`, ו-`StateVariable`
+## מבנה `ServiceDescription`, `Action`, ו-`StateVariable`
 
-הטיפוסים הללו מוגדרים ב-[`src/types.ts`](../src/types.ts:1) (ומיוצאים דרך [`src/index.ts`](../src/index.ts)):
+הטיפוסים הללו מוגדרים ב-[`src/types.ts`](../src/types.ts) (ומיוצאים דרך [`src/index.ts`](../src/index.ts)):
 
-*   **`UpnpService` (או `ServiceDescription`):**
+*   **`ServiceDescription`:**
     *   `serviceType`: סוג השירות (למשל, `urn:schemas-upnp-org:service:AVTransport:1`).
     *   `serviceId`: מזהה השירות.
-    *   `SCPDURL`: כתובת ה-URL של קובץ ה-SCPD.
-    *   `controlURL`: כתובת ה-URL לשליחת פקודות SOAP לשירות.
-    *   `eventSubURL`: כתובת ה-URL להרשמה לאירועים מהשירות.
-    *   `actions` (אופציונלי): אובייקט של פעולות (`Record<string, Action>`), כאשר המפתח הוא שם הפעולה.
-    *   `stateVariables` (אופציונלי): מערך של אובייקטים מסוג `StateVariable`.
+    *   `SCPDURL`: כתובת ה-URL (יחסית או מוחלטת) של קובץ ה-SCPD.
+    *   `controlURL`: כתובת ה-URL (יחסית או מוחלטת) לשליחת פקודות SOAP לשירות.
+    *   `eventSubURL`: כתובת ה-URL (יחסית או מוחלטת) להרשמה לאירועים מהשירות.
+    *   `actionList` (אופציונלי): מערך של אובייקטים מסוג `Action`. מאוכלס אם `detailLevel` הוא `Full`.
+    *   `stateVariableList` (אופציונלי): מערך של אובייקטים מסוג `StateVariable`. מאוכלס אם `detailLevel` הוא `Full`.
     *   `scpdError` (אופציונלי): מחרוזת המכילה הודעת שגיאה אם אחזור/ניתוח ה-SCPD נכשל.
 
 *   **`Action`:**
     *   `name`: שם הפעולה.
     *   `arguments` (אופציונלי): מערך של אובייקטים מסוג `ActionArgument`.
-    *   `invoke` (אופציונלי): פונקציה `(args: Record<string, any>) => Promise<Record<string, any>>` להפעלת הפעולה.
+    *   `invoke` (אופציונלי): פונקציה `(args: Record<string, any>) => Promise<Record<string, any>>` להפעלת הפעולה. נוספת אוטומטית כאשר `detailLevel` הוא `Full`.
 
 *   **`StateVariable`:**
     *   `name`: שם המשתנה.
     *   `dataType`: סוג הנתונים של המשתנה.
-    *   `sendEventsAttribute` (אופציונלי, מסוג `boolean`): האם המשתנה שולח אירועים.
-    *   `allowedValueList` (אופציונלי): רשימת ערכים מותרים.
+    *   `sendEvents`: (היה `sendEventsAttribute`) האם המשתנה שולח אירועים (ערך `yes` או `no` מה-XML, מומר ל-`boolean` אם אפשרי).
+    *   `allowedValueList` (אופציונלי): מערך של ערכים מותרים.
     *   `defaultValue` (אופציונלי): ערך ברירת מחדל.
-    *   `query` (אופציונלי): פונקציה `() => Promise<any>` לשאילתת ערך המשתנה.
+    *   `query` (אופציונלי): פונקציה `() => Promise<any>` לשאילתת ערך המשתנה. נוספת אוטומטית כאשר `detailLevel` הוא `Full` וניתן לשאילתה.
 
-### גישה למידע SCPD
+## גישה למידע SCPD
 
-ניתן לגשת למידע זה מתוך אובייקט `UpnpDevice` שהתקבל ב-`onDeviceFoundCallback`:
+כאשר `detailLevel` הוא `Full`, ניתן לגשת למידע ה-SCPD מתוך אובייקט `FullDeviceDescription` שהתקבל ב-`onDeviceFound`:
 
 ```typescript
-// ...בתוך onDeviceFoundCallback...
-if (device.services) { // שונה ל-services
-  Object.values(device.services).forEach(service => { // מעבר על ערכי האובייקט
+// ...בתוך onDeviceFound, כאשר device הוא FullDeviceDescription...
+if (device.serviceList) {
+  device.serviceList.forEach(service => {
     console.log(`  Service: ${service.serviceId} (${service.serviceType})`);
     if (service.scpdError) {
       console.log(`    Error fetching/parsing SCPD: ${service.scpdError}`);
     } else {
       console.log(`    SCPD URL: ${service.SCPDURL}`);
-      if (service.actions && Object.keys(service.actions).length > 0) { // שונה ל-actions ובדיקת אובייקט
+      if (service.actionList && service.actionList.length > 0) {
         console.log(`    Actions:`);
-        Object.values(service.actions).forEach(action => { // מעבר על ערכי האובייקט
+        service.actionList.forEach(action => {
           console.log(`      - ${action.name} ${action.invoke ? '(invokable)' : ''}`);
           // הדגמת שימוש ב-invoke (בצורה בטוחה)
           if (action.name === 'GetVolume' && action.invoke && service.serviceType.includes('RenderingControl')) {
             action.invoke({ InstanceID: 0, Channel: 'Master' }) // הנחות לדוגמה
               .then(result => console.log(`        Result of ${action.name}:`, result))
-              .catch(err => console.error(`        Error invoking ${action.name}:`, err.message));
+              .catch(err => console.error(`        Error invoking ${action.name}:`, err.message || err));
           }
           if (action.arguments && action.arguments.length > 0) {
             action.arguments.forEach(arg => {
@@ -157,15 +207,15 @@ if (device.services) { // שונה ל-services
         console.log('    No actions found or SCPD not processed for actions.');
       }
 
-      if (service.stateVariables && service.stateVariables.length > 0) {
+      if (service.stateVariableList && service.stateVariableList.length > 0) {
         console.log(`    State Variables:`);
-        service.stateVariables.forEach(variable => {
-          console.log(`      - ${variable.name} (Type: ${variable.dataType}, SendEvents: ${variable.sendEventsAttribute}) ${variable.query ? '(queryable)' : ''}`);
+        service.stateVariableList.forEach(variable => {
+          console.log(`      - ${variable.name} (Type: ${variable.dataType}, SendEvents: ${variable.sendEvents}) ${variable.query ? '(queryable)' : ''}`);
           // הדגמת שימוש ב-query (בצורה בטוחה)
           if (variable.name === 'Mute' && variable.query && service.serviceType.includes('RenderingControl')) {
             variable.query()
               .then(value => console.log(`        Value of ${variable.name}: ${value}`))
-              .catch(err => console.error(`        Error querying ${variable.name}:`, err.message));
+              .catch(err => console.error(`        Error querying ${variable.name}:`, err.message || err));
           }
         });
       } else {
@@ -178,42 +228,45 @@ if (device.services) { // שונה ל-services
 
 ## שימוש בפונקציות ברמה נמוכה יותר (אופציונלי, למתקדמים)
 
-למשתמשים המעוניינים בשליטה פרטנית יותר על תהליך הגילוי ואחזור הנתונים, קובץ [`src/upnpDeviceExplorer.ts`](../src/upnpDeviceExplorer.ts:1) (שמיוצא גם דרך [`src/index.ts`](../src/index.ts)) חושף שתי פונקציות עיקריות:
+למשתמשים המעוניינים בשליטה פרטנית יותר, [`src/index.ts`](../src/index.ts) מייצא גם את הפונקציות הבאות:
 
-*   **`discoverSsdpDevicesIterable(options?: DiscoveryOptions): AsyncIterable<BasicSsdpDevice>`:**
-    פונקציה זו מבצעת גילוי SSDP ומחזירה `AsyncIterable`. כל איבר ב-iterable הוא אובייקט `BasicSsdpDevice` בסיסי המכיל את המידע הראשוני שהתקבל מהתקן (כמו `usn`, `location`, `st`). פונקציה זו אינה מאחזרת את תיאור ההתקן המלא (XML) או את פרטי ה-SCPD. `DiscoveryOptions` הוא אובייקט המאפשר להגדיר `searchTarget`, `timeoutMs` ועוד.
+*   **`discoverSsdpDevicesIterable(options?: DiscoveryOptions): AsyncIterable<ProcessedDevice>`:**
+    פונקציה זו מבצעת גילוי SSDP ומחזירה `AsyncIterable`. כל איבר ב-iterable הוא אובייקט `ProcessedDevice` שתואם ל-`detailLevel` שצוין ב-`options`. זה מאפשר עיבוד של התקנים ברגע שהם מתגלים ומעובדים, מבלי לחכות לסיום כל תהליך הגילוי.
 
-*   **`fetchDeviceDescription(basicDevice: BasicSsdpDevice, includeScpdDetails: boolean = false, customLogger?: Function): Promise<DeviceDescription | null>`:**
-    פונקציה זו מקבלת אובייקט `BasicSsdpDevice` (שהתקבל מ-`discoverSsdpDevicesIterable` למשל), מאחזרת את קובץ ה-XML מכתובת ה-`location` שלו, מנתחת אותו, ומחזירה אובייקט `DeviceDescription` (שהוא הטיפוס הבסיסי של `UpnpDevice`) מלא. אם `includeScpdDetails` הוא `true` (שימו לב שבפונקציה זו ברירת המחדל היא `false`, בניגוד לשימוש בה בתוך `discoverAndProcessDevices`), הפונקציה תאחזר ותנתח גם את קבצי ה-SCPD עבור כל שירות.
+*   **`processUpnpDevice(basicDevice: BasicSsdpDevice, options: DeviceProcessingOptions): Promise<ProcessedDevice | null>`:**
+    (מיוצא מ-[`src/upnpDeviceProcessor.ts`](../src/upnpDeviceProcessor.ts) דרך האינדקס)
+    פונקציה זו לוקחת `BasicSsdpDevice` (למשל, כזה שהתקבל מאיטרטור גילוי בסיסי יותר) ומעבדת אותו לרמת הפירוט המבוקשת ב-`options.detailLevel`. היא אחראית על אחזור ה-XML, ניתוחו, אחזור SCPD (אם נדרש), והוספת פונקציות `invoke`/`query`.
 
-שילוב של שתי פונקציות אלו מאפשר גמישות מרבית, אך דורש טיפול מורכב יותר בתהליך האסינכרוני ובניהול השגיאות.
+הפונקציה `fetchDeviceDescription` שהייתה קיימת בעבר הפכה פנימית (`_fetchAndParseDeviceDescriptionXml`) ומשמשת כחלק מ-`processUpnpDevice`.
+בדרך כלל, הפונקציה `discoverSsdpDevices` (עם קולבק `onDeviceFound`) או `discoverSsdpDevicesIterable` אמורות להספיק לרוב מקרי השימוש.
 
 ## קבועים שימושיים
 
-הקובץ [`src/index.ts`](../src/index.ts) (במקור מ-[`src/upnpDiscoveryService.ts`](../src/upnpDiscoveryService.ts:1)) מייצא מספר קבועים שיכולים להיות שימושיים בעבודה עם התקני UPnP, בעיקר לשימוש בפרמטר `searchTarget` או לזיהוי סוגי התקנים ושירותים:
+הקובץ [`src/index.ts`](../src/index.ts) (דרך [`src/types.ts`](../src/types.ts)) מייצא מספר קבועים שיכולים להיות שימושיים בעבודה עם התקני UPnP, בעיקר לשימוש בפרמטר `searchTarget` או לזיהוי סוגי התקנים ושירותים:
 
 ```typescript
 import {
-  // SSDP_ALL אינו מיוצא ישירות; ניתן להשתמש ב-"ssdp:all" או בברירת המחדל של הפונקציה.
-  MEDIA_SERVER_DEVICE,
-  MEDIA_RENDERER_DEVICE,
-  AVTRANSPORT_SERVICE,
-  CONTENT_DIRECTORY_SERVICE,
-  RENDERING_CONTROL_SERVICE,
-  CONNECTION_MANAGER_SERVICE,
-} from '../src/index'; // ייבוא מקובץ האינדקס המאוחד
+  // Search Targets (ST)
+  SSDP_ALL, // "ssdp:all"
+  UPNP_ROOT_DEVICE, // "upnp:rootdevice"
+
+  // Device Types
+  MEDIA_SERVER_DEVICE, // "urn:schemas-upnp-org:device:MediaServer:1"
+  MEDIA_RENDERER_DEVICE, // "urn:schemas-upnp-org:device:MediaRenderer:1"
+  // ... ועוד סוגי התקנים
+
+  // Service Types
+  AVTRANSPORT_SERVICE, // "urn:schemas-upnp-org:service:AVTransport:1"
+  CONTENT_DIRECTORY_SERVICE, // "urn:schemas-upnp-org:service:ContentDirectory:1"
+  RENDERING_CONTROL_SERVICE, // "urn:schemas-upnp-org:service:RenderingControl:1"
+  CONNECTION_MANAGER_SERVICE, // "urn:schemas-upnp-org:service:ConnectionManager:1"
+  // ... ועוד סוגי שירותים
+} from '../src/index';
 
 // דוגמה לשימוש:
-// discoverAndProcessDevices({ searchTarget: MEDIA_RENDERER_DEVICE, ... });
+// discoverSsdpDevices({ searchTarget: MEDIA_RENDERER_DEVICE, ... });
 ```
-
-*   `"ssdp:all"` (מחרוזת לשימוש ישיר, או ברירת מחדל ב-`discoverAndProcessDevices`): לחיפוש כל ההתקנים.
-*   `MEDIA_SERVER_DEVICE`: "urn:schemas-upnp-org:device:MediaServer:1"
-*   `MEDIA_RENDERER_DEVICE`: "urn:schemas-upnp-org:device:MediaRenderer:1"
-*   `AVTRANSPORT_SERVICE`: "urn:schemas-upnp-org:service:AVTransport:1"
-*   `CONTENT_DIRECTORY_SERVICE`: "urn:schemas-upnp-org:service:ContentDirectory:1"
-*   `RENDERING_CONTROL_SERVICE`: "urn:schemas-upnp-org:service:RenderingControl:1"
-*   `CONNECTION_MANAGER_SERVICE`: "urn:schemas-upnp-org:service:ConnectionManager:1"
+יש לוודא שהקבועים אכן מיוצאים וזמינים.
 
 ## עבודה עם תוכן (ContentDirectoryService)
 
@@ -225,38 +278,31 @@ import {
 import {
   ContentDirectoryService,
   BrowseFlag,
-  BrowseResult,
-  DidlLiteContainer,
-  DidlLiteObject,
-  Resource,
-  UpnpService, // נדרש לאתחול ServiceDescription
-  UpnpSoapClient // נדרש לאתחול ContentDirectoryService
+  type BrowseResult,
+  type DidlLiteContainer,
+  type DidlLiteObject,
+  type Resource,
+  type ServiceDescription, // נדרש לאתחול ServiceDescription
+  // sendUpnpCommand // ContentDirectoryService מייבא זאת ישירות
+  type FullDeviceDescription // מכיל baseURL
 } from '../src/index';
 ```
 
 ### אתחול השירות
 
-כדי להשתמש ב-`ContentDirectoryService`, יש צורך באובייקט `ServiceDescription` (המייצג את שירות ContentDirectory הספציפי בהתקן) ובמופע של `UpnpSoapClient`.
+כדי להשתמש ב-`ContentDirectoryService`, יש צורך באובייקט `ServiceDescription` (המייצג את שירות ContentDirectory הספציפי בהתקן) וב-`baseURL` של ההתקן.
 
 ```typescript
-// נניח שיש לנו אובייקט 'device' מסוג UpnpDevice שהתקבל מגילוי
+// נניח שיש לנו אובייקט 'device' מסוג FullDeviceDescription שהתקבל מגילוי
 // ושאנחנו רוצים לעבוד עם שירות ContentDirectory שלו.
-// כמו כן, נניח ש-'device.services' מאוכלס כראוי.
 
-let cdsServiceInfo: UpnpService | undefined;
-if (device.services) {
-    for (const serviceId in device.services) {
-        const service = device.services[serviceId];
-        if (service.serviceType.includes('ContentDirectory')) {
-            cdsServiceInfo = service;
-            break;
-        }
-    }
+let cdsServiceInfo: ServiceDescription | undefined;
+if (device.serviceList) {
+    cdsServiceInfo = device.serviceList.find(s => s.serviceType.includes(CONTENT_DIRECTORY_SERVICE));
 }
 
 if (cdsServiceInfo) {
-  const soapClient = new UpnpSoapClient(); // אתחול לקוח SOAP
-  const cds = new ContentDirectoryService(cdsServiceInfo, soapClient);
+  const cds = new ContentDirectoryService(cdsServiceInfo, device.baseURL);
   console.log('ContentDirectoryService initialized.');
   // כעת ניתן להשתמש ב-cds, למשל: browseContent(cds);
 } else {
@@ -271,13 +317,13 @@ if (cdsServiceInfo) {
 ```typescript
 async function browseContent(cds: ContentDirectoryService, objectId: string = "0") {
   try {
-    const result: BrowseResult = await cds.browse(
-      objectId, // ObjectID (למשל, "0" עבור השורש)
-      BrowseFlag.BrowseDirectChildren, // דגל לעיון בילדים ישירים
-      "*", // Filter (לקבל את כל המאפיינים)
-      0,   // startingIndex
-      0    // requestedCount (0 עבור כל הפריטים התואמים)
-    );
+    const result: BrowseResult = await cds.browse({
+      objectID: objectId, // ObjectID (למשל, "0" עבור השורש)
+      browseFlag: BrowseFlag.BrowseDirectChildren, // דגל לעיון בילדים ישירים
+      filter: "*", // Filter (לקבל את כל המאפיינים)
+      startingIndex: 0,
+      requestedCount: 0 // 0 עבור כל הפריטים התואמים
+    });
 
     console.log(`Browsing ObjectID '${objectId}': Found ${result.numberReturned} items (Total: ${result.totalMatches})`);
     if (result.updateID) {
@@ -292,7 +338,7 @@ async function browseContent(cds: ContentDirectoryService, objectId: string = "0
       console.log(`    Class: ${item.class}`);
       console.log(`    Restricted: ${item.restricted}`);
 
-      if ('childCount' in item) { // זהו DidlLiteContainer
+      if (item.class.startsWith('object.container')) { // זהו DidlLiteContainer
         const container = item as DidlLiteContainer;
         console.log(`    Type: Container`);
         if (container.childCount !== undefined) {
@@ -326,8 +372,7 @@ async function browseContent(cds: ContentDirectoryService, objectId: string = "0
 
 // כדי להריץ את הדוגמה:
 // if (cdsServiceInfo) {
-//   const soapClient = new UpnpSoapClient();
-//   const cds = new ContentDirectoryService(cdsServiceInfo, soapClient);
+//   const cds = new ContentDirectoryService(cdsServiceInfo, device.baseURL);
 //   browseContent(cds); // עיון בשורש
 //   // browseContent(cds, "someOtherContainerId"); // עיון בתיקייה ספציפית
 // }
@@ -341,41 +386,34 @@ async function browseContent(cds: ContentDirectoryService, objectId: string = "0
 *   `totalMatches`: המספר הכולל של פריטים התואמים לקריטריונים (יכול להיות גדול מ-`numberReturned` אם נעשה שימוש בפגינציה).
 *   `updateID` (אופציונלי): מזהה המשמש למעקב אחר שינויים בתוכן השרת.
 
-הטיפוסים `DidlLiteContainer`, `DidlLiteObject`, ו-`Resource` מכילים שדות רבים המתארים את מאפייני הפריטים והמשאבים שלהם, כפי שמפורט ב-[`src/types.ts`](../src/types.ts:1) (ומיוצא דרך [`src/index.ts`](../src/index.ts)).
+הטיפוסים `DidlLiteContainer`, `DidlLiteObject`, ו-`Resource` מכילים שדות רבים המתארים את מאפייני הפריטים והמשאבים שלהם, כפי שמפורט ב-[`src/types.ts`](../src/types.ts) (ומיוצא דרך [`src/index.ts`](../src/index.ts)).
 
-## שליחת פקודות SOAP (UpnpSoapClient) - גישה ישירה
+## שליחת פקודות SOAP (`sendUpnpCommand`) - גישה ישירה
 
-בעוד שהדרך המומלצת לאינטראקציה עם פעולות היא דרך פונקציות ה-`invoke` שנוספו לאובייקטי ה-`Action`, ה-`UpnpSoapClient` (מ-[`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts:1)) עדיין זמין לשימוש ישיר. הוא משמש "מתחת למכסה המנוע" על ידי פונקציות ה-`invoke` ועל ידי שירותים ספציפיים כמו `ContentDirectoryService`. ניתן להשתמש בו ישירות אם יש צורך בשליטה נמוכה יותר, לשליחת פקודות שאין להן עטיפה ייעודית, או לצורך ניפוי שגיאות.
+בעוד שהדרך המומלצת לאינטראקציה עם פעולות היא דרך פונקציות ה-`invoke` שנוספו לאובייקטי ה-`Action` (כאשר `detailLevel` הוא `Full`), הפונקציה `sendUpnpCommand` מ-[`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts) (ומיוצאת דרך [`src/index.ts`](../src/index.ts)) זמינה לשימוש ישיר. היא משמשת "מתחת למכסה המנוע" על ידי פונקציות ה-`invoke` ועל ידי שירותים ספציפיים כמו `ContentDirectoryService`. ניתן להשתמש בה ישירות אם יש צורך בשליטה נמוכה יותר, לשליחת פקודות שאין להן עטיפה ייעודית, או לצורך ניפוי שגיאות.
 
 ### ייבוא
 
 ```typescript
 import {
-  UpnpSoapClient,
-  SoapResponse,
-  SoapFault, // לטיפול בשגיאות
-  SoapResponsePayload // לגישה לנתונים מוצלחים
-  // UpnpService נדרש כדי לקבל controlURL ו-serviceType
+  sendUpnpCommand,
+  type SoapFault, // לטיפול בשגיאות
+  type ServiceDescription // נדרש כדי לקבל controlURL ו-serviceType
 } from '../src/index';
 ```
 
-### אתחול הלקוח
+### דוגמת שימוש
 
-```typescript
-const soapClient = new UpnpSoapClient();
-```
-ניתן להעביר אופציות לפרסר ה-XML (xml2js) ולבונה ה-XML (xmlbuilder2) בעת יצירת המופע, אך לרוב הגדרות ברירת המחדל מספיקות.
-
-### דוגמת שימוש: קריאה לפעולה (`invokeAction`)
-
-המתודה העיקרית היא `sendUpnpCommand` (שם הפונקציה שונה מ-`invokeAction` בדוגמה הישנה), המקבלת את הפרמטרים הבאים:
-*   `controlURL`: כתובת ה-URL של נקודת הבקרה של השירות (נמצא ב-`UpnpService.controlURL`).
-*   `serviceType`: ה-URN של סוג השירות (נמצא ב-`UpnpService.serviceType`).
+הפונקציה `sendUpnpCommand` מקבלת אובייקט `UpnpCommandOptions` עם הפרמטרים הבאים:
+*   `controlURL`: כתובת ה-URL של נקודת הבקרה של השירות (נמצא ב-`ServiceDescription.controlURL`).
+*   `serviceType`: ה-URN של סוג השירות (נמצא ב-`ServiceDescription.serviceType`).
 *   `actionName`: שם הפעולה לביצוע (למשל, "GetProtocolInfo").
-*   `args`: אובייקט JavaScript המכיל את הארגומנטים של הפעולה. אם אין ארגומנטים, יש להעביר אובייקט ריק `{}`.
+*   `args` (אופציונלי): אובייקט JavaScript המכיל את הארגומנטים של הפעולה. אם אין ארגומנטים, ניתן להשמיט או להעביר אובייקט ריק `{}`.
+*   `baseURL` (אופציונלי): כתובת בסיס לפתרון `controlURL` אם הוא יחסי.
+*   `customLogger` (אופציונלי).
 
 ```typescript
-async function getProtocolInfoExample(service: UpnpService, client: UpnpSoapClient) {
+async function getProtocolInfoExample(service: ServiceDescription, baseUrl?: string) {
   if (!service.controlURL || !service.serviceType) {
     console.error("Service controlURL or serviceType is missing.");
     return;
@@ -383,12 +421,13 @@ async function getProtocolInfoExample(service: UpnpService, client: UpnpSoapClie
 
   try {
     // הפונקציה sendUpnpCommand זורקת שגיאה במקרה של כשל SOAP או רשת
-    const result: Record<string, any> = await client.sendUpnpCommand(
-      service.controlURL,
-      service.serviceType,
-      "GetProtocolInfo", // שם הפעולה
-      {} // אין פרמטרים לפעולה זו
-    );
+    const result: Record<string, any> = await sendUpnpCommand({
+      controlURL: service.controlURL,
+      serviceType: service.serviceType,
+      actionName: "GetProtocolInfo", // שם הפעולה
+      args: {}, // אין פרמטרים לפעולה זו
+      baseURL: baseUrl
+    });
 
     console.log("GetProtocolInfo successful!");
     console.log("Source:", result.Source);
@@ -400,11 +439,11 @@ async function getProtocolInfoExample(service: UpnpService, client: UpnpSoapClie
         const fault = error.soapFault as SoapFault;
         console.error(`  Fault Code: ${fault.faultCode}`);
         console.error(`  Fault String: ${fault.faultString}`);
-        if (fault.upnpErrorCode) {
-            console.error(`  UPnP Error Code: ${fault.upnpErrorCode}`);
+        if (fault.detail?.UPnPError?.errorCode) { // מבנה שונה לפרטי שגיאת UPnP
+            console.error(`  UPnP Error Code: ${fault.detail.UPnPError.errorCode}`);
         }
-        if (fault.upnpErrorDescription) {
-            console.error(`  UPnP Error Description: ${fault.upnpErrorDescription}`);
+        if (fault.detail?.UPnPError?.errorDescription) {
+             console.error(`  UPnP Error Description: ${fault.detail.UPnPError.errorDescription}`);
         }
     } else {
         console.error(`  Message: ${error.message}`);
@@ -413,14 +452,13 @@ async function getProtocolInfoExample(service: UpnpService, client: UpnpSoapClie
 }
 
 // כדי להריץ את הדוגמה:
-// נניח שיש לנו 'device' מסוג UpnpDevice, ואנחנו רוצים לקרוא לפעולה בשירות ConnectionManager שלו
-// let connManagerService: UpnpService | undefined;
-// if (device.services) {
-//   connManagerService = Object.values(device.services).find(s => s.serviceType.includes('ConnectionManager'));
+// נניח שיש לנו 'device' מסוג FullDeviceDescription, ואנחנו רוצים לקרוא לפעולה בשירות ConnectionManager שלו
+// let connManagerService: ServiceDescription | undefined;
+// if (device.serviceList) {
+//   connManagerService = device.serviceList.find(s => s.serviceType.includes(CONNECTION_MANAGER_SERVICE));
 // }
 // if (connManagerService) {
-//   const soapClient = new UpnpSoapClient();
-//   getProtocolInfoExample(connManagerService, soapClient);
+//   getProtocolInfoExample(connManagerService, device.baseURL);
 // }
 ```
 
@@ -429,11 +467,11 @@ async function getProtocolInfoExample(service: UpnpService, client: UpnpSoapClie
 הפונקציה `sendUpnpCommand` מחזירה `Promise<Record<string, any>>`.
 *   במקרה של הצלחה, ה-Promise יתממש עם אובייקט המכיל את הפרמטרים שהוחזרו מהפעולה (למשל, עבור `GetProtocolInfo`, הוא יכיל את `Source` ו-`Sink`).
 *   במקרה של שגיאת SOAP או שגיאת רשת, ה-Promise יידחה עם אובייקט `Error`. אם השגיאה היא שגיאת SOAP, לאובייקט ה-`Error` יתווסף מאפיין `soapFault` מסוג `SoapFault` המכיל את פרטי השגיאה.
-    *   `faultCode`: קוד השגיאה.
+    *   `faultCode`: קוד השגיאה (למשל, `s:Client` או `s:Server`).
     *   `faultString`: תיאור מילולי של השגיאה.
-    *   `detail` (אופציונלי): פרטים נוספים.
-    *   `upnpErrorCode` (אופציונלי): קוד שגיאה ספציפי ל-UPnP.
-    *   `upnpErrorDescription` (אופציונלי): תיאור שגיאת ה-UPnP.
+    *   `detail` (אופציונלי): אובייקט המכיל פרטים נוספים, שעשוי לכלול `UPnPError` עם:
+        *   `errorCode`: קוד שגיאה ספציפי ל-UPnP.
+        *   `errorDescription`: תיאור שגיאת ה-UPnP.
 
 ## יצירת לוגרים (createLogger)
 
@@ -481,75 +519,93 @@ performSomeOperation({ value: 'another test without id' });
 *   `LOG_TO_CONSOLE`: `true` או `false`. ברירת מחדל: `true` (אם לא מוגדר).
 *   `LOG_TO_FILE`: `true` או `false`. ברירת מחדל: `false`.
 *   `LOG_FILE_PATH`: נתיב לקובץ הלוג אם `LOG_TO_FILE` הוא `true`. ברירת מחדל: `logs/app.log`.
-*   `LOG_MODULES`: רשימה מופרדת בפסיקים של שמות מודולים שרק עבורם יודפסו הודעות לוג (למשל, `MyApplicationLogic,upnpDiscoveryService`). אם לא מוגדר, ריק, או `*`, יודפסו הודעות מכל המודולים.
+*   `LOG_MODULES`: רשימה מופרדת בפסיקים של שמות מודולים שרק עבורם יודפסו הודעות לוג (למשל, `MyApplicationLogic,upnpDeviceExplorer`). אם לא מוגדר, ריק, או `*`, יודפסו הודעות מכל המודולים.
 
-ניתן לעיין בקובץ [`src/logger.ts`](../src/logger.ts:1) לפרטים נוספים על משתני הסביבה הנתמכים והתנהגות ברירת המחדל.
+ניתן לעיין בקובץ [`src/logger.ts`](../src/logger.ts) לפרטים נוספים על משתני הסביבה הנתמכים והתנהגות ברירת המחדל.
 
 ## דוגמת קוד מורחבת
 
-דוגמה זו (בהשראת [`examples/comprehensiveUpnpExample.ts`](../examples/comprehensiveUpnpExample.ts:1)) מדגימה גילוי התקנים, סינון התקנים מסוג "MediaRenderer", והדפסת פרטי שירות "AVTransport" אם קיים.
+דוגמה זו (בהשראת [`examples/comprehensiveUpnpExample.ts`](../examples/comprehensiveUpnpExample.ts)) מדגימה גילוי התקנים, סינון התקנים מסוג "MediaRenderer", והדפסת פרטי שירות "AVTransport" אם קיים, כולל הפעלת פעולה.
 
 ```typescript
-import { discoverAndProcessDevices, MEDIA_RENDERER_DEVICE, AVTRANSPORT_SERVICE, UpnpDevice, UpnpService } from '../src/index'; // ייבוא מקובץ האינדקס המאוחד
-// אין צורך לייבא Service בנפרד אם משתמשים ב-UpnpService
+import {
+  discoverSsdpDevices,
+  DiscoveryDetailLevel,
+  MEDIA_RENDERER_DEVICE,
+  AVTRANSPORT_SERVICE,
+  type FullDeviceDescription,
+  type ServiceDescription,
+  type Action
+} from '../src/index';
 
 async function findAndInspectMediaRenderers() {
   console.log('Looking for Media Renderer devices...');
-  const foundRenderers: UpnpDevice[] = [];
+  const foundRenderers: FullDeviceDescription[] = [];
 
   try {
-    await discoverAndProcessDevices(
-      MEDIA_RENDERER_DEVICE, // searchTarget: חפש רק Media Renderers
-      7000, // timeoutMs: המתן 7 שניות
-      (device: UpnpDevice) => { // onDeviceFoundCallback
-        console.log(`Found Media Renderer: ${device.friendlyName} (UDN: ${device.UDN})`);
+    await discoverSsdpDevices({
+      searchTarget: MEDIA_RENDERER_DEVICE,
+      timeoutMs: 7000, // זמן ארוך יותר לגילוי
+      detailLevel: DiscoveryDetailLevel.Full, // נבקש את כל הפרטים
+      onDeviceFound: (processedDevice: ProcessedDevice) => {
+        const device = processedDevice as FullDeviceDescription; // הנחה ש-detailLevel הוא Full
+        console.log(`\nFound Media Renderer: ${device.friendlyName} (UDN: ${device.UDN})`);
+        console.log(`  Location: ${device.location}`);
+        console.log(`  Manufacturer: ${device.manufacturer || 'N/A'}, Model: ${device.modelName || 'N/A'}`);
         foundRenderers.push(device);
 
-        if (device.services) { // שונה ל-services
-          // חפש את שירות AVTransport
-          let avTransportService: UpnpService | undefined;
-          for (const serviceId in device.services) {
-              const service = device.services[serviceId];
-              if (service.serviceType.includes(AVTRANSPORT_SERVICE)) {
-                  avTransportService = service;
-                  break;
-              }
-          }
+        if (device.serviceList) {
+          const avTransportService = device.serviceList.find(
+            (s: ServiceDescription) => s.serviceType.includes(AVTRANSPORT_SERVICE)
+          );
 
           if (avTransportService) {
             console.log(`  AVTransport Service (${avTransportService.serviceId}):`);
             console.log(`    Control URL: ${avTransportService.controlURL}`);
             console.log(`    SCPD URL: ${avTransportService.SCPDURL}`);
-            if (avTransportService.scpdError) {
-                console.log(`    SCPD Error: ${avTransportService.scpdError}`);
-            } else if (avTransportService.actions && Object.keys(avTransportService.actions).length > 0) { // שונה ל-actions
-              console.log(`    Actions:`);
-              Object.values(avTransportService.actions).forEach(action => { // מעבר על ערכי האובייקט
-                console.log(`      - ${action.name} ${action.invoke ? '(invokable)' : ''}`);
+
+            if (avTransportService.actionList) {
+              console.log(`    Actions (${avTransportService.actionList.length}):`);
+              avTransportService.actionList.forEach((action: Action) => {
+                console.log(`      - ${action.name} ${action.invoke ? '(Invokable)' : ''}`);
               });
-              // אפשר להמשיך ולפרט StateVariables וכו'
+
+              // ננסה להפעיל פעולה, למשל GetMediaInfo
+              const getMediaInfoAction = avTransportService.actionList.find(a => a.name === 'GetMediaInfo');
+              if (getMediaInfoAction && getMediaInfoAction.invoke) {
+                console.log(`    Invoking GetMediaInfo...`);
+                getMediaInfoAction.invoke({ InstanceID: "0" }) // InstanceID הוא בדרך כלל מחרוזת
+                  .then(mediaInfo => {
+                    console.log(`      GetMediaInfo Result for ${device.friendlyName}:`);
+                    console.log(`        NrTracks: ${mediaInfo.NrTracks}`);
+                    console.log(`        MediaDuration: ${mediaInfo.MediaDuration}`);
+                    console.log(`        CurrentURI: ${mediaInfo.CurrentURI}`);
+                  })
+                  .catch(err => {
+                    console.error(`      Error invoking GetMediaInfo for ${device.friendlyName}:`, err.message || err);
+                  });
+              }
             } else {
-              console.log('    No actions found for AVTransport service.');
+              console.log('    No actions found for AVTransport service (SCPD might be missing or failed).');
             }
           } else {
-            console.log(`  AVTransport service not found for ${device.friendlyName}`);
+            console.log('  AVTransport service not found on this renderer.');
           }
+        } else {
+          console.log('  No services listed for this renderer.');
         }
       }
-    );
+    });
 
-    if (foundRenderers.length === 0) {
-      console.log('No Media Renderer devices found.');
-    } else {
-      console.log(`\nDiscovery finished. Found ${foundRenderers.length} Media Renderer(s).`);
+    console.log(`\nDiscovery finished. Found ${foundRenderers.length} Media Renderers.`);
+    if (foundRenderers.length > 0) {
+      console.log("Summary of found renderers:");
+      foundRenderers.forEach(r => console.log(`- ${r.friendlyName} (UDN: ${r.UDN})`));
     }
 
   } catch (error) {
-    console.error('Error during Media Renderer discovery:', error);
+    console.error('\nError during comprehensive Media Renderer discovery:', error);
   }
 }
 
 findAndInspectMediaRenderers();
-```
-
-מדריך זה מכסה את השימוש העיקרי במודול גילוי ה-UPnP. לפרטים נוספים, מומלץ לעיין בקוד המקור של הקבצים המוזכרים ובדוגמאות נוספות אם קיימות.

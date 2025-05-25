@@ -1,0 +1,125 @@
+import { EventEmitter } from 'events';
+import { discoverSsdpDevices } from '../src/index';
+import {
+  ProcessedDevice,
+  DiscoveryOptions,
+  DiscoveryDetailLevel,
+  DeviceDescription,
+  FullDeviceDescription,
+  DeviceWithServicesDescription
+} from '../src/index';
+import { createModuleLogger } from '../src/index'; // Assuming logger is needed
+
+const logger = createModuleLogger('ContinuousDeviceExplorer');
+
+// ברירות מחדל עבור הגילוי הרציף
+const DEFAULT_CONTINUOUS_DISCOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 דקות
+const DEFAULT_DISCOVERY_OPTIONS: DiscoveryOptions = {
+  timeoutMs: 10000, // 10 שניות לכל סבב גילוי
+  detailLevel: DiscoveryDetailLevel.Full, // מספיק למידע הבסיסי הנדרש
+  searchTarget: 'ssdp:all',
+};
+
+export class ContinuousDeviceExplorer extends EventEmitter {
+  private discoveryOptions: DiscoveryOptions;
+  private intervalId?: NodeJS.Timeout;
+  private isDiscovering: boolean = false;
+  private abortController?: AbortController;
+  private continuousDiscoveryIntervalMs: number;
+
+  constructor(options?: Partial<DiscoveryOptions>, continuousIntervalMs?: number) {
+    super();
+    this.discoveryOptions = { ...DEFAULT_DISCOVERY_OPTIONS, ...options };
+    this.continuousDiscoveryIntervalMs = continuousIntervalMs || DEFAULT_CONTINUOUS_DISCOVERY_INTERVAL_MS;
+  }
+
+  public startDiscovery(): void {
+    if (this.isDiscovering) {
+      logger.warn('Discovery process is already running.');
+      return;
+    }
+    logger.info('Starting continuous UPnP device discovery...');
+    this.isDiscovering = true;
+    this.runDiscoveryCycle(); // הפעלת סבב ראשון מיידי
+
+    // הגדרת אינטרוול לסבבים הבאים
+    this.intervalId = setInterval(() => {
+      this.runDiscoveryCycle();
+    }, this.continuousDiscoveryIntervalMs);
+  }
+
+  public stopDiscovery(): void {
+    if (!this.isDiscovering) {
+      logger.warn('Discovery process is not running.');
+      return;
+    }
+    logger.info('Stopping continuous UPnP device discovery...');
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = undefined;
+    }
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = undefined;
+    }
+    this.isDiscovering = false;
+    this.emit('stopped');
+  }
+
+  private async runDiscoveryCycle(): Promise<void> {
+    if (this.abortController) { // אם יש סבב קודם שעדיין רץ, בטל אותו
+      logger.debug('Aborting previous discovery cycle.');
+      this.abortController.abort();
+    }
+    this.abortController = new AbortController();
+    const currentSignal = this.abortController.signal;
+
+    logger.debug('Starting new discovery cycle.', this.discoveryOptions);
+
+    try {
+      await discoverSsdpDevices({
+        ...this.discoveryOptions,
+        abortSignal: currentSignal,
+        onDeviceFound: (device: ProcessedDevice) => {
+          if (currentSignal.aborted) {
+            logger.debug('Device found after abort, ignoring:', (device as DeviceDescription).UDN || device.usn);
+            return;
+          }
+          // ודא שהמכשיר הוא לפחות DeviceDescription כדי לגשת לשדות הנדרשים
+          if ('friendlyName' in device && 'modelName' in device && 'UDN' in device) { // תיקון ל-UDN
+             this.emit('device', device as DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription);
+          } else if ('usn' in device && device.usn) { // USN קיים ב-BasicSsdpDevice
+            // אם זה רק BasicSsdpDevice, ייתכן שנרצה לפלוט אותו או לוג
+            // כאן אנחנו מצפים לפחות ל-DeviceDescription כדי לפלוט, אז אם זה רק Basic, נרשום לוג.
+            logger.debug('Basic SSDP device found (has USN but not full details like UDN/friendlyName yet):', device.usn);
+            // אפשר לפלוט אירוע אחר או לאגור אותו לעיבוד נוסף אם רוצים
+          }
+        },
+      });
+      if (currentSignal.aborted) {
+        logger.info('Discovery cycle was aborted.');
+      } else {
+        logger.debug('Discovery cycle completed.');
+      }
+    } catch (error: any) {
+      if (currentSignal.aborted && error.message && error.message.includes('aborted')) {
+        logger.info('Discovery cycle aborted as expected.');
+      } else {
+        logger.error('Error during discovery cycle:', error);
+        this.emit('error', error);
+      }
+    } finally {
+      if (this.abortController && this.abortController.signal === currentSignal) {
+         // נקה את הבקר רק אם זה הבקר הנוכחי (למניעת race condition אם stopDiscovery נקרא)
+        this.abortController = undefined;
+      }
+      logger.debug('Finished discovery cycle attempt.');
+    }
+  }
+
+  // Helper to check if a device has the required fields
+  // This can be used if we want to be more strict with the type emitted
+  // private isDeviceWithDetails(device: ProcessedDevice): device is DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription {
+  //   return 'friendlyName' in device && 'modelName' in device && 'UDN' in device;
+  // }
+}
