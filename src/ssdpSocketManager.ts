@@ -1,7 +1,8 @@
 // קובץ זה מכיל את הלוגיקה לניהול סוקטי SSDP (UDP)
 
 import * as dgram from 'node:dgram';
-import * as util from 'node:util'; // הוספת import
+import * as os from "node:os";
+
 import type { DiscoveryOptions } from './types';
 import { createModuleLogger } from './logger';
 
@@ -14,6 +15,93 @@ const SSDP_MULTICAST_ADDRESS_IPV6_LINK_LOCAL = "FF02::C";
 const M_SEARCH_REQUEST_START_LINE = "M-SEARCH * HTTP/1.1";
 const MX_VALUE = 2; // שניות להמתנה לתגובה מהתקנים
 const USER_AGENT = "Node.js/UpnpDeviceExplorer/0.1"; // User-Agent עבור בקשות SSDP
+const APIPA_ADDRESS_v4 = '169.254.';
+const EXTERNAL_ADDRESS_v6 = 'fe80::';
+const DEFAULT_MULTICAST_TTL = 128;
+
+type NetworkType = 'IPv4' | 'IPv6';
+interface NetworkInterface {
+  name: string;
+  address: string;
+  family: NetworkType;
+  scopeId?: number;
+  ipv6FullAddress?: string;
+}
+
+/**
+ * @hebrew מאתרת ממשקי רשת רלוונטיים עבור גילוי SSDP.
+ * @param allNetworkInterfaces - אובייקט המכיל את כל ממשקי הרשת הזמינים (כמו זה המוחזר מ-os.networkInterfaces()).
+ * @param isIPv6 - האם לכלול רק ממשקי IPv6 או רק ממשקי IPv4
+ * @returns מערך של ממשקי רשת רלוונטיים.
+ */
+function findRelevantNetworkInterfaces(
+  allNetworkInterfaces: NodeJS.Dict<os.NetworkInterfaceInfo[]>,
+  isIPv6: boolean
+): NetworkInterface[] {
+
+  const searchIPv4 = !isIPv6, searchIPv6 = isIPv6;
+
+  const relevantInterfaces: NetworkInterface[] = [];
+
+  if (!allNetworkInterfaces) return relevantInterfaces;
+
+  for (const interfaceName of Object.keys(allNetworkInterfaces)) {
+
+    const interfaceDetails = allNetworkInterfaces[interfaceName];
+
+    if (!interfaceDetails) continue;
+
+    for (const iface of interfaceDetails) {
+      if (
+        iface.internal && iface.address.startsWith(APIPA_ADDRESS_v4)
+      ) continue; // דלג על ממשקים פנימיים וממשקים תקולים
+
+      if (
+        searchIPv4 &&
+        iface.family === 'IPv4'
+      ) {
+        relevantInterfaces.push({
+          name: interfaceName,
+          address: iface.address,
+          family: 'IPv4'
+        });
+        logger.debug(`Found relevant IPv4 interface: ${interfaceName} - ${iface.address}`);
+
+      } else if (
+        searchIPv6
+        && iface.family === 'IPv6'
+        && iface.address.toLowerCase().startsWith(EXTERNAL_ADDRESS_v6)
+        && (iface.scopeid !== undefined && iface.scopeid > 0)
+      ) {
+
+        let ipv6FullAddress: string;
+
+        if (process.platform === 'win32') {
+          ipv6FullAddress = `${iface.address}%${iface.scopeid}`;
+
+          logger.debug(`[${interfaceName}] Windows IPv6 Link-Local: using address%scopeId: ${ipv6FullAddress}`);
+        } else {
+          ipv6FullAddress = `${iface.address}%${interfaceName}`;
+
+          logger.debug(`[${interfaceName}] Non-Windows IPv6 Link-Local: membership with address%name (${ipv6FullAddress})`);
+        }
+
+        relevantInterfaces.push({
+          name: interfaceName,
+          address: iface.address,
+          family: 'IPv6',
+          scopeId: iface.scopeid,
+          ipv6FullAddress
+        });
+
+        logger.debug(`Found relevant IPv6 link-local interface: ${interfaceName} - ${iface.address}%${iface.scopeid || ''}`);
+      }
+    }
+
+  }
+
+  return relevantInterfaces;
+}
 
 /**
  * @hebrew יוצר סוקט dgram בודד עם ההגדרות הנדרשות.
@@ -25,12 +113,19 @@ async function createSingleSocket(
   socketIdentifier: "notifyIPv4" | "msearchIPv4" | "notifyIPv6" | "msearchIPv6",
   isMSearchSocket: boolean,
   onMessageCallback: (msg: Buffer, rinfo: dgram.RemoteInfo, socketType: "notifyIPv4" | "msearchIPv4" | "notifyIPv6" | "msearchIPv6") => void,
-  onErrorCallback: (err: Error, socketType: string) => void
+  onErrorCallback: (err: Error, socketType: string) => void,
+  networkInterfaces?: NodeJS.Dict<os.NetworkInterfaceInfo[]>
 ): Promise<dgram.Socket> {
   return new Promise<dgram.Socket>((resolve, reject) => {
     const socket = dgram.createSocket({ type, reuseAddr: true });
     // @ts-ignore - הוספת המאפיין באופן דינמי לצורך זיהוי בלוגים
     socket._socketIdentifier = socketIdentifier;
+
+    const isIPv6 = (type === 'udp6');
+    const allInterfacesInput = networkInterfaces || os.networkInterfaces();
+    const relevantInterfaces = findRelevantNetworkInterfaces(allInterfacesInput, isIPv6);
+    const portToBind = isMSearchSocket ? 0 : SSDP_PORT;
+    const bindAddress = isIPv6 ? '::' : '0.0.0.0';
 
 
     socket.on('error', (err) => {
@@ -49,16 +144,24 @@ async function createSingleSocket(
       onMessageCallback(msg, rinfo, socketIdentifier);
     });
 
-    const portToBind = isMSearchSocket ? 0 : SSDP_PORT; 
-    const bindAddress = type === 'udp4' ? '0.0.0.0' : '::';
-
     socket.bind(portToBind, bindAddress, () => {
       try {
-        socket.setBroadcast(true); 
-        // socket.setMulticastTTL(DEFAULT_MULTICAST_TTL); // לא הכרחי לרוב
+        socket.setBroadcast(true);
+        socket.setMulticastTTL(DEFAULT_MULTICAST_TTL); // לא הכרחי לרוב
 
-        socket.addMembership(multicastAddress); 
-        const actualPort = socket.address().port; 
+        // קשירה למולטיקאסט בכל הממשקים הרלוונטיים
+        for (const interfaceInfo of relevantInterfaces) {
+
+          const interfaceAddress = // ב ג' 6 צריך כתובת מלאה כולל שם ממשק, או מספר בווינדוס.
+            (isIPv6) ? interfaceInfo?.ipv6FullAddress : interfaceInfo.address;
+
+          socket.addMembership(multicastAddress, interfaceAddress);
+        }
+
+
+
+        const actualPort = socket.address().port;
+
         logger.info(`Socket ${socketIdentifier} listening on ${bindAddress}:${actualPort} and joined multicast group ${multicastAddress}`);
         resolve(socket);
       } catch (bindError: any) {
@@ -75,6 +178,15 @@ async function createSingleSocket(
   });
 }
 
+type OnMessage = (
+  msg: Buffer,
+  rinfo: dgram.RemoteInfo,
+  socketType: "notifyIPv4" | "msearchIPv4" | "notifyIPv6" | "msearchIPv6",
+) => void;
+
+type SendMSearch = (target: string, ipVersion: 4 | 6) => Promise<void>;
+
+
 /**
  * @hebrew יוצר ומנהל את סוקטי ה-UDP לגילוי SSDP.
  * מטפל ביצירת סוקטים ל-IPv4, ואם נדרש, גם ל-IPv6.
@@ -86,14 +198,11 @@ async function createSingleSocket(
  */
 export async function createSocketManager(
   options: Pick<DiscoveryOptions, "includeIPv6">, // הצטמצמו הפרמטרים שבאמת בשימוש כאן
-  onMessage: (
-    msg: Buffer,
-    rinfo: dgram.RemoteInfo,
-    socketType: "notifyIPv4" | "msearchIPv4" | "notifyIPv6" | "msearchIPv6"
-  ) => void,
-  onError: (err: Error, socketType: string) => void
+  onMessage: OnMessage,
+  onError: (err: Error, socketType: string) => void,
+  networkInterfaces?: NodeJS.Dict<os.NetworkInterfaceInfo[]>
 ): Promise<{
-  sendMSearch: (target: string, ipVersion: 4 | 6) => Promise<void>;
+  sendMSearch: SendMSearch;
   closeAll: () => Promise<PromiseSettledResult<void>[]>;
 }> {
   const sockets: dgram.Socket[] = [];
@@ -108,7 +217,8 @@ export async function createSocketManager(
       "notifyIPv4",
       false, // isMSearchSocket
       onMessage,
-      onError // onError כבר נקרא מתוך createSingleSocket במקרה של reject
+      onError, // onError כבר נקרא מתוך createSingleSocket במקרה של reject
+      networkInterfaces
     );
     sockets.push(notifyIPv4Socket);
   } catch (err) {
@@ -211,10 +321,10 @@ export async function createSocketManager(
             resolve();
           });
         } catch (err) {
-            // @ts-ignore
-            const id = socket._socketIdentifier || 'unknown';
-            logger.warn(`Error trying to initiate close for socket ${id}. It might already be closed or in an error state.`, err);
-            resolve(); // Resolve even if closing fails, as the socket might be unusable
+          // @ts-ignore
+          const id = socket._socketIdentifier || 'unknown';
+          logger.warn(`Error trying to initiate close for socket ${id}. It might already be closed or in an error state.`, err);
+          resolve(); // Resolve even if closing fails, as the socket might be unusable
         }
       });
     });

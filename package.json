@@ -1,9 +1,16 @@
 {
+  "main": "src/index.ts",
   "dependencies": {
     "@achingbrain/ssdp": "^4.2.2",
+    "@perseveranza-pets/milo": "^0.3.0",
+    "@types/express": "^5.0.2",
     "@types/xml2js": "^0.4.14",
     "axios": "^1.9.0",
     "dlna-browser-utils": "^0.0.2",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "http-parser-js": "^0.5.10",
+    "llhttp": "^1.0.1",
     "node-ssdp": "^4.0.1",
     "strong-soap": "^4.1.12",
     "upnp-mediarenderer-client": "^1.4.0",
@@ -15,9 +22,12 @@
   },
   "scripts": {
     "example:custom-discovery": "node node_modules/ts-node/dist/bin.js examples/testCustomDiscovery.ts",
-    "example:comprehensive": "node node_modules/ts-node/dist/bin.js examples/comprehensiveUpnpExample.ts"
+    "example:comprehensive": "node node_modules/ts-node/dist/bin.js examples/comprehensiveUpnpExample.ts",
+    "test": "bun test ./src",
+    "start": "bun ./server/server.ts"
   },
   "devDependencies": {
+    "@types/bun": "^1.2.14",
     "@types/node-ssdp": "^4.0.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

@@ -163,7 +163,9 @@ export declare function discoverSsdpDevicesIterable(
 
 ## מבנה פונקציות פנימיות עיקריות (דוגמאות)
 
+
 ```typescript
+
 /**
  * @hebrew (פנימי) יוצר ומנהל את סוקטי ה-UDP לגילוי SSDP.
  * מטפל ביצירת סוקטים ל-IPv4, ואם נדרש, גם ל-IPv6.
@@ -229,16 +231,16 @@ async function _discoverDevicesOrchestrator(
   //        - const basicDevice = _parseSsdpResponseWithLlhttp(msg, rinfo);
   //        - אם basicDevice תקין ואינו USN שכבר נצפה:
   //            - הוסף USN ל-uniqueUsns.
-  //            - _fullyProcessSingleDevice(basicDevice, options.detailLevel)
-  //                .then(processedDevice => {
-  //                    if (processedDevice) {
-  //                        onDeviceProcessed(processedDevice);
-  //                    }
-  //                })
-  //                .catch(error => {
-  //                    logger.error(`Error processing device ${basicDevice.usn}:`, error);
-  //                    // אפשר להחליט אם להפעיל את הקולבק עם basicDevice או לא במקרה של שגיאה
-  //                });
+  _fullyProcessSingleDevice(basicDevice, options.detailLevel)
+    .then(processedDevice => {
+      if (processedDevice) {
+        onDeviceProcessed(processedDevice);
+      }
+    })
+    .catch(error => {
+      logger.error(`Error processing device ${basicDevice.usn}:`, error);
+      // אפשר להחליט אם להפעיל את הקולבק עם basicDevice או לא במקרה של שגיאה
+    });
   // 4. המתנה לסיום ה-timeout או התערבות חיצונית.
   // 5. סגירת סוקטים בסיום: await socketManager.closeAll();
 }
@@ -305,7 +307,7 @@ async function _fullyProcessSingleDevice(
     logger.error(`Error populating actions/state variables for ${basicDevice.location}: ${error.message}, returning device with services.`);
     return processedDevice as DeviceWithServicesDescription; // או null
   }
-  
+
   return processedDevice as FullDeviceDescription;
 }
 
@@ -344,18 +346,18 @@ async function _fetchAndParseDeviceDescriptionXml(basicDevice: BasicSsdpDevice):
  */
 async function _populateServices(deviceDescription: DeviceDescription): Promise<DeviceWithServicesDescription | null> {
   /* ... מימוש ... */
-  // let servicesPopulated = false;
-  // for (const service of deviceDescription.serviceList) {
-  //   try {
-  //     // 1. אחזור ה-XML של ה-SCPD מה-service.SCPDURL.
-  //     // 2. פירסור ה-XML של ה-SCPD.
-  //     // 3. מיפוי ל-service.actionList (עם `_mapXmlToActionList`).
-  //     // 4. מיפוי ל-service.stateVariables (עם `_mapXmlToStateVariableList`).
-  //     //    לא יוצרים כאן את פונקציות ה-invoke/query.
-  //     // servicesPopulated = true;
-  //   } catch (error) { /* ... */ }
-  // }
-  // return servicesPopulated ? (deviceDescription as DeviceWithServicesDescription) : null;
+  let servicesPopulated = false;
+  for (const service of deviceDescription.serviceList) {
+    try {
+      //     // 1. אחזור ה-XML של ה-SCPD מה-service.SCPDURL.
+      //     // 2. פירסור ה-XML של ה-SCPD.
+      //     // 3. מיפוי ל-service.actionList (עם `_mapXmlToActionList`).
+      //     // 4. מיפוי ל-service.stateVariables (עם `_mapXmlToStateVariableList`).
+      //     //    לא יוצרים כאן את פונקציות ה-invoke/query.
+      //     // servicesPopulated = true;
+    } catch (error) { /* ... */ }
+  }
+  return servicesPopulated ? (deviceDescription as DeviceWithServicesDescription) : null;
   // הפונקציה הקיימת `fetchServiceScpdDetails` תפוצל/תותאם לכאן.
   /**
    * @hebrew (פנימי-פנימי) ממפה קלט XML של רשימת אקשנים מ-SCPD למערך Action[].
@@ -376,8 +378,8 @@ async function _populateServices(deviceDescription: DeviceDescription): Promise<
  */
 async function _populateActionsAndStateVariables(deviceWithServices: DeviceWithServicesDescription): Promise<FullDeviceDescription> {
   /* ... מימוש ... */
-  // for (const service of deviceWithServices.serviceList) { /* ... */ }
-  // return deviceWithServices as FullDeviceDescription;
+  for (const service of deviceWithServices.serviceList) { /* ... */ }
+  return deviceWithServices as FullDeviceDescription;
   /**
    * @hebrew (פנימי-פנימי) יוצר פונקציית invoke דינמית עבור אקשן נתון.
    */

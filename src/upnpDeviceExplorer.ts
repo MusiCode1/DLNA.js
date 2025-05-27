@@ -15,7 +15,7 @@ import {
   DiscoveryOptions,
   BasicSsdpDevice,
   DeviceDescription, // נשאר בשימוש
-  ServiceDescription, // נשאר בשימוש
+  //ServiceDescription, // נשאר בשימוש
   // DeviceIcon, // הוסר - לא בשימוש ישיר כאן
   // Action, // הוסר - לא בשימוש ישיר כאן
   // ActionArgument, // הוסר - לא בשימוש ישיר כאן
@@ -23,7 +23,9 @@ import {
   ProcessedDevice, // הוספת ייבוא
   DiscoveryDetailLevel, // הוספת ייבוא
   DeviceWithServicesDescription, // נשאר בשימוש
-  FullDeviceDescription // נשאר בשימוש
+  FullDeviceDescription, // נשאר בשימוש
+  RawSsdpMessagePayload, // הוספת ייבוא
+  RawSsdpMessageHandler // הוספת ייבוא
 } from './types';
 
 
@@ -32,7 +34,7 @@ import {
 // ==========================================================================================
 const DEFAULT_TIMEOUT_MS = 5000; // קבוע זה עדיין בשימוש כאן
 const DEFAULT_SEARCH_TARGET = "ssdp:all";
-const DEFAULT_DISCOVERY_TIMEOUT_PER_INTERFACE_MS = 2000;
+// const DEFAULT_DISCOVERY_TIMEOUT_PER_INTERFACE_MS = 2000;
 const DEFAULT_INCLUDE_IPV6 = false;
 // הקבועים הבאים הועברו ל-ssdpSocketManager.ts
 // const SSDP_PORT = 1900;
@@ -180,7 +182,7 @@ function _mapHttpPacketToBasicSsdpDevice(
  * @returns Promise שמסתיים כאשר תהליך הגילוי מסתיים (לאחר timeout או abort).
  */
 async function _discoverDevicesOrchestrator(
-  options: Required<DiscoveryOptions>, // options.abortSignal is guaranteed to be an AbortSignal here
+  options: Omit<Required<DiscoveryOptions>, 'onRawSsdpMessage'> & { onRawSsdpMessage?: RawSsdpMessageHandler }, // options.abortSignal is guaranteed to be an AbortSignal here
   onDeviceProcessed: (device: ProcessedDevice) => void
 ): Promise<void> {
   const uniqueUsns = new Set<string>();
@@ -217,9 +219,21 @@ async function _discoverDevicesOrchestrator(
 
   const onSocketMessage = (
     msg: Buffer,
-    rinfo: import('node:dgram').RemoteInfo, // שימוש ב-import type
+    rinfo: RemoteInfo, // שימוש ב-import type
     socketType: string
   ) => {
+    // >>> ADD THIS SECTION <<<
+    if (options.onRawSsdpMessage) {
+      try {
+        const payload: RawSsdpMessagePayload = { message: msg, remoteInfo: rinfo, socketType };
+        options.onRawSsdpMessage(payload);
+      } catch (error) {
+        logger.error('Error in user-provided onRawSsdpMessage handler:', error, { remoteAddress: rinfo.address });
+        // Continue processing the message normally even if the user's callback fails
+      }
+    }
+    // >>> END OF ADDED SECTION <<<
+
     if (internalAbortController.signal.aborted) {
       logger.debug(`[Orchestrator] Message received on ${socketType} from ${rinfo.address}:${rinfo.port} after abort. Ignoring.`);
       return;
@@ -283,11 +297,9 @@ async function _discoverDevicesOrchestrator(
   };
 
   try {
-    socketManager = await createSocketManager( // שימוש בפונקציה המיובאת והמתוקנת
-      {
-        includeIPv6: options.includeIPv6,
-        // searchTarget ו-timeoutMs אינם חלק מהחתימה של createSocketManager עוד
-      },
+    socketManager = await createSocketManager({ // שימוש בפונקציה המיובאת והמתוקנת
+      includeIPv6: options.includeIPv6,
+    },
       onSocketMessage,
       onSocketError
     );
@@ -421,10 +433,10 @@ export async function* discoverSsdpDevicesIterable(
     }
   }
 
-  const effectiveOptions: Required<DiscoveryOptions> = {
+  const effectiveOptions: Parameters<typeof _discoverDevicesOrchestrator>[0] = {
     timeoutMs: options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     searchTarget: options?.searchTarget ?? DEFAULT_SEARCH_TARGET,
-    discoveryTimeoutPerInterfaceMs: options?.discoveryTimeoutPerInterfaceMs ?? DEFAULT_DISCOVERY_TIMEOUT_PER_INTERFACE_MS,
+    //discoveryTimeoutPerInterfaceMs: options?.discoveryTimeoutPerInterfaceMs ?? DEFAULT_DISCOVERY_TIMEOUT_PER_INTERFACE_MS,
     onDeviceFound: (device: ProcessedDevice) => {
       if (abortControllerForIterable.signal.aborted) {
         logger.debug("discoverSsdpDevicesIterable (onDeviceFound): Iterable aborted, not adding device to buffer:", device.usn || (device as DeviceDescription).UDN);
@@ -442,6 +454,11 @@ export async function* discoverSsdpDevicesIterable(
     networkInterfaces: options?.networkInterfaces ?? (os.networkInterfaces() as NodeJS.Dict<os.NetworkInterfaceInfo[]>),
     detailLevel: options?.detailLevel ?? DiscoveryDetailLevel.Full,
     abortSignal: abortControllerForIterable.signal,
+    // onRawSsdpMessage is now correctly typed due to the change in _discoverDevicesOrchestrator's signature
+    // and how effectiveOptions is passed to it.
+    // The issue was that Required<DiscoveryOptions> made onRawSsdpMessage: RawSsdpMessageHandler (not undefined).
+    // Now, _discoverDevicesOrchestrator expects onRawSsdpMessage to be potentially undefined.
+    onRawSsdpMessage: options?.onRawSsdpMessage,
   };
 
   let pendingPromiseResolve: ((result: IteratorResult<ProcessedDevice>) => void) | null = null;
@@ -623,15 +640,16 @@ export async function discoverSsdpDevices(
     optionsParam?.onDeviceFound?.(device);
   };
 
-  const effectiveOptions: Required<DiscoveryOptions> = {
+  const effectiveOptions: Parameters<typeof _discoverDevicesOrchestrator>[0] = {
     timeoutMs: optionsParam?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     searchTarget: optionsParam?.searchTarget ?? DEFAULT_SEARCH_TARGET,
-    discoveryTimeoutPerInterfaceMs: optionsParam?.discoveryTimeoutPerInterfaceMs ?? DEFAULT_DISCOVERY_TIMEOUT_PER_INTERFACE_MS,
+    //discoveryTimeoutPerInterfaceMs: optionsParam?.discoveryTimeoutPerInterfaceMs ?? DEFAULT_DISCOVERY_TIMEOUT_PER_INTERFACE_MS,
     onDeviceFound: onDeviceProcessedCallback,
     includeIPv6: optionsParam?.includeIPv6 ?? DEFAULT_INCLUDE_IPV6,
     networkInterfaces: optionsParam?.networkInterfaces ?? (os.networkInterfaces() as NodeJS.Dict<os.NetworkInterfaceInfo[]>),
     detailLevel: optionsParam?.detailLevel ?? DiscoveryDetailLevel.Full,
     abortSignal: effectiveAbortSignal,
+    onRawSsdpMessage: optionsParam?.onRawSsdpMessage,
   };
 
   try {

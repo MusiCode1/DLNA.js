@@ -3,49 +3,56 @@ dotenv.config(); // טעינת משתני סביבה מקובץ .env
 
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path'; // הוספת ייבוא עבור path
+import { networkInterfaces } from "node:os";
+import type { RemoteInfo } from 'node:dgram'; // הוספת ייבוא עבור RemoteInfo
+
+
 import { ContinuousDeviceExplorer } from './continuousDeviceExplorer'; // ייבוא המחלקה החדשה
+// ייבוא טיפוסים מהאינדקס, הוספת BrowseFlag
+import { handleBrowseRequest } from './browseHandler'; // ייבוא ה-handler החדש
+import { createRendererHandler, playFolderOnRenderer } from './rendererHandler'; // ייבוא ה-handler החדש עבור renderers ופונקציית העזר
+
 import {
   DiscoveryDetailLevel,
   createModuleLogger,
-} from '../src'; // ייבוא טיפוסים מהאינדקס, הוספת BrowseFlag
-import { handleBrowseRequest } from './browseHandler'; // ייבוא ה-handler החדש
-import { createRendererHandler, playFolderOnRenderer } from './rendererHandler'; // ייבוא ה-handler החדש עבור renderers ופונקציית העזר
+} from '../src';
 
 import type {
   DeviceWithServicesDescription,
   FullDeviceDescription,
   DeviceDescription,
-  ProcessedDevice
-
+  ProcessedDevice,
+  RawSsdpMessagePayload
 } from '../src';
-import type { ApiDevice } from './types'; // ייבוא ישירות מ-types.ts
+
+
+import type { ApiDevice, ContinueDiscoveryOptions } from './types'; // ייבוא ישירות מ-types.ts
 
 const logger = createModuleLogger('Server');
 
+type RawMessagesBuffer = {
+  message: string;
+  remoteInfo: RemoteInfo;
+  socketType: string;
+}
+
+const MAX_RAW_MESSAGES = 100; // קבוע לגודל המאגר
+const rawMessagesBuffer: RawMessagesBuffer[] = []; // מאגר לאחסון ההודעות
+
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3300;
+
+
 
 // אפשרות להעביר אופציות מותאמות אישית ל-ContinuousDeviceExplorer
-const discoveryOptions = {
+const discoveryOptions: ContinueDiscoveryOptions = {
   detailLevel: DiscoveryDetailLevel.Full, // בקש מספיק פרטים עבור ה-API
-  // ניתן להוסיף כאן timeoutMs או searchTarget אם רוצים לשנות את ברירות המחדל
+  includeIPv6: true,
+  timeoutMs: 30 * 1000,
+  continuousIntervalMs: 50 * 1000
 };
 const deviceExplorer = new ContinuousDeviceExplorer(discoveryOptions);
 
-// רשימה של המכשירים שנתגלו, נשמור רק את המידע הרלוונטי ל-API
-// export interface ApiDevice { // הגדרה זו הועברה ל-src/types.ts
-//   friendlyName: string;
-//   modelName: string;
-//   udn: string;
-//   remoteAddress?: string;
-//   lastSeen: number; // חותמת זמן מתי המכשיר נראה לאחרונה
-//   iconUrl?: string; // הוספת שדה עבור URL הלוגו
-//   // שדות שנוספו כדי לתמוך בפעולת browse
-//   baseURL?: string; // חיוני להרכבת URL-ים אבסולוטיים לשירותים
-//   serviceList?: ServiceDescription[]; // רשימת השירותים המלאה
-//   // supportedServices נשאר כדי לא לשבור API קיים, אך serviceList הוא המקור המלא
-//   supportedServices?: string[];
-// }
 let activeDevices: Map<string, ApiDevice> = new Map(); // שימוש ב-Map לניהול קל יותר של מכשירים לפי UDN
 
 // Middleware to parse JSON bodies
@@ -73,6 +80,11 @@ app.post('/api/devices/:udn/browse', (req: Request, res: Response, next: NextFun
 // Endpoint for controlling renderers
 const rendererRouter = createRendererHandler(activeDevices);
 app.use('/api/renderers', rendererRouter);
+
+// נקודת קצה חדשה להחזרת הודעות גולמיות
+app.get('/api/raw-messages', (req: Request, res: Response) => {
+  res.json(rawMessagesBuffer);
+});
 
 // נקודת קצה חדשה להפעלת פריסט
 app.get('/api/play-preset', async (req: Request, res: Response, next: NextFunction) => {
@@ -174,6 +186,20 @@ const startContinuousDeviceDiscovery = () => {
     }
   });
 
+  // הוספת האזנה לאירוע rawResponse
+  deviceExplorer.on('rawResponse', (payload: RawSsdpMessagePayload) => {
+
+    const messageString = payload.message.toString('utf-8');
+    rawMessagesBuffer.push({
+      ...payload,
+      message: messageString,
+    });
+    if (rawMessagesBuffer.length > MAX_RAW_MESSAGES) {
+      rawMessagesBuffer.shift();
+    }
+    // logger.debug(`Received raw SSDP message. Buffer size: ${rawMessagesBuffer.length}`); // הערה: ניתן להוסיף לוג אם רוצים
+  });
+
   deviceExplorer.on('error', (err: Error) => {
     logger.error('Error during continuous device discovery:', err);
     // כאן אפשר להחליט אם לנסות להפעיל מחדש את הגילוי או לנקוט פעולה אחרת
@@ -219,6 +245,7 @@ app.use((err: Error, req: Request, res: Response, next: express.NextFunction) =>
 
 app.listen(port, () => {
   logger.info(`Server listening on port ${port}`);
+  logger.info('url: http://localhost:' + port + '/')
   startContinuousDeviceDiscovery();
 });
 

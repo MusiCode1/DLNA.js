@@ -6,6 +6,12 @@ $env:LOG_MODULES = ""
 $env:LOG_LEVEL = ""
 ```
 
+// הגדרת משתני סביבה לדוגמה (בפועל, הם יוגדרו מחוץ לקוד)
+// process.env.LOG_LEVEL = 'debug'; // הצג את כל הרמות עד debug
+// process.env.LOG_TO_CONSOLE = 'true';
+// process.env.LOG_TO_FILE = 'true';
+// process.env.LOG_FILE_PATH = 'logs/test_run.log'; // קובץ לוג ייעודי לבדיקה זו
+
 */
 
 // הגדרת רמות לוג וצבעים (אופציונלי, winston משתמש ברמות npm כברירת מחדל)

@@ -1,5 +1,8 @@
 // server/types.ts
-import type { ServiceDescription } from '../src'; // ApiDevice תלוי ב-ServiceDescription
+import type {
+    ServiceDescription,
+    DiscoveryOptions
+} from '../src'; // ApiDevice תלוי ב-ServiceDescription
 
 /**
  * @hebrew מייצג את המידע על התקן כפי שהוא נשמר ומוצג ב-API של השרת.
@@ -14,4 +17,8 @@ export interface ApiDevice {
     baseURL?: string; // חיוני להרכבת URL-ים אבסולוטיים לשירותים
     serviceList?: ServiceDescription[]; // רשימת השירותים המלאה
     supportedServices?: string[]; // שירותים נתמכים (יכול להיות נגזר מ-serviceList)
+}
+
+export interface ContinueDiscoveryOptions extends DiscoveryOptions {
+    continuousIntervalMs: number
 }

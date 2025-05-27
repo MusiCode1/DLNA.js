@@ -24,6 +24,7 @@ const DEVICES_FILE_NAME = 'discovered_devices.json';
 const SCRIPT_DIR = __dirname; // תיקיית הסקריפט הנוכחי
 const LOG_FILE_PATH = path.join(SCRIPT_DIR, LOG_FILE_NAME);
 const DEVICES_FILE_PATH = path.join(SCRIPT_DIR, DEVICES_FILE_NAME);
+const MY_IP = '10.100.102.106';
 
 // ==========================================================================================
 // Global State - מצב גלובלי
@@ -290,7 +291,7 @@ const createNotifyListenerSocket = (): dgram.Socket => {
         }
     });
     
-    notifySocket.bind(SSDP_PORT, "0.0.0.0", () => {
+    notifySocket.bind(SSDP_PORT, MY_IP, () => {
         log(`NOTIFY listener socket bound to 0.0.0.0:${SSDP_PORT}`, 'info');
     });
 
@@ -326,7 +327,7 @@ const createMSearchClientSocket = (): dgram.Socket => {
     });
     
     // קשירה לפורט אקראי (undefined) בכל הממשקים
-    mSearchSocket.bind(undefined, "0.0.0.0", () => {
+    mSearchSocket.bind(undefined, MY_IP, () => {
         const address = mSearchSocket.address();
         log(`M-SEARCH client socket bound to ${address.address}:${address.port}`, 'info');
         // לאחר הקשירה, אפשר להצטרף לקבוצת המולטיקאסט אם רוצים לקלוט גם NOTIFY דרך הסוקט הזה,

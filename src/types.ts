@@ -1,6 +1,33 @@
 // קובץ זה מכיל את כל הגדרות הממשקים והטיפוסים הקשורים ל-UPnP.
 import type { ContentDirectory, AVTransport, RenderingControl } from './specificTypes';
+import type { RemoteInfo } from 'node:dgram'; // הוספת ייבוא
+import * as os from 'os'; // הוספת ייבוא, למרות שכבר היה שימוש ב-import('os') בהמשך
+
 // AbortSignal זמין גלובלית ב-Node.js מודרני, אין צורך בייבוא.
+
+/**
+ * @hebrew מידע על הודעת SSDP גולמית שהתקבלה.
+ */
+export interface RawSsdpMessagePayload {
+  /**
+   * @hebrew ההודעה הגולמית כפי שהתקבלה מהרשת.
+   */
+  message: Buffer;
+  /**
+   * @hebrew מידע על כתובת השולח.
+   */
+  remoteInfo: RemoteInfo;
+  /**
+   * @hebrew סוג הסוקט שקלט את ההודעה (למשל, 'ipv4-unicast', 'ipv6-multicast').
+   */
+  socketType: string;
+}
+
+/**
+ * @hebrew פונקציית קולבק המופעלת עם קבלת הודעת SSDP גולמית.
+ * @param payload - המידע על ההודעה הגולמית.
+ */
+export type RawSsdpMessageHandler = (payload: RawSsdpMessagePayload) => void;
 
 /**
  * @hebrew אפשרויות עבור פונקציית הגילוי.
@@ -20,7 +47,7 @@ export interface DiscoveryOptions {
      * @hebrew זמן קצוב (במילישניות) לחיפוש על כל ממשק רשת בודד.
      * @default 2000
      */
-    discoveryTimeoutPerInterfaceMs?: number;
+    //discoveryTimeoutPerInterfaceMs?: number;
     /**
      * @hebrew פונקציית קולבק שתוזמן מיד עם קבלת תגובה ייחודית מהתקן SSDP.
      */
@@ -50,6 +77,10 @@ export interface DiscoveryOptions {
      * @hebrew אובייקט AbortSignal חיצוני לביטול תהליך הגילוי.
      */
     abortSignal?: AbortSignal;
+    /**
+     * @hebrew (אופציונלי) פונקציית קולבק שתופעל עבור כל הודעת SSDP גולמית המתקבלת.
+     */
+    onRawSsdpMessage?: RawSsdpMessageHandler;
 }
 
 /**

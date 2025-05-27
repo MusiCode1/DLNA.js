@@ -118,7 +118,7 @@ function sendWakeOnLan(
 // 2. (אופציונלי) שנה את כתובת ה-broadcast אם הרשת שלך משתמשת בכתובת שונה.
 // 3. (אופציונלי) שנה את מספר היציאה אם נדרש.
 
-const targetMac: string = ['48:9E:9D:FB:F7:CC', '48:9E:9D:FB:F7:98'][1]; // <--- שנה לכתובת ה-MAC הרצויה!
+const targetMac: string = ['48:9E:9D:FB:F7:CC', '48:9E:9D:FB:F7:98'][0]; // <--- שנה לכתובת ה-MAC הרצויה!
 const broadcastIp: string = '192.168.1.255'; // ברירת מחדל, שנה אם צריך
 const wolPort: number = 9;                     // ברירת מחדל, שנה אם צריך
 
