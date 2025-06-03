@@ -1,2 +1,7 @@
 
-bun build .\server\server.ts --compile --minify --sourcemap --bytecode --windows-hide-console --outfile .\dist\dlna-server
+bun build .\server\index.ts --compile --minify --sourcemap --bytecode --windows-hide-console --outfile .\dist\dlna-server
+
+bun build .\server\index.ts --compile --minify --outfile .\dist\dlna-server
+# ESP32
+
+WebQuery http://www.mysite.com/api/status GET
