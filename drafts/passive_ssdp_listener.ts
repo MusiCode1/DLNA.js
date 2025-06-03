@@ -19,6 +19,27 @@ const APIPA_ADDRESS_v4 = '169.254.';
 const APIPA_ADDRESS_v6 = 'fe80::';
 
 // ==========================================================================================
+// Filter Configuration - הגדרות סינון
+// ==========================================================================================
+const KNOWN_DEVICE_TYPES = [
+    "ssdp:all",
+    "upnp:rootdevice",
+    "urn:schemas-upnp-org:device:Basic:1",
+    "urn:schemas-upnp-org:device:MediaServer:1",
+    "urn:schemas-upnp-org:service:ContentDirectory:1",
+    "urn:schemas-upnp-org:service:ConnectionManager:1",
+    "urn:schemas-upnp-org:device:MediaRenderer:1",
+    "urn:schemas-upnp-org:service:AVTransport:1",
+    "urn:schemas-upnp-org:service:RenderingControl:1",
+    "urn:dial-multiscreen-org:service:dial:1",
+    "urn:lge-com:service:webos-second-screen:1", // LG Specific
+    // ניתן להוסיף עוד סוגים לפי הצורך
+];
+
+let currentFilterType: string | null = null;
+let isFilteringEnabled: boolean = false;
+
+// ==========================================================================================
 // Main Script Logic - לוגיקת הסקריפט הראשית
 // ==========================================================================================
 
@@ -32,6 +53,21 @@ const log = (message: string, level: 'log' | 'error' | 'warn' = 'log') => {
         console.warn(formattedMessage);
     } else {
         console.log(formattedMessage);
+    }
+};
+
+const setSsdpFilter = (deviceType: string | null) => {
+    if (deviceType && KNOWN_DEVICE_TYPES.includes(deviceType)) {
+        currentFilterType = deviceType;
+        isFilteringEnabled = true;
+        log(`SSDP filter enabled for device type: ${currentFilterType}`, 'log');
+    } else if (deviceType === null) {
+        currentFilterType = null;
+        isFilteringEnabled = false;
+        log("SSDP filter disabled.", 'log');
+    } else if (deviceType) {
+        log(`Invalid or unknown device type for filter: ${deviceType}. Filter remains unchanged.`, 'warn');
+        log(`Available types: ${KNOWN_DEVICE_TYPES.join(', ')}`, 'warn');
     }
 };
 
@@ -60,6 +96,8 @@ const sendMSearchRequest = (socket: dgram.Socket, searchTarget: string = SEARCH_
 };
 
 async function main() {
+
+    //setSsdpFilter('urn:schemas-upnp-org:device:MediaRenderer:1');
     log("Starting passive SSDP listener script...");
 
     const networkInterfacesList = networkInterfaces();
@@ -102,7 +140,7 @@ async function main() {
                         !interfaceInfo.address.startsWith(APIPA_ADDRESS_v6) &&
                         interfaceInfo.family === networkFamelyType
                     ) {
-                        log('interface ' + interfaceName + ' add multicast on address ' + interfaceInfo.address, 'log');
+                        log('interface "' + interfaceName + '" add multicast on address ' + interfaceInfo.address, 'log');
                         socket.addMembership(SSDP_MULTICAST_ADDRESS_IPV4, interfaceInfo.address);
                     }
 
@@ -119,22 +157,76 @@ async function main() {
 
             (globalThis as any).socket = socket;
             (globalThis as any).sendMSearchRequest = sendMSearchRequest;
+            (globalThis as any).setSsdpFilter = setSsdpFilter;
+            (globalThis as any).KNOWN_DEVICE_TYPES = KNOWN_DEVICE_TYPES;
+            (globalThis as any).getIsFilteringEnabled = () => isFilteringEnabled;
+            (globalThis as any).getCurrentFilterType = () => currentFilterType;
         } catch (e: any) {
             log(`Error setting socket options or joining multicast group: ${e.message}`, "error");
             log("Listener might not receive multicast messages.", "warn");
         }
     });
 
+// פונקציית עזר לניתוח כותרות מהודעת SSDP
+const getSsdpHeaderValue = (message: string, headerName: string): string | null => {
+    const lines = message.split('\r\n');
+    for (const line of lines) {
+        if (line.toUpperCase().startsWith(headerName.toUpperCase() + ':')) {
+            return line.substring(headerName.length + 1).trim();
+        }
+    }
+    return null;
+};
+
     socket.on('message', (msg, rinfo) => {
         const responseText = msg.toString('utf-8');
 
-        log(
-            `\n\nReceived message from: ${rinfo.address}:${rinfo.port} (size: ${rinfo.size} bytes)` + '\n' +
-            "--- Message Start ---" +
-            '\n' + responseText +
-            "--- Message End ---" + '\n',
-            "log");
+        if (isFilteringEnabled && currentFilterType) {
+            const ntHeader = getSsdpHeaderValue(responseText, 'NT'); // Notification Type
+            const stHeader = getSsdpHeaderValue(responseText, 'ST'); // Search Target
+            const usnHeader = getSsdpHeaderValue(responseText, 'USN'); // Unique Service Name
 
+            let deviceIdentifier: string | null = null;
+
+            if (ntHeader) {
+                deviceIdentifier = ntHeader;
+            } else if (stHeader) {
+                deviceIdentifier = stHeader;
+            } else if (usnHeader) {
+                // USN בדרך כלל מכיל UUID ואז את סוג ההתקן
+                // לדוגמה: uuid:abcdefgh-1234-abcd-1234-abcdefghijkl::urn:schemas-upnp-org:device:MediaServer:1
+                const parts = usnHeader.split('::');
+                if (parts.length > 1) {
+                    deviceIdentifier = parts.pop() || null; // קח את החלק האחרון שאמור להיות סוג ההתקן
+                } else {
+                    deviceIdentifier = usnHeader; // אם אין '::', נסה להשתמש ב-USN כולו (פחות סביר שיתאים)
+                }
+            }
+            
+            // בדיקה אם ה-identifier מכיל את ה-currentFilterType
+            // זה מאפשר התאמה גם אם ה-filter הוא "ssdp:all" וההודעה היא ספציפית יותר,
+            // או אם ה-filter הוא ספציפי וההודעה מכילה אותו.
+            if (deviceIdentifier && deviceIdentifier.includes(currentFilterType)) {
+                log(
+                    `\n\n[FILTERED] Received message from: ${rinfo.address}:${rinfo.port} (size: ${rinfo.size} bytes)` + '\n' +
+                    `Matches filter: "${currentFilterType}" (Found in NT/ST/USN: "${deviceIdentifier}")` + '\n' +
+                    "--- Message Start ---" +
+                    '\n' + responseText +
+                    "--- Message End ---" + '\n',
+                    "log");
+            } else {
+                // אם הסינון מופעל וההודעה לא תואמת, אל תדפיס אותה (או הדפס הודעת דיבאג אם רוצים)
+                // log(`Message from ${rinfo.address}:${rinfo.port} filtered out (type: ${deviceIdentifier}, filter: ${currentFilterType})`, 'log');
+            }
+        } else {
+            // אם הסינון כבוי, הדפס את כל ההודעות
+            log(
+                `\n\nReceived message from: ${rinfo.address}:${rinfo.port} (size: ${rinfo.size} bytes)` + '\n' +
+                "--- Message Start ---" +
+                '\n' + responseText +
+                "--- Message End ---" + '\n',
+                "log");
+        }
     });
 
     socket.on('connect', () => {
