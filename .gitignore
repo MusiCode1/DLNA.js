@@ -51,3 +51,4 @@ bun.lockb
 !drafts/
 # Executables
 server.exe
+server/presets.json
