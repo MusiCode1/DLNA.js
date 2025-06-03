@@ -2,16 +2,16 @@
 import axios from 'axios';
 import * as xml2js from 'xml2js';
 import type {
-    BasicSsdpDevice,
-    DeviceDescription,
-    ServiceDescription,
-    DeviceIcon,
-    Action,
-    ActionArgument,
-    StateVariable,
-    ProcessedDevice,
-    DeviceWithServicesDescription,
-    FullDeviceDescription,
+  BasicSsdpDevice,
+  DeviceDescription,
+  ServiceDescription,
+  DeviceIcon,
+  Action,
+  ActionArgument,
+  StateVariable,
+  ProcessedDevice,
+  DeviceWithServicesDescription,
+  FullDeviceDescription,
 } from './types'; // ודא נתיב נכון
 import { DiscoveryDetailLevel } from './types'; // יובא בנפרד כערך
 import { createModuleLogger } from './logger';   // ודא נתיב נכון
@@ -56,54 +56,54 @@ async function fetchAndParseDeviceDescriptionXml(
     // logger.trace(`fetchAndParseDeviceDescriptionXml: XML data received from ${locationUrl}:`, xmlData); // יכול להיות מאוד ורבלי
 
     const parser = new xml2js.Parser({
-        explicitArray: false, // מניעת יצירת מערכים עבור אלמנטים בודדים
-        explicitRoot: false,  // הסרת אלמנט השורש 'root'
-        tagNameProcessors: [xml2js.processors.stripPrefix] // הסרת קידומות משמות תגיות
+      explicitArray: false, // מניעת יצירת מערכים עבור אלמנטים בודדים
+      explicitRoot: false,  // הסרת אלמנט השורש 'root'
+      tagNameProcessors: [xml2js.processors.stripPrefix] // הסרת קידומות משמות תגיות
     });
 
     const result = await parser.parseStringPromise(xmlData);
     // logger.trace(`fetchAndParseDeviceDescriptionXml: Parsed XML result from ${locationUrl}:`, result);
 
     if (!result || !result.device) {
-        logger.warn(`fetchAndParseDeviceDescriptionXml: Invalid or incomplete device description XML from ${locationUrl}. Missing 'device' root element after parsing.`, { parsedResult: result });
-        return null;
+      logger.warn(`fetchAndParseDeviceDescriptionXml: Invalid or incomplete device description XML from ${locationUrl}. Missing 'device' root element after parsing.`, { parsedResult: result });
+      return null;
     }
     const deviceNode = result.device;
 
     // פונקציות עזר לחילוץ טקסט וטיפול ב-URL-ים
     const getText = (node: any, propertyName: string): string | undefined => {
-        if (node && typeof node === 'object' && node[propertyName] !== undefined) {
-            if (typeof node[propertyName] === 'string') {
-                return node[propertyName].trim();
-            }
-            // במקרה של אובייקט ריק (למשל, <presentationURL />), xml2js עשוי להחזיר אובייקט ריק.
-            // נחזיר undefined במקרה זה.
-            if (typeof node[propertyName] === 'object' && Object.keys(node[propertyName]).length === 0) {
-                return undefined;
-            }
+      if (node && typeof node === 'object' && node[propertyName] !== undefined) {
+        if (typeof node[propertyName] === 'string') {
+          return node[propertyName].trim();
         }
-        return undefined;
+        // במקרה של אובייקט ריק (למשל, <presentationURL />), xml2js עשוי להחזיר אובייקט ריק.
+        // נחזיר undefined במקרה זה.
+        if (typeof node[propertyName] === 'object' && Object.keys(node[propertyName]).length === 0) {
+          return undefined;
+        }
+      }
+      return undefined;
     };
 
     const getBaseUrl = (locUrl: string): string | undefined => {
-        try {
-            const url = new URL(locUrl);
-            return `${url.protocol}//${url.host}`;
-        } catch (e) {
-            logger.warn(`fetchAndParseDeviceDescriptionXml: Invalid location URL for getBaseUrl: ${locUrl}`, e);
-            return undefined;
-        }
+      try {
+        const url = new URL(locUrl);
+        return `${url.protocol}//${url.host}`;
+      } catch (e) {
+        logger.warn(`fetchAndParseDeviceDescriptionXml: Invalid location URL for getBaseUrl: ${locUrl}`, e);
+        return undefined;
+      }
     };
-    
+
     const resolveUrl = (base: string | undefined, relative?: string): string | undefined => {
-        if (!relative) return undefined;
-        if (!base) return relative; // אם אין בסיס, נחזיר את היחסי כפי שהוא (בהנחה שהוא כבר מלא)
-        try {
-            return new URL(relative, base).toString();
-        } catch (e) {
-            logger.warn(`fetchAndParseDeviceDescriptionXml: Could not resolve URL. Base: ${base}, Relative: ${relative}`, e);
-            return relative; // נחזיר את היחסי במקרה של שגיאה, אולי הוא כבר URL מלא
-        }
+      if (!relative) return undefined;
+      if (!base) return relative; // אם אין בסיס, נחזיר את היחסי כפי שהוא (בהנחה שהוא כבר מלא)
+      try {
+        return new URL(relative, base).toString();
+      } catch (e) {
+        logger.warn(`fetchAndParseDeviceDescriptionXml: Could not resolve URL. Base: ${base}, Relative: ${relative}`, e);
+        return relative; // נחזיר את היחסי במקרה של שגיאה, אולי הוא כבר URL מלא
+      }
     };
 
     const baseUrl = getBaseUrl(locationUrl);
@@ -127,10 +127,10 @@ async function fetchAndParseDeviceDescriptionXml(
       iconList: [],
       serviceList: [],
       // התקנים משנה (deviceList) לא נתמכים כרגע במלואם, אך נשמור את המבנה
-      deviceList: deviceNode.deviceList && deviceNode.deviceList.device ? 
-                    (Array.isArray(deviceNode.deviceList.device) ? deviceNode.deviceList.device : [deviceNode.deviceList.device])
-                    .map((d: any) => ({UDN: getText(d, 'UDN'), deviceType: getText(d, 'deviceType')})) // מידע בסיסי על התקני משנה
-                    : [], 
+      deviceList: deviceNode.deviceList && deviceNode.deviceList.device ?
+        (Array.isArray(deviceNode.deviceList.device) ? deviceNode.deviceList.device : [deviceNode.deviceList.device])
+          .map((d: any) => ({ UDN: getText(d, 'UDN'), deviceType: getText(d, 'deviceType') })) // מידע בסיסי על התקני משנה
+        : [],
       // מאפיינים מ-BasicSsdpDevice שאינם בהכרח קיימים ב-DeviceDescription הטיפוסי
       usn: '', // יתמלא בהמשך מ-basicDevice
       st: '', // יתמלא בהמשך
@@ -145,13 +145,13 @@ async function fetchAndParseDeviceDescriptionXml(
     // עיבוד רשימת האייקונים
     if (deviceNode.iconList && deviceNode.iconList.icon) {
       const iconsInput = Array.isArray(deviceNode.iconList.icon) ? deviceNode.iconList.icon : [deviceNode.iconList.icon];
-      description.iconList = iconsInput.map((iconNode: any): DeviceIcon => { 
+      description.iconList = iconsInput.map((iconNode: any): DeviceIcon => {
         return {
-            mimetype: getText(iconNode, 'mimetype') || '',
-            width: parseInt(getText(iconNode, 'width') || '0', 10),
-            height: parseInt(getText(iconNode, 'height') || '0', 10),
-            depth: parseInt(getText(iconNode, 'depth') || '0', 10),
-            url: resolveUrl(description.URLBase || baseUrl, getText(iconNode, 'url')) || '',
+          mimetype: getText(iconNode, 'mimetype') || '',
+          width: parseInt(getText(iconNode, 'width') || '0', 10),
+          height: parseInt(getText(iconNode, 'height') || '0', 10),
+          depth: parseInt(getText(iconNode, 'depth') || '0', 10),
+          url: resolveUrl(description.URLBase || baseUrl, getText(iconNode, 'url')) || '',
         };
       }).filter((icon: DeviceIcon) => icon.url); // סנן אייקונים ללא URL
     }
@@ -161,14 +161,14 @@ async function fetchAndParseDeviceDescriptionXml(
       const servicesInput = Array.isArray(deviceNode.serviceList.service) ? deviceNode.serviceList.service : [deviceNode.serviceList.service];
       description.serviceList = servicesInput.map((serviceNode: any): ServiceDescription => {
         const service: ServiceDescription = {
-            serviceType: getText(serviceNode, 'serviceType') || '',
-            serviceId: getText(serviceNode, 'serviceId') || '',
-            SCPDURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'SCPDURL')) || '',
-            controlURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'controlURL')) || '',
-            eventSubURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'eventSubURL')) || '',
-            // מאפיינים אופציונליים שיתמלאו מאוחר יותר
-            actionList: [],
-            stateVariableList: [],
+          serviceType: getText(serviceNode, 'serviceType') || '',
+          serviceId: getText(serviceNode, 'serviceId') || '',
+          SCPDURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'SCPDURL')) || '',
+          controlURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'controlURL')) || '',
+          eventSubURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'eventSubURL')) || '',
+          // מאפיינים אופציונליים שיתמלאו מאוחר יותר
+          actionList: [],
+          stateVariableList: [],
         };
         // בדיקה ששדות החובה קיימים ואם לא, רישום אזהרה
         if (!service.serviceType) logger.warn(`fetchAndParseDeviceDescriptionXml: Missing serviceType for a service in ${locationUrl}`, { serviceNode });
@@ -179,17 +179,17 @@ async function fetchAndParseDeviceDescriptionXml(
         return service;
       }).filter((service: ServiceDescription) => service.serviceType && service.serviceId && service.SCPDURL && service.controlURL); // סנן שירותים ללא שדות חובה (eventSubURL אינו חובה לזיהוי בסיסי)
     }
-    
+
     // logger.debug(`fetchAndParseDeviceDescriptionXml: Successfully parsed device description for ${locationUrl}`, { description });
     return description;
 
   } catch (error: any) {
     if (axios.isCancel(error)) {
-        logger.debug(`fetchAndParseDeviceDescriptionXml: Request to ${locationUrl} was canceled.`, { message: error.message });
+      logger.debug(`fetchAndParseDeviceDescriptionXml: Request to ${locationUrl} was canceled.`, { message: error.message });
     } else if (error.code === 'ECONNABORTED' || (error.response && error.response.status === 408) || error.message?.includes('timeout')) {
-        logger.warn(`fetchAndParseDeviceDescriptionXml: Timeout fetching device description from ${locationUrl}.`, { message: error.message });
+      logger.warn(`fetchAndParseDeviceDescriptionXml: Timeout fetching device description from ${locationUrl}.`, { message: error.message });
     } else {
-        logger.error(`fetchAndParseDeviceDescriptionXml: Error fetching or parsing device description from ${locationUrl}:`, { message: error.message, stack: error.stack, url: locationUrl });
+      logger.error(`fetchAndParseDeviceDescriptionXml: Error fetching or parsing device description from ${locationUrl}:`, { message: error.message, stack: error.stack, url: locationUrl });
     }
     return null;
   }
@@ -214,8 +214,8 @@ async function populateServices(
 
   const servicePromises = deviceDescription.serviceList.map(service => {
     if (signal?.aborted) {
-        logger.debug(`populateServices: Aborted before fetching SCPD for service ${service.serviceId} of device ${deviceDescription.UDN}`);
-        return Promise.resolve(); // החזרת Promise שנפתר מיד
+      logger.debug(`populateServices: Aborted before fetching SCPD for service ${service.serviceId} of device ${deviceDescription.UDN}`);
+      return Promise.resolve(); // החזרת Promise שנפתר מיד
     }
     return fetchScpdAndUpdateService(service, signal) // שינוי שם הקריאה
       .then(() => {
@@ -223,9 +223,9 @@ async function populateServices(
       })
       .catch(error => {
         if (!signal?.aborted) { // רשום שגיאה רק אם לא בוטל
-            logger.warn(`populateServices: Failed to populate service ${service.serviceId} for device ${deviceDescription.friendlyName}: ${error.message}`);
+          logger.warn(`populateServices: Failed to populate service ${service.serviceId} for device ${deviceDescription.friendlyName}: ${error.message}`);
         } else {
-            logger.debug(`populateServices: SCPD fetch for service ${service.serviceId} was aborted.`);
+          logger.debug(`populateServices: SCPD fetch for service ${service.serviceId} was aborted.`);
         }
         // לא זורקים שגיאה כדי לא לעצור את כל התהליך, רק רושמים אזהרה
       });
@@ -254,6 +254,7 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
 
   logger.debug(`fetchScpdAndUpdateService: Fetching SCPD for service ${service.serviceId} from ${service.SCPDURL}`);
 
+  let xmlData;
   try {
     const response = await axios.get(service.SCPDURL, {
       responseType: 'text',
@@ -271,20 +272,20 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
       return;
     }
 
-    const xmlData = response.data;
+    xmlData = response.data;
     // logger.trace(`fetchScpdAndUpdateService: XML data received from ${service.SCPDURL}:`, xmlData);
 
     const parser = new xml2js.Parser({
-        explicitArray: false,
-        explicitRoot: false, // הסרת אלמנט השורש 'scpd'
-        tagNameProcessors: [xml2js.processors.stripPrefix]
+      explicitArray: false,
+      explicitRoot: false, // הסרת אלמנט השורש 'scpd'
+      tagNameProcessors: [xml2js.processors.stripPrefix]
     });
     const result = await parser.parseStringPromise(xmlData);
     // logger.trace(`fetchScpdAndUpdateService: Parsed SCPD result for ${service.serviceId}:`, result);
 
     if (!result || (!result.actionList && !result.serviceStateTable)) {
-        logger.warn(`fetchScpdAndUpdateService: Invalid or incomplete SCPD XML from ${service.SCPDURL}. Missing 'actionList' or 'serviceStateTable'.`, { parsedResult: result });
-        return;
+      logger.warn(`fetchScpdAndUpdateService: Invalid or incomplete SCPD XML from ${service.SCPDURL}. Missing 'actionList' or 'serviceStateTable'.`, { parsedResult: result });
+      return;
     }
 
     // עיבוד רשימת הפעולות
@@ -292,8 +293,8 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
       const actionsArray = Array.isArray(result.actionList.action) ? result.actionList.action : [result.actionList.action];
       service.actionList = actionsArray.map((actionNode: any): Action => {
         const argsArray = actionNode.argumentList && actionNode.argumentList.argument ?
-                          (Array.isArray(actionNode.argumentList.argument) ? actionNode.argumentList.argument : [actionNode.argumentList.argument])
-                          : [];
+          (Array.isArray(actionNode.argumentList.argument) ? actionNode.argumentList.argument : [actionNode.argumentList.argument])
+          : [];
         return {
           name: actionNode.name || '',
           arguments: argsArray.map((argNode: any): ActionArgument => ({
@@ -304,7 +305,7 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
         };
       }).filter((action: Action) => action.name); // סנן פעולות ללא שם
     } else {
-        service.actionList = []; // אם אין actionList או אין פעולות, הגדר כמערך ריק
+      service.actionList = []; // אם אין actionList או אין פעולות, הגדר כמערך ריק
     }
 
     // עיבוד טבלת משתני המצב
@@ -315,30 +316,31 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
         dataType: svNode.dataType || '',
         sendEvents: svNode['@_sendEvents'] === 'no' ? 'no' : (svNode['@_sendEvents'] === 'yes' ? 'yes' : undefined),
         allowedValueList: svNode.allowedValueList && svNode.allowedValueList.allowedValue ?
-                          (Array.isArray(svNode.allowedValueList.allowedValue) ? svNode.allowedValueList.allowedValue : [svNode.allowedValueList.allowedValue])
-                          : undefined,
+          (Array.isArray(svNode.allowedValueList.allowedValue) ? svNode.allowedValueList.allowedValue : [svNode.allowedValueList.allowedValue])
+          : undefined,
         // allowedValueRange הוסר מכיוון שאינו קיים בטיפוס StateVariable
         // במקומו, ניתן להשתמש ב-min, max, step אם הם קיימים ב-svNode
-        ...(svNode.allowedValueRange && { 
-            min: svNode.allowedValueRange.minimum,
-            max: svNode.allowedValueRange.maximum,
-            step: svNode.allowedValueRange.step
+        ...(svNode.allowedValueRange && {
+          min: svNode.allowedValueRange.minimum,
+          max: svNode.allowedValueRange.maximum,
+          step: svNode.allowedValueRange.step
         }),
         defaultValue: svNode.defaultValue
       })).filter((sv: StateVariable) => sv.name && sv.dataType); // סנן משתני מצב לא תקינים
     } else {
-        service.stateVariableList = []; // אם אין טבלת מצב או אין משתנים, הגדר כמערך ריק
+      service.stateVariableList = []; // אם אין טבלת מצב או אין משתנים, הגדר כמערך ריק
     }
 
     // logger.debug(`fetchScpdAndUpdateService: Successfully populated SCPD for service ${service.serviceId}`);
 
   } catch (error: any) {
-     if (axios.isCancel(error)) {
-        logger.debug(`fetchScpdAndUpdateService: Request to ${service.SCPDURL} was canceled.`, { message: error.message });
+    if (axios.isCancel(error)) {
+      logger.debug(`fetchScpdAndUpdateService: Request to ${service.SCPDURL} was canceled.`, { message: error.message });
     } else if (error.code === 'ECONNABORTED' || (error.response && error.response.status === 408) || error.message?.includes('timeout')) {
-        logger.warn(`fetchScpdAndUpdateService: Timeout fetching SCPD for service ${service.serviceId} from ${service.SCPDURL}.`, { message: error.message });
+      logger.warn(`fetchScpdAndUpdateService: Timeout fetching SCPD for service ${service.serviceId} from ${service.SCPDURL}.`, { message: error.message });
     } else {
-        logger.error(`fetchScpdAndUpdateService: Error fetching or parsing SCPD for service ${service.serviceId} from ${service.SCPDURL}:`, { message: error.message, stack: error.stack, url: service.SCPDURL });
+      logger.error(xmlData as string)
+      logger.error(`fetchScpdAndUpdateService: Error fetching or parsing SCPD for service ${service.serviceId} from ${service.SCPDURL}:`, { message: error.message, stack: error.stack, url: service.SCPDURL });
     }
     // לא זורקים שגיאה כדי לא לעצור את כל התהליך
   }
@@ -351,27 +353,27 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
  * @param device - אובייקט BasicSsdpDevice או DeviceDescription המכיל את פרטי ההתקן (לצורך URL-ים).
  */
 function populateActionsAndStateVariables(
-    service: ServiceDescription,
-    device: BasicSsdpDevice | DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription
+  service: ServiceDescription,
+  device: BasicSsdpDevice | DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription
 ): void {
-    const controlURL = service.controlURL;
-    const serviceType = service.serviceType;
+  const controlURL = service.controlURL;
+  const serviceType = service.serviceType;
 
-    if (!controlURL) {
-        logger.warn(`populateActionsAndStateVariables: Missing controlURL for service ${service.serviceId} of device ${device.usn || (device as DeviceDescription).UDN}. Cannot create invoke/query functions.`);
-        return;
-    }
+  if (!controlURL) {
+    logger.warn(`populateActionsAndStateVariables: Missing controlURL for service ${service.serviceId} of device ${device.usn || (device as DeviceDescription).UDN}. Cannot create invoke/query functions.`);
+    return;
+  }
 
-    if (service.actionList) {
-        service.actionList.forEach(action => {
-            action.invoke = createInvokeFunctionForAction(action, controlURL, serviceType); // שינוי שם הקריאה
-        });
-    }
-    if (service.stateVariableList) {
-        service.stateVariableList.forEach(stateVar => {
-            stateVar.query = createQueryFunctionForStateVar(stateVar, controlURL, serviceType); // שינוי שם הקריאה
-        });
-    }
+  if (service.actionList) {
+    service.actionList.forEach(action => {
+      action.invoke = createInvokeFunctionForAction(action, controlURL, serviceType); // שינוי שם הקריאה
+    });
+  }
+  if (service.stateVariableList) {
+    service.stateVariableList.forEach(stateVar => {
+      stateVar.query = createQueryFunctionForStateVar(stateVar, controlURL, serviceType); // שינוי שם הקריאה
+    });
+  }
 }
 
 /**
@@ -385,12 +387,12 @@ function createInvokeFunctionForAction(
   return async (args: Record<string, any>): Promise<Record<string, any>> => {
     logger.debug(`Invoking action "${action.name}" on service "${serviceType}" with args:`, args);
     try {
-        const result = await sendUpnpCommand(controlURL, serviceType, action.name, args);
-        logger.debug(`Action "${action.name}" invoked successfully. Result:`, result);
-        return result;
+      const result = await sendUpnpCommand(controlURL, serviceType, action.name, args);
+      logger.debug(`Action "${action.name}" invoked successfully. Result:`, result);
+      return result;
     } catch (error: any) {
-        logger.error(`Error invoking action "${action.name}" on service "${serviceType}":`, error.message);
-        throw error; 
+      logger.error(`Error invoking action "${action.name}" on service "${serviceType}":`, error.message);
+      throw error;
     }
   };
 }
@@ -403,24 +405,24 @@ function createQueryFunctionForStateVar(
   controlURL: string,
   serviceType: string
 ): () => Promise<any> {
-  const queryActionName = "QueryStateVariable"; 
+  const queryActionName = "QueryStateVariable";
   return async (): Promise<any> => {
     logger.debug(`Querying state variable "${stateVar.name}" on service "${serviceType}"`);
     const args = {
-      VarName: stateVar.name, 
+      VarName: stateVar.name,
     };
     try {
-        const result = await sendUpnpCommand(controlURL, serviceType, queryActionName, args);
-        logger.debug(`State variable "${stateVar.name}" queried successfully. Raw result:`, result);
-        if (result && typeof result === 'object' && result.hasOwnProperty('return')) {
-            return result.return;
-        }
-        logger.warn(`Query result for "${stateVar.name}" did not have the expected 'return' property. Returning full result.`, { result });
-        return result;
+      const result = await sendUpnpCommand(controlURL, serviceType, queryActionName, args);
+      logger.debug(`State variable "${stateVar.name}" queried successfully. Raw result:`, result);
+      if (result && typeof result === 'object' && result.hasOwnProperty('return')) {
+        return result.return;
+      }
+      logger.warn(`Query result for "${stateVar.name}" did not have the expected 'return' property. Returning full result.`, { result });
+      return result;
 
     } catch (error: any) {
-        logger.error(`Error querying state variable "${stateVar.name}" on service "${serviceType}":`, error.message);
-        throw error;
+      logger.error(`Error querying state variable "${stateVar.name}" on service "${serviceType}":`, error.message);
+      throw error;
     }
   };
 }
@@ -454,7 +456,7 @@ export async function processUpnpDevice( // שם שונה והוספת export
   if (!basicDevice.location) {
     logger.warn(`processUpnpDevice: Device ${basicDevice.usn} has no location URL. Cannot fetch description. Returning basic info.`);
     if (abortSignal?.aborted) throw new Error("Operation aborted (no location).");
-    return { ...basicDevice, error: "Device has no location URL." }; 
+    return { ...basicDevice, error: "Device has no location URL." };
   }
 
   if (abortSignal?.aborted) throw new Error("Operation aborted before fetching description.");
@@ -467,20 +469,20 @@ export async function processUpnpDevice( // שם שונה והוספת export
   }
 
   const mergedDeviceDesc: DeviceDescription = {
-      ...basicDevice, 
-      ...deviceDescription, 
-      location: basicDevice.location, 
-      remoteAddress: basicDevice.remoteAddress,
-      remotePort: basicDevice.remotePort,
-      headers: basicDevice.headers,
-      timestamp: basicDevice.timestamp,
-      messageType: basicDevice.messageType,
-      ...(basicDevice.cacheControlMaxAge !== undefined && { cacheControlMaxAge: basicDevice.cacheControlMaxAge }),
-      ...(basicDevice.httpMethod && { httpMethod: basicDevice.httpMethod }),
-      ...(basicDevice.httpStatusCode && { httpStatusCode: basicDevice.httpStatusCode }),
-      ...(basicDevice.httpStatusMessage && { httpStatusMessage: basicDevice.httpStatusMessage }),
-      ...(basicDevice.nts && { nts: basicDevice.nts }),
-      ...(basicDevice.httpVersion && { httpVersion: basicDevice.httpVersion }),
+    ...basicDevice,
+    ...deviceDescription,
+    location: basicDevice.location,
+    remoteAddress: basicDevice.remoteAddress,
+    remotePort: basicDevice.remotePort,
+    headers: basicDevice.headers,
+    timestamp: basicDevice.timestamp,
+    messageType: basicDevice.messageType,
+    ...(basicDevice.cacheControlMaxAge !== undefined && { cacheControlMaxAge: basicDevice.cacheControlMaxAge }),
+    ...(basicDevice.httpMethod && { httpMethod: basicDevice.httpMethod }),
+    ...(basicDevice.httpStatusCode && { httpStatusCode: basicDevice.httpStatusCode }),
+    ...(basicDevice.httpStatusMessage && { httpStatusMessage: basicDevice.httpStatusMessage }),
+    ...(basicDevice.nts && { nts: basicDevice.nts }),
+    ...(basicDevice.httpVersion && { httpVersion: basicDevice.httpVersion }),
   };
 
   if (detailLevel === DiscoveryDetailLevel.Description) {
@@ -509,7 +511,112 @@ export async function processUpnpDevice( // שם שונה והוספת export
     return fullDeviceDescription;
   }
 
+  // Fallback for unknown detail level, though TypeScript should prevent this.
   logger.warn(`processUpnpDevice: Unknown detail level "${detailLevel}" for device ${basicDevice.usn}. Returning basic info.`);
   if (abortSignal?.aborted) throw new Error("Operation aborted (unknown detail level).");
   return basicDevice;
+}
+
+/**
+ * @hebrew מאחזר ומעבד תיאור התקן UPnP מלא מ-URL.
+ * @param locationUrl - כתובת ה-URL של קובץ התיאור הראשי של ההתקן.
+ * @param detailLevel - רמת הפירוט הרצויה.
+ * @param abortSignal - אות לביטול הפעולה.
+ * @returns Promise המכיל את ProcessedDevice או null אם נכשל.
+ */
+export async function processUpnpDeviceFromUrl(
+  locationUrl: string,
+  detailLevel: DiscoveryDetailLevel,
+  abortSignal?: AbortSignal
+): Promise<ProcessedDevice | null> {
+  logger.debug(`processUpnpDeviceFromUrl: Processing device from URL ${locationUrl} to detail level: ${detailLevel}`);
+
+  if (abortSignal?.aborted) {
+    logger.debug(`processUpnpDeviceFromUrl: Operation aborted before fetching description for ${locationUrl}.`);
+    return null;
+  }
+
+  const initialDeviceDescription = await fetchAndParseDeviceDescriptionXml(locationUrl, abortSignal);
+
+  if (!initialDeviceDescription) {
+    logger.warn(`processUpnpDeviceFromUrl: Failed to get device description from ${locationUrl}.`);
+    if (abortSignal?.aborted) {
+      logger.debug(`processUpnpDeviceFromUrl: Aborted during fetchAndParseDeviceDescriptionXml for ${locationUrl}.`);
+    }
+    return null;
+  }
+
+  // נוודא ששדה location קיים, למרות שהוא אמור להיות מאוכלס על ידי fetchAndParseDeviceDescriptionXml
+  if (!initialDeviceDescription.location) {
+    initialDeviceDescription.location = locationUrl;
+  }
+  // נוודא ששדה UDN קיים, למרות שהוא אמור להיות מאוכלס
+  if (!initialDeviceDescription.UDN) {
+    logger.warn(`processUpnpDeviceFromUrl: UDN is missing in the device description from ${locationUrl}. This might cause issues.`);
+    // אפשר להחזיר null כאן אם UDN הוא קריטי, או להמשיך בזהירות
+  }
+
+
+  // הכנת אובייקט בסיס - initialDeviceDescription כבר מכיל את רוב המידע.
+  // שדות כמו remoteAddress, remotePort, headers, timestamp, messageType לא יהיו זמינים כי אנחנו לא מתחילים מ-SSDP.
+  // זה בסדר כי הפונקציות הבאות מסתמכות בעיקר על baseURL ועל כתובות ה-URL המלאות של השירותים.
+
+  if (detailLevel === DiscoveryDetailLevel.Basic || detailLevel === DiscoveryDetailLevel.Description) {
+    if (abortSignal?.aborted) {
+      logger.debug(`processUpnpDeviceFromUrl: Operation aborted before returning description for ${locationUrl}.`);
+      return null;
+    }
+    // במקרה זה, Basic יהיה זהה ל-Description כי התחלנו מ-URL שיש בו תיאור.
+    // נוסיף את detailLevelAchieved
+    return { ...initialDeviceDescription, detailLevelAchieved: DiscoveryDetailLevel.Description } as DeviceDescription;
+  }
+
+  if (abortSignal?.aborted) {
+    logger.debug(`processUpnpDeviceFromUrl: Operation aborted before populating services for ${locationUrl}.`);
+    return null;
+  }
+  await populateServices(initialDeviceDescription, abortSignal);
+
+  // לאחר populateServices, initialDeviceDescription עודכן עם actionList ו-stateVariableList (ללא invoke/query)
+  const deviceWithServices: DeviceWithServicesDescription = {
+    ...initialDeviceDescription,
+    detailLevelAchieved: DiscoveryDetailLevel.Services, // עדכון רמת הפירוט שהושגה
+  } as DeviceWithServicesDescription;
+
+
+  if (detailLevel === DiscoveryDetailLevel.Services) {
+    if (abortSignal?.aborted) {
+      logger.debug(`processUpnpDeviceFromUrl: Operation aborted before returning services for ${locationUrl}.`);
+      return null;
+    }
+    return deviceWithServices;
+  }
+
+  // detailLevel === DiscoveryDetailLevel.Full
+  if (abortSignal?.aborted) {
+    logger.debug(`processUpnpDeviceFromUrl: Operation aborted before populating actions/state variables for ${locationUrl}.`);
+    return null;
+  }
+
+  if (deviceWithServices.serviceList) {
+    for (const service of deviceWithServices.serviceList) {
+      if (abortSignal?.aborted) {
+        logger.debug(`processUpnpDeviceFromUrl: Operation aborted during populating actions/state variables for service ${service.serviceId} in ${locationUrl}.`);
+        return null; // או שנמשיך וניתן להתקן להיות חלקי? התוכנית לא מציינת. נבחר להחזיר null.
+      }
+      populateActionsAndStateVariables(service, deviceWithServices);
+    }
+  }
+
+  const fullDeviceDescription: FullDeviceDescription = {
+    ...deviceWithServices,
+    detailLevelAchieved: DiscoveryDetailLevel.Full, // עדכון רמת הפירוט שהושגה
+  } as FullDeviceDescription;
+
+  if (abortSignal?.aborted) {
+    logger.debug(`processUpnpDeviceFromUrl: Operation aborted before returning full description for ${locationUrl}.`);
+    return null;
+  }
+
+  return fullDeviceDescription;
 }
