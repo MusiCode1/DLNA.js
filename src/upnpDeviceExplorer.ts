@@ -33,6 +33,7 @@ import {
 // Constants - קבועים
 // ==========================================================================================
 const DEFAULT_TIMEOUT_MS = 5000; // קבוע זה עדיין בשימוש כאן
+const DEFAULT_M_SEARCH_INTERVAL_TIME = 10 * 1000;
 const DEFAULT_SEARCH_TARGET = "ssdp:all";
 // const DEFAULT_DISCOVERY_TIMEOUT_PER_INTERFACE_MS = 2000;
 const DEFAULT_INCLUDE_IPV6 = false;
@@ -209,6 +210,8 @@ async function _discoverDevicesOrchestrator(
     closeAll: () => Promise<PromiseSettledResult<void>[]>;
   } | undefined;
 
+  let mSearchInterval: NodeJS.Timeout;
+
   logger.info(`[Orchestrator] Starting discovery for target: ${options.searchTarget} with timeout: ${options.timeoutMs}ms`);
 
   const onSocketError = (err: Error, socketType: string) => {
@@ -304,18 +307,25 @@ async function _discoverDevicesOrchestrator(
       onSocketError
     );
 
-    // שליחת M-SEARCH ראשונית
-    if (socketManager) {
-      await socketManager.sendMSearch(options.searchTarget, 4);
-      if (options.includeIPv6) {
-        await socketManager.sendMSearch(options.searchTarget, 6);
+    const sendMSearch = async () => {
+      // שליחת M-SEARCH ראשונית
+      if (socketManager) {
+        await socketManager.sendMSearch(options.searchTarget, 4);
+        if (options.includeIPv6) {
+          await socketManager.sendMSearch(options.searchTarget, 6);
+        }
+      } else {
+        clearInterval(mSearchInterval);
+
+        logger.warn("[Orchestrator] socketManager is not initialized, cannot send M-SEARCH.");
+        // אם אין סוקט מנג'ר, כנראה שיש בעיה קריטית ביצירת הסוקטים.
+        // נזרוק שגיאה כדי שה-finally יטפל בניקוי ויציאה.
+        throw new Error("Socket manager failed to initialize. Cannot send M-SEARCH.");
       }
-    } else {
-      logger.warn("[Orchestrator] socketManager is not initialized, cannot send M-SEARCH.");
-      // אם אין סוקט מנג'ר, כנראה שיש בעיה קריטית ביצירת הסוקטים.
-      // נזרוק שגיאה כדי שה-finally יטפל בניקוי ויציאה.
-      throw new Error("Socket manager failed to initialize. Cannot send M-SEARCH.");
-    }
+    };
+
+    sendMSearch();
+    mSearchInterval = setInterval(sendMSearch, DEFAULT_M_SEARCH_INTERVAL_TIME)
 
     // המתנה לסיום הגילוי (timeout או abort)
     // יצירת Promise שמסתיים כאשר ה-timeout מגיע או כאשר ה-AbortSignal מופעל
@@ -329,6 +339,7 @@ async function _discoverDevicesOrchestrator(
       // האזנה ל-AbortSignal הפנימי כדי לנקות את הטיימר אם ה-abort מגיע ממקור אחר
       internalAbortController.signal.addEventListener('abort', () => { // תוקן: internalAbortController
         clearTimeout(timer);
+        clearInterval(mSearchInterval);
         logger.debug('[Orchestrator] Internal AbortController was aborted. Clearing discovery timeout.');
         resolve(); // פתרון ה-Promise של ה-timeout
       }, { once: true });
@@ -358,7 +369,9 @@ async function _discoverDevicesOrchestrator(
         .catch(err => {
           // למרות ש-closeAll אמור להחזיר PromiseSettledResult, נתפוס שגיאות בלתי צפויות כאן
           logger.error('[Orchestrator] Unexpected error during socketManager.closeAll():', err);
-        });
+        }).finally(() => {
+          clearInterval(mSearchInterval);
+        })
     } else {
       logger.debug('[Orchestrator] socketManager was not initialized, no sockets to close explicitly here.');
     }

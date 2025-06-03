@@ -22,3 +22,37 @@ export interface ApiDevice {
 export interface ContinueDiscoveryOptions extends DiscoveryOptions {
     continuousIntervalMs: number
 }
+// הוספת טיפוסים עבור הגדרות פריסט
+export interface RendererPreset {
+  udn: string;
+  baseURL: string;
+  ipAddress: string; // שדה חובה
+  macAddress: string; // שדה חובה
+}
+
+export interface FolderPreset {
+  objectId: string; // שדה חובה
+  path?: string | null; // נתיב התיקייה, אופציונלי (לנוחות המשתמש, לא קריטי לפעולה)
+}
+
+export interface MediaServerPreset {
+  udn: string;
+  baseURL: string;
+  folder: FolderPreset; // שדה חובה
+}
+
+export interface PresetSettings {
+  renderer?: RendererPreset | null;
+  mediaServer?: MediaServerPreset | null;
+}
+
+// טיפוס עבור כלל הפריסטים, כאשר המפתח הוא שם הפריסט
+export interface AllPresetSettings {
+  [presetName: string]: PresetSettings;
+}
+
+// טיפוס עבור רשומת פריסט בודדת במערך, כפי שמוחזר ללקוח
+export interface PresetEntry {
+  name: string;
+  settings: PresetSettings;
+}

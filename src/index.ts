@@ -17,10 +17,15 @@ export * from './types';
 // From upnpDeviceExplorer.ts
 export {
     discoverSsdpDevices,
-    discoverSsdpDevicesIterable
+    discoverSsdpDevicesIterable,
+
 } from './upnpDeviceExplorer';
 
 // From upnpSoapClient.ts
 export {
-    sendUpnpCommand
+    sendUpnpCommand,
+
 } from './upnpSoapClient';
+
+export { processUpnpDevice, processUpnpDeviceFromUrl } from './upnpDeviceProcessor';
+

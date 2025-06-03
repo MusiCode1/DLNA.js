@@ -99,6 +99,7 @@ export function parseHttpPacket(
 
     const finishResult = parser.finish();
     if (finishResult instanceof Error) {
+      logger.error('\n'+messageBuffer.toString('utf-8')+'\n')
       logger.error('parseHttpPacket: parser.finish() returned an error', { error: finishResult.message, stack: finishResult.stack });
       return null;
     }

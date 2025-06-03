@@ -1,7 +1,10 @@
 // server/rendererHandler.ts
 import { Request, Response, NextFunction, Router } from 'express';
-import { sendUpnpCommand, createModuleLogger } from '../src';
-import type { ServiceDescription } from '../src';
+import {
+  sendUpnpCommand, createModuleLogger,
+  ContentDirectoryService, BrowseFlag
+} from '../src';
+import type { ServiceDescription } from "../src";
 import type { ApiDevice } from './types';
 
 const logger = createModuleLogger('rendererHandler');
@@ -52,8 +55,7 @@ export async function playFolderOnRenderer(
       controlURL: absoluteCdControlURL
     };
 
-    const { ContentDirectoryService } = await import('../src/contentDirectoryService');
-    const { BrowseFlag } = await import('../src/types');
+
 
     const cds = new ContentDirectoryService(cdServiceForBrowse);
     const browseResult = await cds.browse(folderObjectId, BrowseFlag.BrowseDirectChildren, '*', 0, 0);
@@ -400,11 +402,8 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
           controlURL: absoluteCdControlURL
         };
 
-        const { ContentDirectoryService } = await import('../src/contentDirectoryService');
-        const { BrowseFlag } = await import('../src/types');
-
         const cds = new ContentDirectoryService(cdServiceForBrowse);
-        const browseResult = await cds.browse(objectID, BrowseFlag.BrowseMetadata, '*', 0, 1);
+        const browseResult = await cds.browse(objectID, BrowseFlag.BrowseMetadata,  '*', 0, 1);
 
         if (!browseResult || browseResult.numberReturned === 0 || !browseResult.items || browseResult.items.length === 0) {
           logger.warn(`Play request failed: Object with ID ${objectID} not found on media server ${mediaServerUdn}.`);

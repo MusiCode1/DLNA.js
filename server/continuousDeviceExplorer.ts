@@ -31,7 +31,7 @@ export class ContinuousDeviceExplorer extends EventEmitter {
   private isDiscovering: boolean = false;
   private abortController?: AbortController;
 
-  constructor(options?: Partial<ContinueDiscoveryOptions>, continuousIntervalMs?: number) {
+  constructor(options?: Partial<ContinueDiscoveryOptions>) {
     super();
     this.discoveryOptions = { ...DEFAULT_DISCOVERY_OPTIONS, ...options };
   }

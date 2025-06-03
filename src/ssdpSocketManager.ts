@@ -277,14 +277,14 @@ export async function createSocketManager(
 
   const sendMSearch = async (target: string, ipVersion: 4 | 6): Promise<void> => {
     const host = ipVersion === 4 ? SSDP_MULTICAST_ADDRESS_IPV4 : SSDP_MULTICAST_ADDRESS_IPV6_LINK_LOCAL;
-    const message =
-      `${M_SEARCH_REQUEST_START_LINE}\r\n` +
-      `HOST: ${host}:${SSDP_PORT}\r\n` +
-      `MAN: "ssdp:discover"\r\n` +
-      `MX: ${MX_VALUE}\r\n` +
-      `ST: ${target}\r\n` +
-      `USER-AGENT: ${USER_AGENT}\r\n` +
-      `\r\n`;
+    const message = [
+      `${M_SEARCH_REQUEST_START_LINE}`,
+      `HOST: ${host}:${SSDP_PORT}`,
+      `MAN: "ssdp:discover"`,
+      `MX: ${MX_VALUE}`,
+      `ST: ${target}`,
+      `USER-AGENT: ${USER_AGENT}`,
+      ``,``].join('\r\n');
 
     const buffer = Buffer.from(message);
     const selectedSocket = ipVersion === 4 ? msearchIPv4Socket : msearchIPv6Socket;
