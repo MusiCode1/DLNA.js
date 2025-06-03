@@ -1,0 +1,13 @@
+@IP=127.0.0.1
+@PORT=3300
+@url = http://{{IP}}:{{PORT}}
+###
+GET {{url}}/api/play-preset
+    ?presetName=Kodi-rClone
+###
+
+GET http://{{IP}}:{{PORT}}/api/presets
+
+###
+
+GET http://{{IP}}:{{PORT}}/api/play-preset

@@ -1,0 +1,47 @@
+{
+  "Kodi-rClone": {
+    "renderer": {
+      "udn": "uuid:eb830de2-e3a0-b4b0-0872-c0d7b8a699ff",
+      "baseURL": "http://10.100.102.106:1473",
+      "ipAddress": "10.100.102.106",
+      "macAddress": "48:9E:9D:FB:F7:98"
+    },
+    "mediaServer": {
+      "udn": "uuid:9c219fd1-b9e5-637b-480c-88bf4eb39ed4",
+      "baseURL": "http://172.31.96.1:7879",
+      "folder": {
+        "objectId": "%2F%D7%9E%D7%90%D7%A9%D7%94+%D7%95%D7%94%D7%93%D7%95%D7%91"
+      }
+    }
+  },
+  "Moishy": {
+    "renderer": {
+      "udn": "uuid:be1c59a2-4a1e-9c76-3288-742038c5ddc8",
+      "baseURL": "http://192.168.1.102:1567",
+      "ipAddress": "192.168.1.102",
+      "macAddress": "48:9E:9D:FB:F7:98"
+    },
+    "mediaServer": {
+      "udn": "uuid:6da3c8fa-6406-9f97-8acc-853d88e139b3",
+      "baseURL": "http://192.168.1.103:7879",
+      "folder": {
+        "objectId": "%2F%D7%9E%D7%90%D7%A9%D7%94+%D7%95%D7%94%D7%93%D7%95%D7%91"
+      }
+    }
+  },
+  "Moyshi2": {
+    "renderer": {
+      "udn": "uuid:6b0d6eac-ab18-3b92-f9ac-5a15b110bb41",
+      "baseURL": "http://192.168.1.113:1693",
+      "ipAddress": "192.168.1.113",
+      "macAddress": "48:9E:9D:FB:F7:98"
+    },
+    "mediaServer": {
+      "udn": "uuid:9c219fd1-b9e5-637b-480c-88bf4eb39ed4",
+      "baseURL": "http://192.168.1.105:7879",
+      "folder": {
+        "objectId": "%2F%D7%9E%D7%90%D7%A9%D7%94+%D7%95%D7%94%D7%93%D7%95%D7%91"
+      }
+    }
+  }
+}

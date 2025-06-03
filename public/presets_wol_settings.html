@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ניהול פריסטים ו-Wake on LAN</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        .presets-section, .wol-section {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .presets-section h2, .wol-section h2 {
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input[type="text"],
+        .form-group select {
+            width: calc(100% - 22px); /* Account for padding and border */
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-right: 5px;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #1e7e34;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        #preset-list-display { /* Changed ID to avoid conflict if index.html has preset-list */
+            list-style-type: none;
+            padding: 0;
+        }
+        #preset-list-display li {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #preset-list-display li:last-child {
+            border-bottom: none;
+        }
+        #preset-list-display li button {
+            margin-left: 5px;
+            padding: 5px 8px;
+            font-size: 0.9em;
+        }
+        .status-message {
+            padding: 10px;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            border-radius: 3px;
+            display: none; /* Hidden by default */
+        }
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 8px 12px;
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .nav-link:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="nav-link">< חזרה לרשימת ההתקנים</a>
+        <h1>ניהול פריסטים ו-Wake on LAN</h1>
+
+        <!-- Preset Management Section -->
+        <div class="presets-section">
+            <h2>ניהול פריסטים</h2>
+            <div id="preset-status-message" class="status-message"></div>
+
+            <h3>יצירה / עדכון פריסט</h3>
+            <form id="preset-form">
+                <div class="form-group">
+                    <label for="preset-name">שם פריסט:</label>
+                    <input type="text" id="preset-name" placeholder="לדוגמה: טלוויזיה בסלון" required>
+                </div>
+                <div class="form-group">
+                    <label for="preset-renderer-udn">Renderer UDN:</label>
+                    <select id="preset-renderer-udn" required>
+                        <option value="">בחר Renderer</option>
+                        <!-- Renderers יאוכלסו כאן על ידי JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="preset-renderer-mac">כתובת MAC של ה-Renderer:</label>
+                    <input type="text" id="preset-renderer-mac" placeholder="00:1A:2B:3C:4D:5E" required pattern="^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$">
+                    <small>פורמט: XX:XX:XX:XX:XX:XX</small>
+                </div>
+                <div class="form-group">
+                    <label for="preset-mediaserver-udn">Media Server UDN (אופציונלי):</label>
+                     <select id="preset-mediaserver-udn">
+                        <option value="">בחר Media Server (אופציונלי)</option>
+                        <!-- Media Servers יאוכלסו כאן על ידי JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="preset-folder-object-id">Folder Object ID (אופציונלי, אם נבחר Media Server):</label>
+                    <input type="text" id="preset-folder-object-id" placeholder="לדוגמה: 0$1$2">
+                </div>
+                <button type="submit" class="btn btn-primary">שמור פריסט</button>
+                <button type="button" id="clear-preset-form-button" class="btn btn-danger" style="background-color: #6c757d;">נקה טופס</button>
+            </form>
+
+            <h3>פריסטים קיימים</h3>
+            <ul id="preset-list-display">
+                <!-- הפריסטים הקיימים יוצגו כאן -->
+            </ul>
+        </div>
+
+        <!-- Wake on LAN Section -->
+        <div class="wol-section">
+            <h2>Wake on LAN</h2>
+            <div id="wol-status-message" class="status-message"></div>
+            <div class="form-group">
+                <label for="wol-preset-select">בחר פריסט להערה:</label>
+                <select id="wol-preset-select">
+                    <option value="">בחר פריסט</option>
+                    <!-- הפריסטים יאוכלסו כאן על ידי JS -->
+                </select>
+            </div>
+            <button id="send-wol-button" class="btn btn-success">שלח פקודת Wake on LAN</button>
+        </div>
+    </div>
+
+    <script src="presets_wol_settings.js" defer></script>
+</body>
+</html>
