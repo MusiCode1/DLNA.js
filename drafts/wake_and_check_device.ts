@@ -25,26 +25,26 @@ async function wakeDeviceAndVerify(
 
   // שלב 1: שליחת חבילת Wake-on-LAN
   // נשתמש בפרומיס כדי להמתין לסיום פעולת sendWakeOnLan
-  const sendWolPromise = new Promise<void>((resolve, reject) => {
-    const callback: WolCallback = (error) => {
-      if (error) {
-        console.error(`Failed to send WoL packet: ${error.message}`);
-        reject(error); // דחיית הפרומיס במקרה של שגיאה
-      } else {
-        console.log(`WoL packet sent successfully to MAC ${macAddress}.`);
-        resolve(); // אישור הפרומיס בהצלחה
-      }
-    };
-    sendWakeOnLan(macAddress, broadcastAddress, wolPort);
-  });
-
+  console.log(`[wakeDeviceAndVerify] Calling sendWakeOnLan for MAC ${macAddress}`);
   try {
-    await sendWolPromise; // המתנה לסיום שליחת חבילת ה-WoL
-    console.log('WoL packet dispatch process completed. Now waiting for device to wake up...');
+    const wolSuccess = await sendWakeOnLan(macAddress, broadcastAddress, wolPort);
+    if (wolSuccess) {
+      console.log(`[wakeDeviceAndVerify] WoL packet sent successfully to MAC ${macAddress}.`);
+      console.log('WoL packet dispatch process completed. Now waiting for device to wake up...');
+    } else {
+      // sendWakeOnLan החזיר false, מה שמצביע על כישלון בשליחה
+      console.error(`[wakeDeviceAndVerify] sendWakeOnLan reported failure for MAC ${macAddress}.`);
+      throw new Error(`sendWakeOnLan failed for MAC ${macAddress}`);
+    }
   } catch (error) {
-    // אם שליחת ה-WoL נכשלה, אין טעם להמשיך לבדיקות פינג
-    console.error('Could not send WoL packet. Aborting wake-up attempt.');
-    return; // יציאה מהפונקציה
+    // אם שליחת ה-WoL נכשלה (בין אם sendWakeOnLan זרק שגיאה או החזיר false)
+    console.error(`[wakeDeviceAndVerify] Could not send WoL packet or an error occurred during sendWakeOnLan. Aborting wake-up attempt. Error:`, error);
+    // זרוק את השגיאה כדי שה-catch החיצוני יתפוס אותה
+    if (error instanceof Error) {
+        throw error;
+    } else {
+        throw new Error(String(error));
+    }
   }
 
   // המתנה קצרה לפני התחלת בדיקות הפינג, כדי לתת להתקן זמן להתחיל לעלות
