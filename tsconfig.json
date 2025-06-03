@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "target": "ESNext", // הגדרת גרסת היעד של JavaScript
-    "module": "commonjs", // הגדרת מערכת המודולים
+    "module": "NodeNext", // הגדרת מערכת המודולים
+    "types": ["bun-types"],
     "esModuleInterop": true, // מאפשר תאימות טובה יותר עם מודולים של CommonJS
     "forceConsistentCasingInFileNames": true, // מוודא שימוש עקבי באותיות גדולות/קטנות בשמות קבצים
     "strict": true, // מפעיל את כל בדיקות הטיפוסים המחמירות
