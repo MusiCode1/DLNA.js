@@ -15,7 +15,7 @@ import { sendWakeOnLan, wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan'; 
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler'; // ייבוא הפונקציות החדשות
 
 const logger = createModuleLogger('PresetManager'); // הגדרת לוגר למודול
-const PRESETS_FILE_PATH = path.join(process.cwd(), 'data', 'presets.json'); // שימוש בנתיב מהשורש של הפרויקט
+const PRESETS_FILE_PATH = path.join(process.cwd(), '..', 'data', 'presets.json'); // הנתיב מחושב יחסית לספריית העבודה של השרת, ועולה רמה אחת לשורש הפרויקט
 
 /**
  * @hebrew טוען את הגדרות הפריסט מקובץ ה-JSON וממיר אותן למערך.
@@ -40,7 +40,7 @@ export async function loadPresets(): Promise<AllPresetSettings> {
             // או שנחזיר אובייקט ריק כפי שנדרש
             return {};
         }
-        console.error('Error loading presets:', error);
+        logger.error('Error loading presets:', error); // שימוש בלוגר במקום console.error
         // במקרה של שגיאת JSON או שגיאה אחרת, החזר אובייקט ריק כדי למנוע קריסה
         return {};
     }
@@ -54,9 +54,11 @@ export async function loadPresets(): Promise<AllPresetSettings> {
 export async function savePresets(settings: AllPresetSettings): Promise<void> {
     try {
         const data = JSON.stringify(settings, null, 2); // עיצוב ה-JSON עם הזחה לקריאות
+        const directoryPath = path.dirname(PRESETS_FILE_PATH); // קבלת הנתיב לתיקייה
+        await fs.mkdir(directoryPath, { recursive: true }); // יצירת התיקייה אם היא לא קיימת
         await fs.writeFile(PRESETS_FILE_PATH, data, 'utf-8');
     } catch (error) {
-        console.error('Error saving presets:', error);
+        logger.error('Error saving presets:', error); // שימוש בלוגר במקום console.error
         // ניתן להוסיף כאן טיפול בשגיאות מתקדם יותר אם נדרש, כגון זריקת שגיאה מותאמת אישית
         throw error; // זרוק את השגיאה כדי שהקוד הקורא יוכל לטפל בה
     }
