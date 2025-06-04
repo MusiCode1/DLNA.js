@@ -57,6 +57,7 @@ server.exe
 # server/presets.json # הוסר, הקובץ עבר לתיקיית data שמתעלמים ממנה
 
 *.tsbuildinfo
+tsconfig.tsbuildinfo
 **.tsbuildinfo
 **/tsconfig.tsbuildinfo
 packages/dlna-core/tsconfig.tsbuildinfo
