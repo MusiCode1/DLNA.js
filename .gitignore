@@ -6,6 +6,9 @@ node_modules/
 logs/
 *.log
 
+# התעלמות מתיקיית הנתונים
+data/ 
+
 temp/
 
 # Optional npm cache directory
@@ -51,5 +54,4 @@ bun.lockb
 !drafts/
 # Executables
 server.exe
-server/presets.json
-server/presets.json
+# server/presets.json # הוסר, הקובץ עבר לתיקיית data שמתעלמים ממנה

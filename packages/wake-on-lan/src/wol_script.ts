@@ -211,6 +211,75 @@ export async function checkPingWithRetries(
   return false;
 }
 
+/**
+ * מעיר התקן באמצעות Wake-on-LAN וממתין להתעוררותו באמצעות בדיקות פינג.
+ * @param {string} macAddress - כתובת ה-MAC של ההתקן.
+ * @param {string} ipAddress - כתובת ה-IP של ההתקן.
+ * @param {string} [broadcastAddress='255.255.255.255'] - כתובת ה-broadcast לשליחת חבילת ה-WoL.
+ * @param {number} [wolPort=9] - יציאת ה-WoL.
+ * @param {number} [pingTotalTimeoutSeconds=60] - זמן קצוב כולל (בשניות) לבדיקות הפינג.
+ * @param {number} [pingIntervalSeconds=2] - השהיה (בשניות) בין ניסיונות פינג.
+ * @param {number} [pingSingleTimeoutSeconds=3] - זמן קצוב (בשניות) לכל ניסיון פינג בודד.
+ * @returns {Promise<void>}
+ */
+export async function wakeDeviceAndVerify(
+  macAddress: string,
+  ipAddress: string,
+  broadcastAddress: string = '255.255.255.255', // ברירת מחדל גלובלית
+  wolPort: number = 9,
+  pingTotalTimeoutSeconds: number = 60, // זמן המתנה ארוך יותר להתעוררות
+  pingIntervalSeconds: number = 2,
+  pingSingleTimeoutSeconds: number = 3
+): Promise<void> {
+  // הדפסת כל הפרמטרים, כולל כתובת ה-broadcast שבה ייעשה שימוש
+  console.log(`Attempting to wake device with MAC: ${macAddress}, IP: ${ipAddress}, Broadcast: ${broadcastAddress}, Port: ${wolPort}`);
+
+  // שלב 1: שליחת חבילת Wake-on-LAN
+  // נשתמש בפרומיס כדי להמתין לסיום פעולת sendWakeOnLan
+  console.log(`[wakeDeviceAndVerify] Calling sendWakeOnLan for MAC ${macAddress} using broadcast ${broadcastAddress}`);
+  try {
+    const wolSuccess = await sendWakeOnLan(macAddress, broadcastAddress, wolPort);
+    // הדפסת התוצאה שהתקבלה מ-sendWakeOnLan
+    console.log(`[wakeDeviceAndVerify] sendWakeOnLan for MAC ${macAddress} (broadcast: ${broadcastAddress}) returned: ${wolSuccess}`);
+    if (wolSuccess) {
+      console.log(`[wakeDeviceAndVerify] WoL packet reported as sent successfully to MAC ${macAddress} via ${broadcastAddress}.`);
+      console.log('WoL packet dispatch process completed. Now waiting for device to wake up...');
+    } else {
+      // sendWakeOnLan החזיר false, מה שמצביע על כישלון בשליחה
+      console.error(`[wakeDeviceAndVerify] sendWakeOnLan reported failure for MAC ${macAddress}.`);
+      throw new Error(`sendWakeOnLan failed for MAC ${macAddress}`);
+    }
+  } catch (error) {
+    // אם שליחת ה-WoL נכשלה (בין אם sendWakeOnLan זרק שגיאה או החזיר false)
+    console.error(`[wakeDeviceAndVerify] Could not send WoL packet or an error occurred during sendWakeOnLan. Aborting wake-up attempt. Error:`, error);
+    // זרוק את השגיאה כדי שה-catch החיצוני יתפוס אותה
+    if (error instanceof Error) {
+        throw error;
+    } else {
+        throw new Error(String(error));
+    }
+  }
+
+  // המתנה קצרה לפני התחלת בדיקות הפינג, כדי לתת להתקן זמן להתחיל לעלות
+  console.log('Waiting a few seconds before starting ping checks...');
+  await new Promise(resolve => setTimeout(resolve, 5000)); // המתנה של 5 שניות
+
+  // שלב 2: בדיקת התעוררות באמצעות פינג עם ניסיונות חוזרים
+  console.log(`Starting ping checks to ${ipAddress} for up to ${pingTotalTimeoutSeconds} seconds...`);
+  const isAlive = await checkPingWithRetries(
+    ipAddress,
+    pingTotalTimeoutSeconds,
+    pingIntervalSeconds,
+    pingSingleTimeoutSeconds
+  );
+
+  // שלב 3: הדפסת תוצאה
+  if (isAlive) {
+    console.log(`SUCCESS: Device ${ipAddress} is now responding to ping.`);
+  } else {
+    console.error(`ERROR: Device ${ipAddress} did not respond to ping within ${pingTotalTimeoutSeconds} seconds.`);
+  }
+}
 // הפונקציות והטיפוסים מיוצאים כעת וניתנים לשימוש במודולים אחרים.
 // ניתן לייבא אותם כך:
 // import { sendWakeOnLan, WolCallback, checkPing, checkPingWithRetries } from './wol_script';
