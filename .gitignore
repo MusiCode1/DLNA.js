@@ -55,3 +55,10 @@ bun.lockb
 # Executables
 server.exe
 # server/presets.json # הוסר, הקובץ עבר לתיקיית data שמתעלמים ממנה
+
+*.tsbuildinfo
+**.tsbuildinfo
+**/tsconfig.tsbuildinfo
+packages/dlna-core/tsconfig.tsbuildinfo
+packages/server/tsconfig.tsbuildinfo
+packages/wake-on-lan/tsconfig.tsbuildinfo
