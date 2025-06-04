@@ -1,46 +1,68 @@
-# מדריך שימוש במודול גילוי UPnP
+# פרויקט DLNA, Wake on LAN ושרת יישומים
 
 ## מבוא קצר
 
-מודול זה מאפשר גילוי התקני UPnP (Universal Plug and Play) ברשת המקומית. הוא מספק פונקציונליות לאיתור התקנים באמצעות פרוטוקול SSDP (Simple Service Discovery Protocol), אחזור תיאור מפורט של כל התקן (כולל השירותים שהוא מציע), אחזור תיאור מלא של כל שירות (SCPD), ואף מאפשר הפעלה ישירה של פעולות (actions) ושאילתת משתני מצב (state variables) של השירותים.
+פרויקט זה כולל מספר רכיבים המאפשרים גילוי, שליטה וניהול של התקני רשת, בדגש על התקני UPnP/DLNA ופונקציונליות Wake on LAN.
+הפרויקט מאורגן כמבנה Monorepo המנוהל באמצעות Bun, ומכיל את החבילות הבאות:
+
+*   **`dlna.js`**: ספריית הליבה המרכזית. היא מאפשרת גילוי התקני UPnP (Universal Plug and Play) ברשת המקומית באמצעות פרוטוקול SSDP (Simple Service Discovery Protocol). היא מספקת פונקציונליות לאחזור תיאור מפורט של כל התקן (כולל השירותים שהוא מציע), אחזור תיאור מלא של כל שירות (SCPD), ומאפשרת הפעלה ישירה של פעולות (actions) ושאילתת משתני מצב (state variables) של השירותים. ספרייה זו מיועדת לפרסום ב-NPM.
+*   **`@dlna-tv-play/wake-on-lan`**: חבילה קטנה המספקת פונקציונליות לשליחת חבילות "Wake on LAN" להערת מחשבים והתקנים ברשת.
+*   **`@dlna-tv-play/server`**: שרת יישומים מבוסס Express.js המשתמש בשתי הספריות (`dlna.js` ו-`@dlna-tv-play/wake-on-lan`) כדי לספק API לניהול התקנים, הפעלתם, ושליטה בפונקציות DLNA.
 
 ## מטרה
-המטרה של הפרויקט הזה היא עבור דייר בהוסטל של אוטיזם בתפקוד נמוך, שהפעולה של הפעלת הטלוויזיה היא מורכבת מדי קוגניטיבית עבורו. 
-לכן רציתי ליצור לו לחצן, שבבת אחת גם יפעיל את הטלוויזיה וגם יפעיל רשימת השמעה של סרטונים שהדייר הזה מכיר. 
-התוכנית היא שהלחצן יפעיל WebHook שיקרא לקוד מספרייה זו, וכך יפעיל את רשימת השמעה במכשיר הספציפי.
+המטרה של הפרויקט הזה היא עבור דייר בהוסטל של אוטיזם בתפקוד נמוך, שהפעולה של הפעלת הטלוויזיה היא מורכבת מדי קוגניטיבית עבורו.
+לכן רציתי ליצור לו לחצן, שבבת אחת גם יפעיל את הטלוויזיה וגם יפעיל רשימת השמעה של סרטונים שהדייר הזה מכיר.
+התוכנית היא שהלחצן יפעיל WebHook שיקרא לקוד מהשרת בפרויקט זה, וכך יפעיל את רשימת ההשמעה במכשיר הספציפי.
 
-## על התהליך
+### סדר הפעולות
+סדר הפעולות שצריך לקרות על מנת לבצע את הנ"ל הוא:
+1. הפעלת הטלוויזיה (על ידי WakeOnLan).
+2. המתנה עד שהטלוויזיה תופעל ותגיב לבקשות (מיושם עם בדיקה ע"י `ping`).
+3. (במקביל) קבלת רשימת הקבצים בתיקייה מוגדרת מראש משרת ה DLNA.
+4. שליחת הפקודה להפעלת הסרטון הראשון.
+5. שליחת הפקודה להוספת הסרטונים הבאים לרשימת ההשמעה, כל סרטון בפקודה נפרדת.
 
+## מבנה הפרויקט
 
-הספרייה בנויה כעת ממספר מודולים מרכזיים:
-*   [`src/upnpDeviceExplorer.ts`](../src/upnpDeviceExplorer.ts): מתזמר את תהליך הגילוי ומייצא את ה-API הראשי (`discoverSsdpDevices`, `discoverSsdpDevicesIterable`).
-*   [`src/upnpDeviceProcessor.ts`](../src/upnpDeviceProcessor.ts): אחראי על עיבוד וחקר התקנים לאחר גילוי ראשוני (אחזור XML, SCPD, והוספת פונקציות `invoke`/`query`).
-*   [`src/ssdpSocketManager.ts`](../src/ssdpSocketManager.ts): מנהל את סוקטי ה-UDP לתקשורת SSDP.
-*   [`src/genericHttpParser.ts`](../src/genericHttpParser.ts): מספק פונקציונליות גנרית לפירסור תגובות HTTP (משמש בעיקר לפירסור תגובות SSDP).
-*   [`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts): מכיל את הפונקציה `sendUpnpCommand` לשליחת בקשות SOAP.
-*   [`src/types.ts`](../src/types.ts): מכיל את כל הגדרות הטיפוסים והממשקים הרלוונטיים.
-*   [`src/contentDirectoryService.ts`](../src/contentDirectoryService.ts): מספק ממשק נוח לעבודה עם שירותי ContentDirectory.
+הפרויקט מאורגן בתיקיית `packages/` ראשית, כאשר כל חבילה (`dlna.js`, `wake-on-lan`, `server`) נמצאת בתיקיית משנה משלה.
+כל חבילה מכילה:
+*   קובץ [`package.json`](#) המגדיר את תלויותיה, סקריפטים ופרטי החבילה.
+*   תיקיית `src/` המכילה את קוד המקור של החבילה.
+*   קובץ `index.ts` בתוך `src/` המשמש כנקודת כניסה ראשית לייצוא הפונקציונליות של החבילה.
+*   קובץ [`tsconfig.json`](#) להגדרות TypeScript הספציפיות לחבילה.
 
-כל הייצואים המרכזיים של הספרייה נעשים דרך קובץ האינדקס המרכזי [`src/index.ts`](../src/index.ts) לנוחות השימוש.
+הפרויקט משתמש ב-Bun Workspaces לניהול התלויות בין החבילות.
 
-## התקנה/הכנות
+## התקנה והרצה
 
-המודול הוא חלק אינטגרלי מהפרויקט הנוכחי. יש לוודא שהקבצים הבאים (ונוספים) קיימים בפרויקט כחלק ממבנה המודולים:
-*   [`src/index.ts`](../src/index.ts) (נקודת הכניסה הראשית)
-*   [`src/upnpDeviceExplorer.ts`](../src/upnpDeviceExplorer.ts)
-*   [`src/upnpDeviceProcessor.ts`](../src/upnpDeviceProcessor.ts)
-*   [`src/ssdpSocketManager.ts`](../src/ssdpSocketManager.ts)
-*   [`src/genericHttpParser.ts`](../src/genericHttpParser.ts)
-*   [`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts)
-*   [`src/types.ts`](../src/types.ts)
-*   [`src/contentDirectoryService.ts`](../src/contentDirectoryService.ts)
-*   [`src/logger.ts`](../src/logger.ts)
+1.  **התקנת תלויות**:
+    ודא ש-Bun מותקן במערכת שלך. לאחר מכן, בתיקיית השורש של הפרויקט, הרץ:
+    ```bash
+    bun install
+    ```
+    פקודה זו תתקין את כל התלויות של כל החבילות ותקשר ביניהן (workspaces).
 
-כמו כן, יש לוודא שכל התלויות של הפרויקט מותקנות (לדוגמה, על ידי הרצת `npm install` או `bun install`).
+2.  **בניית החבילות**:
+    כדי לבנות את כל החבילות (לקמפל את קוד ה-TypeScript ל-JavaScript), הרץ מהתיקייה הראשית:
+    ```bash
+    bun run build:all
+    ```
+    (בהנחה שהגדרתם סקריפט כזה ב-package.json הראשי, או שתצטרכו להריץ `bun run build` בתוך כל חבילה או להשתמש בפילטרים).
+    לדוגמה, לבניית חבילת `dlna.js` בלבד:
+    ```bash
+    bun run --filter "dlna.js" build
+    ```
 
-## שימוש בסיסי - גילוי התקנים
+3.  **הרצת השרת**:
+    לאחר שהחבילות נבנו, ניתן להריץ את השרת באמצעות הפקודה מהתיקייה הראשית:
+    ```bash
+    bun start
+    ```
+    השרת יאזין בדרך כלל בכתובת `http://localhost:3300`.
 
-הדרך העיקרית לגלות התקנים היא באמצעות הפונקציה `discoverSsdpDevices` המיובאת מ-[`src/index.ts`](../src/index.ts).
+## שימוש בספריית `dlna.js` - גילוי התקנים
+
+הדרך העיקרית לגלות התקנים באמצעות ספריית `dlna.js` היא באמצעות הפונקציה `discoverSsdpDevices`.
 
 ### ייבוא הפונקציה והטיפוסים הרלוונטיים
 
@@ -53,7 +75,7 @@ import {
   type BasicSsdpDevice,       // אם detailLevel הוא Basic
   type DeviceDescription      // אם detailLevel הוא Description
   // וטיפוסים נוספים לפי הצורך, כמו ServiceDescription, Action, StateVariable
-} from '../src/index';
+} from 'dlna.js'; // ייבוא מחבילת dlna.js
 ```
 
 ### דוגמת קוד לגילוי התקנים
@@ -157,7 +179,7 @@ findDevicesExample();
 
 ## מבנה `ServiceDescription`, `Action`, ו-`StateVariable`
 
-הטיפוסים הללו מוגדרים ב-[`src/types.ts`](../src/types.ts) (ומיוצאים דרך [`src/index.ts`](../src/index.ts)):
+הטיפוסים הללו מוגדרים בתוך חבילת `dlna.js` (במקור בקבצים כמו `types.ts`) ומיוצאים דרך נקודת הכניסה הראשית של החבילה (`dlna.js/index`):
 
 *   **`ServiceDescription`:**
     *   `serviceType`: סוג השירות (למשל, `urn:schemas-upnp-org:service:AVTransport:1`).
@@ -236,13 +258,13 @@ if (device.serviceList) {
 
 ## שימוש בפונקציות ברמה נמוכה יותר (אופציונלי, למתקדמים)
 
-למשתמשים המעוניינים בשליטה פרטנית יותר, [`src/index.ts`](../src/index.ts) מייצא גם את הפונקציות הבאות:
+למשתמשים המעוניינים בשליטה פרטנית יותר, חבילת `dlna.js` מייצאת גם את הפונקציות הבאות:
 
 *   **`discoverSsdpDevicesIterable(options?: DiscoveryOptions): AsyncIterable<ProcessedDevice>`:**
     פונקציה זו מבצעת גילוי SSDP ומחזירה `AsyncIterable`. כל איבר ב-iterable הוא אובייקט `ProcessedDevice` שתואם ל-`detailLevel` שצוין ב-`options`. זה מאפשר עיבוד של התקנים ברגע שהם מתגלים ומעובדים, מבלי לחכות לסיום כל תהליך הגילוי.
 
 *   **`processUpnpDevice(basicDevice: BasicSsdpDevice, options: DeviceProcessingOptions): Promise<ProcessedDevice | null>`:**
-    (מיוצא מ-[`src/upnpDeviceProcessor.ts`](../src/upnpDeviceProcessor.ts) דרך האינדקס)
+    (מיוצא מתוך `dlna.js`, במקור מהמודול `upnpDeviceProcessor.ts`)
     פונקציה זו לוקחת `BasicSsdpDevice` (למשל, כזה שהתקבל מאיטרטור גילוי בסיסי יותר) ומעבדת אותו לרמת הפירוט המבוקשת ב-`options.detailLevel`. היא אחראית על אחזור ה-XML, ניתוחו, אחזור SCPD (אם נדרש), והוספת פונקציות `invoke`/`query`.
 
 הפונקציה `fetchDeviceDescription` שהייתה קיימת בעבר הפכה פנימית (`_fetchAndParseDeviceDescriptionXml`) ומשמשת כחלק מ-`processUpnpDevice`.
@@ -250,7 +272,7 @@ if (device.serviceList) {
 
 ## קבועים שימושיים
 
-הקובץ [`src/index.ts`](../src/index.ts) (דרך [`src/types.ts`](../src/types.ts)) מייצא מספר קבועים שיכולים להיות שימושיים בעבודה עם התקני UPnP, בעיקר לשימוש בפרמטר `searchTarget` או לזיהוי סוגי התקנים ושירותים:
+חבילת `dlna.js` מייצאת מספר קבועים שיכולים להיות שימושיים בעבודה עם התקני UPnP, בעיקר לשימוש בפרמטר `searchTarget` או לזיהוי סוגי התקנים ושירותים:
 
 ```typescript
 import {
@@ -269,7 +291,7 @@ import {
   RENDERING_CONTROL_SERVICE, // "urn:schemas-upnp-org:service:RenderingControl:1"
   CONNECTION_MANAGER_SERVICE, // "urn:schemas-upnp-org:service:ConnectionManager:1"
   // ... ועוד סוגי שירותים
-} from '../src/index';
+} from 'dlna.js';
 
 // דוגמה לשימוש:
 // discoverSsdpDevices({ searchTarget: MEDIA_RENDERER_DEVICE, ... });
@@ -292,8 +314,9 @@ import {
   type Resource,
   type ServiceDescription, // נדרש לאתחול ServiceDescription
   // sendUpnpCommand // ContentDirectoryService מייבא זאת ישירות
-  type FullDeviceDescription // מכיל baseURL
-} from '../src/index';
+  type FullDeviceDescription, // מכיל baseURL
+  CONTENT_DIRECTORY_SERVICE // קבוע שימושי
+} from 'dlna.js';
 ```
 
 ### אתחול השירות
@@ -394,11 +417,11 @@ async function browseContent(cds: ContentDirectoryService, objectId: string = "0
 *   `totalMatches`: המספר הכולל של פריטים התואמים לקריטריונים (יכול להיות גדול מ-`numberReturned` אם נעשה שימוש בפגינציה).
 *   `updateID` (אופציונלי): מזהה המשמש למעקב אחר שינויים בתוכן השרת.
 
-הטיפוסים `DidlLiteContainer`, `DidlLiteObject`, ו-`Resource` מכילים שדות רבים המתארים את מאפייני הפריטים והמשאבים שלהם, כפי שמפורט ב-[`src/types.ts`](../src/types.ts) (ומיוצא דרך [`src/index.ts`](../src/index.ts)).
+הטיפוסים `DidlLiteContainer`, `DidlLiteObject`, ו-`Resource` מכילים שדות רבים המתארים את מאפייני הפריטים והמשאבים שלהם. הם מוגדרים ומיוצאים על ידי חבילת `dlna.js`.
 
 ## שליחת פקודות SOAP (`sendUpnpCommand`) - גישה ישירה
 
-בעוד שהדרך המומלצת לאינטראקציה עם פעולות היא דרך פונקציות ה-`invoke` שנוספו לאובייקטי ה-`Action` (כאשר `detailLevel` הוא `Full`), הפונקציה `sendUpnpCommand` מ-[`src/upnpSoapClient.ts`](../src/upnpSoapClient.ts) (ומיוצאת דרך [`src/index.ts`](../src/index.ts)) זמינה לשימוש ישיר. היא משמשת "מתחת למכסה המנוע" על ידי פונקציות ה-`invoke` ועל ידי שירותים ספציפיים כמו `ContentDirectoryService`. ניתן להשתמש בה ישירות אם יש צורך בשליטה נמוכה יותר, לשליחת פקודות שאין להן עטיפה ייעודית, או לצורך ניפוי שגיאות.
+בעוד שהדרך המומלצת לאינטראקציה עם פעולות היא דרך פונקציות ה-`invoke` שנוספו לאובייקטי ה-`Action` (כאשר `detailLevel` הוא `Full`), הפונקציה `sendUpnpCommand` (המיוצאת מחבילת `dlna.js`) זמינה לשימוש ישיר. היא משמשת "מתחת למכסה המנוע" על ידי פונקציות ה-`invoke` ועל ידי שירותים ספציפיים כמו `ContentDirectoryService`. ניתן להשתמש בה ישירות אם יש צורך בשליטה נמוכה יותר, לשליחת פקודות שאין להן עטיפה ייעודית, או לצורך ניפוי שגיאות.
 
 ### ייבוא
 
@@ -406,8 +429,9 @@ async function browseContent(cds: ContentDirectoryService, objectId: string = "0
 import {
   sendUpnpCommand,
   type SoapFault, // לטיפול בשגיאות
-  type ServiceDescription // נדרש כדי לקבל controlURL ו-serviceType
-} from '../src/index';
+  type ServiceDescription, // נדרש כדי לקבל controlURL ו-serviceType
+  CONNECTION_MANAGER_SERVICE // קבוע שימושי לדוגמה
+} from 'dlna.js';
 ```
 
 ### דוגמת שימוש
@@ -488,7 +512,7 @@ async function getProtocolInfoExample(service: ServiceDescription, baseUrl?: str
 ### ייבוא
 
 ```typescript
-import { createLogger } from '../src/index';
+import { createLogger } from 'dlna.js';
 ```
 
 ### דוגמת שימוש

@@ -24,8 +24,13 @@ export {
 // From upnpSoapClient.ts
 export {
     sendUpnpCommand,
-
 } from './upnpSoapClient';
 
-export { processUpnpDevice, processUpnpDeviceFromUrl } from './upnpDeviceProcessor';
+// From didlLiteUtils.ts
+export { createSingleItemDidlLiteXml } from './didlLiteUtils';
+
+export {
+    processUpnpDevice,
+    processUpnpDeviceFromUrl
+} from './upnpDeviceProcessor';
 

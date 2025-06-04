@@ -2,7 +2,7 @@
 import type {
     ServiceDescription,
     DiscoveryOptions
-} from '../src'; // ApiDevice תלוי ב-ServiceDescription
+} from 'dlna.js'; // ApiDevice תלוי ב-ServiceDescription
 
 /**
  * @hebrew מייצג את המידע על התקן כפי שהוא נשמר ומוצג ב-API של השרת.

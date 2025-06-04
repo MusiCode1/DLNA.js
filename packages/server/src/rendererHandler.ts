@@ -3,8 +3,8 @@ import { Request, Response, NextFunction, Router } from 'express';
 import {
   sendUpnpCommand, createModuleLogger,
   ContentDirectoryService, BrowseFlag
-} from '../src';
-import type { ServiceDescription } from "../src";
+} from 'dlna.js';
+import type { ServiceDescription } from "dlna.js";
 import type { ApiDevice } from './types';
 
 const logger = createModuleLogger('rendererHandler');

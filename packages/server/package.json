@@ -1,0 +1,20 @@
+{
+  "name": "@dlna-tv-play/server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "bun ./dist/index.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "dlna.js": "workspace:*",
+    "@dlna-tv-play/wake-on-lan": "workspace:*",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.2"
+  }
+}

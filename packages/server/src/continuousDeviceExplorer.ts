@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events';
-import { } from '../src/index';
 import {
   ProcessedDevice,
   DiscoveryDetailLevel,
@@ -8,8 +7,8 @@ import {
   DeviceWithServicesDescription,
   discoverSsdpDevices,
   createModuleLogger
-} from '../src/index';
-import type { RawSsdpMessageHandler, DiscoveryOptions } from '../src/index'; // Assuming logger is needed
+} from 'dlna.js';
+import type { RawSsdpMessageHandler, DiscoveryOptions } from 'dlna.js'; // Assuming logger is needed
 
 import type { ContinueDiscoveryOptions } from './types'; // ייבוא ישירות מ-types.ts
 import type { RemoteInfo } from 'node:dgram'; // הוספת ייבוא, למרות שלא נשתמש ישירות בחתימה כרגע

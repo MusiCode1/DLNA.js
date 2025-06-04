@@ -6,11 +6,21 @@ bun build .\server\index.ts --compile --minify --outfile .\dist\dlna-server
 
 ```tasmota
 WebQuery http://www.mysite.com/api/status GET
-WebQuery http://192.168.1.117:8080/play GET
+WebQuery http://192.168.1.117:5544/play GET
 
 ON <trigger> DO <command> [ENDON | BREAK]
 
-Rule1 ON Button1#state=1 DO WebQuery http://192.168.1.117:8080/play GET ENDON 
+# not worked
+Rule1 ON Button1#state=1 DO WebSend [192.168.1.102:3300] /api/play-preset?presetName=Moishy ENDON 
+
+Rule1 ON Button1#state=12 DO WebSend [192.168.1.102:3300] /api/play-preset?presetName=Moishy ENDON 
+
+Rule1 ON Button1#state=2 DO WebQuery http://192.168.1.102:3300/api/play-preset/Moishy GET ENDON 
+
+WebSend [myserver.com] /fancy/data.php?log=1234
+
+WebSend [192.168.1.102:3300] /api/play-preset/Moishy
+
 ```
 
 # RClone

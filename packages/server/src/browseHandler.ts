@@ -3,7 +3,7 @@ import {
   createModuleLogger,
   ContentDirectoryService, BrowseFlag,
   BrowseResult, ServiceDescription
-} from '../src';
+} from 'dlna.js';
 import type { ApiDevice } from './types'; // ייבוא ישירות מ-types.ts
 
 const logger = createModuleLogger('BrowseHandler');
