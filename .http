@@ -3,7 +3,7 @@
 @url = http://{{IP}}:{{PORT}}
 ###
 GET {{url}}/api/play-preset
-    ?presetName=Kodi-rClone
+    ?presetName=Moishy
 ###
 
 GET http://{{IP}}:{{PORT}}/api/presets
@@ -11,3 +11,8 @@ GET http://{{IP}}:{{PORT}}/api/presets
 ###
 
 GET http://{{IP}}:{{PORT}}/api/play-preset
+
+###
+
+GET http://192.168.1.117:8080/play
+

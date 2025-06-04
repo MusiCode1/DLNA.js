@@ -57,6 +57,9 @@ export async function sendWakeOnLan(
   broadcastAddress: string = '255.255.255.255',
   port: number = 9
 ): Promise<boolean> {
+  // הוספת לוג מפורט לפרמטרים המתקבלים
+  console.log(`[sendWakeOnLan ENTRY] Received - MAC: ${macAddress}, Broadcast: ${broadcastAddress}, Port: ${port}`);
+  // סוף הלוג הנוסף
   console.log(`[DEBUG] sendWakeOnLan called with MAC: ${macAddress}, IP: ${broadcastAddress}, Port: ${port}`); // DEBUG LOG
   return new Promise<boolean>((resolve) => {
     try {

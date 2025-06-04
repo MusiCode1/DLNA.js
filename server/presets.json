@@ -17,15 +17,15 @@
   "Moishy": {
     "renderer": {
       "udn": "uuid:be1c59a2-4a1e-9c76-3288-742038c5ddc8",
-      "baseURL": "http://192.168.1.102:1567",
-      "ipAddress": "192.168.1.102",
-      "macAddress": "48:9E:9D:FB:F7:98"
+      "baseURL": "http://192.168.1.41:1941",
+      "ipAddress": "192.168.1.41",
+      "macAddress": "AC:5A:F0:E5:8C:25"
     },
     "mediaServer": {
-      "udn": "uuid:6da3c8fa-6406-9f97-8acc-853d88e139b3",
-      "baseURL": "http://192.168.1.103:7879",
+      "udn": "uuid:564ff520-4e02-506b-23df-0ea882efbf4f",
+      "baseURL": "http://192.168.1.102:7879",
       "folder": {
-        "objectId": "%2F%D7%9E%D7%90%D7%A9%D7%94+%D7%95%D7%94%D7%93%D7%95%D7%91"
+        "objectId": "%2F%D7%A1%D7%A8%D7%98%D7%95%D7%A0%D7%99+%D7%96%D7%9E%D7%9F+%D7%A4%D7%A0%D7%90%D7%99%2F%D7%9E%D7%90%D7%A9%D7%94+%D7%95%D7%94%D7%93%D7%95%D7%91"
       }
     }
   },

@@ -84,6 +84,7 @@ export class ContinuousDeviceExplorer extends EventEmitter {
     type OnDeviceFound = DiscoveryOptions['onDeviceFound'];
 
     const onDeviceFound: OnDeviceFound = (device) => {
+      
       if (currentSignal.aborted) {
         logger.debug('Device found after abort, ignoring:', (device as DeviceDescription).UDN || device.usn);
         return;

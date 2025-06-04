@@ -15,21 +15,24 @@ import { sendWakeOnLan, WolCallback, checkPingWithRetries } from '../server/wol_
 async function wakeDeviceAndVerify(
   macAddress: string,
   ipAddress: string,
-  broadcastAddress: string = '255.255.255.255',
+  broadcastAddress: string = '255.255.255.255', // ברירת מחדל גלובלית
   wolPort: number = 9,
   pingTotalTimeoutSeconds: number = 60, // זמן המתנה ארוך יותר להתעוררות
   pingIntervalSeconds: number = 2,
   pingSingleTimeoutSeconds: number = 3
 ): Promise<void> {
-  console.log(`Attempting to wake device with MAC: ${macAddress} and IP: ${ipAddress}`);
+  // הדפסת כל הפרמטרים, כולל כתובת ה-broadcast שבה ייעשה שימוש
+  console.log(`Attempting to wake device with MAC: ${macAddress}, IP: ${ipAddress}, Broadcast: ${broadcastAddress}, Port: ${wolPort}`);
 
   // שלב 1: שליחת חבילת Wake-on-LAN
   // נשתמש בפרומיס כדי להמתין לסיום פעולת sendWakeOnLan
-  console.log(`[wakeDeviceAndVerify] Calling sendWakeOnLan for MAC ${macAddress}`);
+  console.log(`[wakeDeviceAndVerify] Calling sendWakeOnLan for MAC ${macAddress} using broadcast ${broadcastAddress}`);
   try {
     const wolSuccess = await sendWakeOnLan(macAddress, broadcastAddress, wolPort);
+    // הדפסת התוצאה שהתקבלה מ-sendWakeOnLan
+    console.log(`[wakeDeviceAndVerify] sendWakeOnLan for MAC ${macAddress} (broadcast: ${broadcastAddress}) returned: ${wolSuccess}`);
     if (wolSuccess) {
-      console.log(`[wakeDeviceAndVerify] WoL packet sent successfully to MAC ${macAddress}.`);
+      console.log(`[wakeDeviceAndVerify] WoL packet reported as sent successfully to MAC ${macAddress} via ${broadcastAddress}.`);
       console.log('WoL packet dispatch process completed. Now waiting for device to wake up...');
     } else {
       // sendWakeOnLan החזיר false, מה שמצביע על כישלון בשליחה
@@ -74,12 +77,15 @@ const DEFAULT_MAC_ADDRESS = 'YOUR_MAC_ADDRESS_HERE'; // <--- החלף בכתוב
 const DEFAULT_IP_ADDRESS = 'YOUR_IP_ADDRESS_HERE';    // <--- החלף בכתובת ה-IP שלך
 
 // כאן המשתמש יכול לשנות את הערכים במידת הצורך לפני הרצת הסקריפט
-let targetMacAddress = '48:9E:9D:FB:F7:98';
-let targetIpAddress = '192.168.1.122';
+let targetMacAddress = 'AC:5A:F0:E5:8C:25';
+let targetIpAddress = '192.168.1.41';
+// הגדרת כתובת ה-broadcast הנכונה והספציפית לרשת שלך
+let targetBroadcastAddress = '192.168.1.255';
 
 // אם רוצים להשתמש בערכים ספציפיים לבדיקה, ניתן לשנות אותם כאן:
-// targetMacAddress = '48:9E:9D:FB:F7:98'; 
+// targetMacAddress = '48:9E:9D:FB:F7:98';
 // targetIpAddress = '192.168.1.100';
+// targetBroadcastAddress = '192.168.1.255'; // ודא שזו הכתובת הנכונה לרשת שלך
 
 // הרצת הפונקציה הראשית
 async function main() {
@@ -88,7 +94,9 @@ async function main() {
     console.warn('Warning: Using default placeholder MAC and/or IP addresses. Please update them in the script or ensure they are correct.');
   }
 
-  await wakeDeviceAndVerify(targetMacAddress, targetIpAddress);
+  console.log(`[main] Initiating wake-up for MAC: ${targetMacAddress}, IP: ${targetIpAddress}, using Broadcast: ${targetBroadcastAddress}`);
+  // העברת כתובת ה-broadcast הנכונה לפונקציה
+  await wakeDeviceAndVerify(targetMacAddress, targetIpAddress, targetBroadcastAddress);
 }
 
 // קריאה לפונקציית main אם הקובץ מורץ ישירות

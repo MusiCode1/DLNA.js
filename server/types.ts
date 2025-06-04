@@ -17,6 +17,8 @@ export interface ApiDevice {
     baseURL?: string; // חיוני להרכבת URL-ים אבסולוטיים לשירותים
     serviceList?: ServiceDescription[]; // רשימת השירותים המלאה
     supportedServices?: string[]; // שירותים נתמכים (יכול להיות נגזר מ-serviceList)
+    presentationURL?: string; // הוספת שדה עבור כתובת ה-URL של דף ההצגה של ההתקן
+    rootDoc: string;
 }
 
 export interface ContinueDiscoveryOptions extends DiscoveryOptions {

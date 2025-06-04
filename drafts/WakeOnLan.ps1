@@ -74,7 +74,7 @@ function Send-WakeOnLan {
 # Ensure the target device is configured for Wake-on-LAN in its BIOS/UEFI and network adapter settings.
 
 # Example 1: Direct call
-# Send-WakeOnLan -MacAddress "00:11:22:AA:BB:CC"
+# . ./WakeOnLan.ps1; Send-WakeOnLan -MacAddress "00:11:22:AA:BB:CC"
 
 # Example 2: Using pipeline
 # "00-11-22-AA-BB-CC" | Send-WakeOnLan

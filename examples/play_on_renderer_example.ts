@@ -2,8 +2,11 @@
 // סקריפט זה מדגים הערת התקן רינדור, גישה לשרת מדיה,
 // דפדוף בתיקייה והשמעת קבצים מהשרת על גבי הרינדור.
 
+import express from 'express'; // הוספת ייבוא ל-Express
+import { URL } from 'node:url';
 import { wakeDeviceAndVerify } from '../drafts/wake_and_check_device';
 import { processUpnpDeviceFromUrl, createModuleLogger, DiscoveryDetailLevel, BrowseFlag, ContentDirectoryService } from '../src';
+import { createSingleItemDidlLiteXml } from '../src/didlLiteUtils'; // ייבוא הפונקציה החדשה
 import type {
     FullDeviceDescription,
     ServiceDescription,
@@ -15,12 +18,44 @@ import type {
 
 const logger = createModuleLogger('PlayOnRendererExample');
 
+
+const settingsList = {
+    myHome:
+    {
+        mediaServer: {
+            docUrl: 'http://10.100.102.106:7879/rootDesc.xml',
+            directoryID: '%2F%D7%9E%D7%90%D7%A9%D7%94+%D7%95%D7%94%D7%93%D7%95%D7%91'
+        },
+        mediaRender: {
+            docUrl: 'http://10.100.102.106:1473/',
+            macAddress: 'AC:5A:F0:E5:8C:25'
+        }
+    },
+
+    moishy: {
+        mediaServer: {
+            docUrl: 'http://192.168.1.102:7879/rootDesc.xml',
+            directoryID: '%2F%D7%A1%D7%A8%D7%98%D7%95%D7%A0%D7' +
+                '%99+%D7%96%D7%9E%D7%9F+%D7%A4%D7%A0%D7%90%D7%' +
+                '99%2F%D7%9E%D7%90%D7%A9%D7%94+%D7%95%D7%94%D7%93%D7%95%D7%91'
+        },
+        mediaRender: {
+            docUrl: 'http://192.168.1.41:1216/',
+            macAddress: 'AC:5A:F0:E5:8C:25',
+            wakeOnLanAddress: '192.168.1.255'
+        }
+    },
+};
+
+const settings = settingsList.moishy;
+
 // --- הגדרות קבועות ---
-const MEDIA_SERVER_URL = 'http://192.168.1.108:7879/rootDesc.xml';
-const RENDERER_DEVICE_XML_URL = 'http://192.168.1.114:1150/'; // לפי אישור המשתמש, זו כתובת ה-XML
-const RENDERER_MAC_ADDRESS = 'AC:5A:F0:E5:8C:25';
-const RENDERER_IP_ADDRESS = '192.168.1.114'; // נגזר מה-URL של הרינדור
-const TARGET_BROWSE_DIRECTORY_ID = '0'; // התיקייה הראשית בשרת המדיה
+const MEDIA_SERVER_URL = settings.mediaServer.docUrl;
+const RENDERER_DEVICE_XML_URL = settings.mediaRender.docUrl; // לפי אישור המשתמש, זו כתובת ה-XML
+const RENDERER_MAC_ADDRESS = settings.mediaRender.macAddress;
+const RENDERER_IP_ADDRESS = (new URL(settings.mediaRender.docUrl)).hostname; // נגזר מה-URL של הרינדור
+const TARGET_BROWSE_DIRECTORY_ID = settings.mediaServer.directoryID; // התיקייה הראשית בשרת המדיה
+const WAKE_ON_LAN_ADDRESS = settings.mediaRender.wakeOnLanAddress;
 
 // --- פונקציות עזר ---
 
@@ -70,7 +105,7 @@ async function main() {
         await wakeDeviceAndVerify(
             RENDERER_MAC_ADDRESS,
             RENDERER_IP_ADDRESS,
-            '255.255.255.255', // broadcast address
+            WAKE_ON_LAN_ADDRESS, // broadcast address
             9, // wol port
             90, // ping total timeout seconds (מותאם להתקנים שלוקח להם זמן לעלות)
             3,  // ping interval seconds
@@ -132,44 +167,44 @@ async function main() {
     logger.info(`Browsing directory ID "${TARGET_BROWSE_DIRECTORY_ID}" on media server "${mediaServerDevice.friendlyName}"...`);
     const cdsServiceInfo = findService(mediaServerDevice, 'urn:schemas-upnp-org:service:ContentDirectory:1');
     if (!cdsServiceInfo) {
-      logger.error(`ContentDirectory service not found on media server ${mediaServerDevice.friendlyName}. Aborting.`);
-      return;
+        logger.error(`ContentDirectory service not found on media server ${mediaServerDevice.friendlyName}. Aborting.`);
+        return;
     }
-  
+
     let mediaItems: DidlLiteObject[] = [];
     try {
-      // יצירת מופע של ContentDirectoryService
-      const cds = new ContentDirectoryService(cdsServiceInfo);
-      
-      logger.debug(`Attempting to browse directory ID "${TARGET_BROWSE_DIRECTORY_ID}" using ContentDirectoryService.`);
-      const browseResult = await cds.browse(
-        TARGET_BROWSE_DIRECTORY_ID,
-        BrowseFlag.BrowseDirectChildren,
-        '*', // Filter
-        0,   // StartingIndex
-        0,   // RequestedCount (0 for all)
-        ''   // SortCriteria
-      );
-      logger.debug('Browse action successful using ContentDirectoryService. Result:', browseResult);
-  
-      if (browseResult && browseResult.items) {
-        mediaItems = browseResult.items.filter(
-          (item: DidlLiteContainer | DidlLiteObject): item is DidlLiteObject =>
-            item.class.startsWith('object.item.audioItem') || item.class.startsWith('object.item.videoItem')
+        // יצירת מופע של ContentDirectoryService
+        const cds = new ContentDirectoryService(cdsServiceInfo);
+
+        logger.debug(`Attempting to browse directory ID "${TARGET_BROWSE_DIRECTORY_ID}" using ContentDirectoryService.`);
+        const browseResult = await cds.browse(
+            TARGET_BROWSE_DIRECTORY_ID,
+            BrowseFlag.BrowseDirectChildren,
+            '*', // Filter
+            0,   // StartingIndex
+            0,   // RequestedCount (0 for all)
+            ''   // SortCriteria
         );
-      }
-  
-      if (mediaItems.length === 0) {
-        logger.info(`No media items (audio/video) found in directory "${TARGET_BROWSE_DIRECTORY_ID}" or parsing failed.`);
-      } else {
-        logger.info(`Found ${mediaItems.length} media item(s) in directory "${TARGET_BROWSE_DIRECTORY_ID}".`);
-      }
-  
+        logger.debug('Browse action successful using ContentDirectoryService. Result:', browseResult);
+
+        if (browseResult && browseResult.items) {
+            mediaItems = browseResult.items.filter(
+                (item: DidlLiteContainer | DidlLiteObject): item is DidlLiteObject =>
+                    item.class.startsWith('object.item.audioItem') || item.class.startsWith('object.item.videoItem')
+            );
+        }
+
+        if (mediaItems.length === 0) {
+            logger.info(`No media items (audio/video) found in directory "${TARGET_BROWSE_DIRECTORY_ID}" or parsing failed.`);
+        } else {
+            logger.info(`Found ${mediaItems.length} media item(s) in directory "${TARGET_BROWSE_DIRECTORY_ID}".`);
+        }
+
     } catch (error) {
-      logger.error(`Error browsing ContentDirectory on ${mediaServerDevice.friendlyName} using ContentDirectoryService. Aborting.`, error);
-      return;
+        logger.error(`Error browsing ContentDirectory on ${mediaServerDevice.friendlyName} using ContentDirectoryService. Aborting.`, error);
+        return;
     }
-    
+
     // אם אין פריטים, אין טעם להמשיך לשלב הניגון.
     if (mediaItems.length === 0) {
         logger.info('No media items to play. Exiting playback stage.');
@@ -178,7 +213,7 @@ async function main() {
         // return;
         // נמשיך כדי להדגים את שאר הלוגיקה, אך היא לא תעשה כלום
     }
-  
+
     // שלב 5: השמעת הקבצים על הרינדור
     logger.info(`Preparing to play media on renderer "${rendererDevice.friendlyName}"...`);
     const avTransportService = findService(rendererDevice, 'urn:schemas-upnp-org:service:AVTransport:1');
@@ -188,6 +223,7 @@ async function main() {
     }
 
     const setAvTransportUriAction = findAction(avTransportService, 'SetAVTransportURI');
+    const setNextAvTransportUriAction = findAction(avTransportService, 'SetNextAVTransportURI');
     const playAction = findAction(avTransportService, 'Play');
 
     if (!setAvTransportUriAction || !setAvTransportUriAction.invoke) {
@@ -198,8 +234,13 @@ async function main() {
         logger.error(`Play action not found or not invokable on AVTransport service of ${rendererDevice.friendlyName}. Aborting.`);
         return;
     }
+    if (!setNextAvTransportUriAction || !setNextAvTransportUriAction.invoke) {
+        logger.warn(`SetNextAVTransportURI action not found or not invokable on AVTransport service of ${rendererDevice.friendlyName}. Will only play the first item.`);
+        // אין צורך לבטל, פשוט נגן רק את הפריט הראשון
+    }
 
-    for (const item of mediaItems) {
+    for (let i = 0; i < mediaItems.length; i++) {
+        const item = mediaItems[i];
         if (!item.resources || item.resources.length === 0) {
             logger.warn(`Media item "${item.title}" (ID: ${item.id}) has no resources. Skipping.`);
             continue;
@@ -207,56 +248,104 @@ async function main() {
         const resource = item.resources[0]; // בדרך כלל ניקח את המשאב הראשון
         const mediaUrl = resource.uri;
 
-        logger.info(`Attempting to play: "${item.title}" (URL: ${mediaUrl}) on ${rendererDevice.friendlyName}`);
-
         try {
-            // 1. הגדרת ה-URI
-            const setUriArgs = {
-                InstanceID: 0, // בדרך כלל 0
-                CurrentURI: mediaUrl,
-                CurrentURIMetaData: '', // אפשר להשאיר ריק או לספק DIDL-Lite עבור פריט בודד
-                // יצירת DIDL-Lite פשוט עבור פריט בודד:
-                // `<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">` +
-                // `<item id="${item.id}" parentID="${item.parentId}" restricted="${item.restricted}"><dc:title>${item.title}</dc:title><upnp:class>${item.class}</upnp:class>` +
-                // `<res protocolInfo="${resource.protocolInfo || ''}" size="${resource.size || ''}" duration="${resource.duration || ''}">${mediaUrl}</res></item></DIDL-Lite>`
-            };
-            logger.debug('Invoking SetAVTransportURI with args:', setUriArgs);
-            await setAvTransportUriAction.invoke(setUriArgs);
-            logger.info(`SetAVTransportURI successful for "${item.title}".`);
+            if (i === 0) {
+                // פריט ראשון: השתמש ב-SetAVTransportURI והפעל
+                logger.info(`Setting current media: "${item.title}" (URL: ${mediaUrl}) on ${rendererDevice.friendlyName}`);
+                const setUriArgs = {
+                    InstanceID: 0,
+                    CurrentURI: mediaUrl,
+                    CurrentURIMetaData: createSingleItemDidlLiteXml(item, resource),
+                };
+                logger.debug('Invoking SetAVTransportURI with args:', setUriArgs);
+                await setAvTransportUriAction.invoke(setUriArgs);
+                logger.info(`SetAVTransportURI successful for "${item.title}".`);
 
-            // המתנה קצרה (אופציונלי, יכול לעזור להתקנים מסוימים)
-            await new Promise(resolve => setTimeout(resolve, 1000));
+                // המתנה קצרה לפני הפעלה
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // 2. הפעלת הניגון
-            const playArgs = {
-                InstanceID: 0,
-                Speed: '1', // מהירות ניגון רגילה
-            };
-            logger.debug('Invoking Play with args:', playArgs);
-            await playAction.invoke(playArgs);
-            logger.info(`Play command sent for "${item.title}".`);
+                logger.info(`Attempting to play: "${item.title}"`);
+                const playArgs = {
+                    InstanceID: 0,
+                    Speed: '1',
+                };
+                logger.debug('Invoking Play with args:', playArgs);
+                await playAction.invoke(playArgs);
+                logger.info(`Play command sent for "${item.title}".`);
+                logger.info(`Playback of "${item.title}" initiated. This example does not wait for completion.`);
 
-            // המתנה לסיום הניגון - זהו חלק מורכב.
-            // אפשר להאזין לאירועי AVTransport (LastChange) כדי לדעת מתי הניגון הסתיים או השתנה.
-            // לצורך הדוגמה הפשוטה הזו, נמתין זמן קבוע או שנמשיך לפריט הבא מיד.
-            // כאן נדפיס הודעה ונמשיך (כלומר, נפעיל את כל השירים ברצף מהיר).
-            logger.info(`Playback of "${item.title}" initiated. This example does not wait for completion.`);
-            // אם רוצים להמתין, לדוגמה 10 שניות:
-            // logger.info('Waiting 10 seconds before playing next item (if any)...');
-            // await new Promise(resolve => setTimeout(resolve, 10000));
+            } else if (setNextAvTransportUriAction && setNextAvTransportUriAction.invoke) {
+                // פריטים הבאים: השתמש ב-SetNextAVTransportURI
+                logger.info(`Adding to queue: "${item.title}" (URL: ${mediaUrl}) on ${rendererDevice.friendlyName}`);
+                const setNextUriArgs = {
+                    InstanceID: 0,
+                    NextURI: mediaUrl,
+                    NextURIMetaData: createSingleItemDidlLiteXml(item, resource),
+                };
+                logger.debug('Invoking SetNextAVTransportURI with args:', setNextUriArgs);
+                await setNextAvTransportUriAction.invoke(setNextUriArgs);
+                logger.info(`SetNextAVTransportURI successful for "${item.title}". Item added to queue.`);
+                // אין צורך לקרוא ל-Play שוב, הנגן אמור לעבור לפריט הבא אוטומטית
+            } else {
+                // אם אין SetNextAVTransportURI, לא ניתן להוסיף פריטים נוספים לתור
+                logger.warn(`Cannot add "${item.title}" to queue as SetNextAVTransportURI is not available. Only the first item will be played.`);
+                break; // צא מהלולאה כי אין טעם להמשיך
+            }
+
+            // המתנה בין פריטים (אופציונלי, אם רוצים שהוספה לתור לא תהיה מהירה מדי)
+            // אם זה לא הפריט האחרון והוספנו לתור
+            if (i < mediaItems.length - 1 && i > 0) {
+                // logger.info('Waiting a bit before adding the next item to the queue...');
+                // await new Promise(resolve => setTimeout(resolve, 500));
+            } else if (i === 0 && mediaItems.length > 1) {
+                // אם זה הפריט הראשון ויש עוד, אולי נרצה להמתין קצת לפני שמוסיפים את הבא
+                // logger.info('Waiting a bit before adding the first item to the queue...');
+                // await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
 
         } catch (error) {
-            logger.error(`Error during playback of "${item.title}" (URL: ${mediaUrl}) on ${rendererDevice.friendlyName}.`, error);
-            // אפשר להחליט אם להמשיך לפריט הבא או לעצור את הסקריפט
+            logger.error(`Error during playback/queuing of "${item.title}" (URL: ${mediaUrl}) on ${rendererDevice.friendlyName}.`, error);
         }
     }
 
     logger.info('Play on renderer example script finished.');
 }
 
-// הרצת הפונקציה הראשית אם הקובץ מורץ ישירות
-if (require.main === module) {
-    main().catch(error => {
-        logger.error("An unexpected error occurred in the main execution:", error);
+// --- פונקציית השרת ---
+async function startExpressServer() {
+    const app = express();
+    const port = 8080;
+
+    app.get('/play', async (req, res) => {
+        logger.info('Webhook /play (GET) received, initiating main function...');
+        try {
+            // הפעלת main באופן אסינכרוני כדי לא לחסום את תגובת השרת
+            main().catch(err => {
+                logger.error('Error during main() execution triggered by webhook:', err);
+                // כאן לא נשלח תגובת שגיאה ללקוח כי הבקשה המקורית כבר נענתה
+            });
+            res.status(200).send('Playback initiated via GET to /play. Check logs for details.');
+        } catch (error) {
+            logger.error('Failed to initiate main function from webhook:', error);
+            res.status(500).send('Error initiating playback.');
+        }
     });
+
+    // טיפול בנתיבים לא קיימים (404)
+    app.use((req, res) => {
+        res.status(404).send("Sorry, can't find that!");
+    });
+
+    app.listen(port, () => {
+        logger.info(`Express server listening on port ${port}, accessible at http://localhost:${port}/play`);
+    });
+}
+
+// הרצת השרת אם הקובץ מורץ ישירות
+if (require.main === module) {
+    // main().catch(error => { // קריאה ישנה לפונקציה main
+    //     logger.error("An unexpected error occurred in the main execution:", error);
+    // });
+    startExpressServer(); // קריאה לפונקציית השרת החדשה
 }

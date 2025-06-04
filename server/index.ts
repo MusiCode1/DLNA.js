@@ -403,10 +403,12 @@ const updateDeviceList = (deviceData: DeviceDescription | DeviceWithServicesDesc
       baseURL: deviceData.baseURL, // שמירת baseURL
       serviceList: deviceData.serviceList, // שמירת serviceList המלא
       supportedServices: supportedServices,
+      presentationURL: deviceData.presentationURL, // הוספת presentationURL
+      rootDoc: deviceData.location
     };
     activeDevices.set(apiDevice.udn, apiDevice);
     // עדכון הלוג כדי שיכלול את המידע החדש אם רוצים
-    logger.info(`Device updated/added: ${apiDevice.friendlyName} (UDN: ${apiDevice.udn})${apiDevice.iconUrl ? ` Icon: ${apiDevice.iconUrl}` : ''}, BaseURL: ${apiDevice.baseURL}, Services: ${supportedServices.length > 0 ? supportedServices.join(', ') : 'N/A'}`);
+    logger.info(`Device updated/added: ${apiDevice.friendlyName} (UDN: ${apiDevice.udn})${apiDevice.iconUrl ? ` Icon: ${apiDevice.iconUrl}` : ''}, BaseURL: ${apiDevice.baseURL}, PresentationURL: ${apiDevice.presentationURL || 'N/A'}, Services: ${supportedServices.length > 0 ? supportedServices.join(', ') : 'N/A'}`);
   } else {
     logger.warn('Received device data without all required fields (friendlyName, modelName, UDN)', { udn: deviceData.UDN }); // תיקון ל-UDN
   }
@@ -420,7 +422,9 @@ const startContinuousDeviceDiscovery = () => {
   deviceExplorer.on('device', (device: ProcessedDevice) => {
     // ProcessedDevice יכול להיות אחד מכמה טיפוסים. נבדוק אם יש לו את השדות הנדרשים.
     // ContinuousDeviceExplorer כבר אמור לפלוט רק מכשירים עם הפרטים הנדרשים (לפחות DeviceDescription)
-    if ('friendlyName' in device && 'modelName' in device && 'UDN' in device) { // תיקון: בדיקת UDN במקום udn
+    if (/* 'friendlyName' in device && 
+      'modelName' in device &&  */
+      'UDN' in device) { // תיקון: בדיקת UDN במקום udn
       updateDeviceList(device as DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription);
     } else {
       logger.debug('Received basic device without full details, UDN from USN (if available):', device.usn);

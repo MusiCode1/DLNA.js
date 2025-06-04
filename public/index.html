@@ -126,6 +126,17 @@
                         const textNode = document.createTextNode(`${device.friendlyName} (${device.modelName || 'N/A'})`);
                         deviceInfoContainer.appendChild(textNode);
 
+                        // הצגת קישור למסמך הראשי של ההתקן
+                        if (device.rootDoc) {
+                            const presentationLink = document.createElement('a');
+                            presentationLink.href = device.rootDoc;
+                            presentationLink.textContent = 'Open Device Page';
+                            presentationLink.target = '_blank'; // פתיחה בלשונית חדשה
+                            presentationLink.style.marginLeft = '10px'; // מרווח קטן משמאל
+                            presentationLink.className = 'browse-button'; // שימוש באותו עיצוב כמו כפתור העיון
+                            deviceInfoContainer.appendChild(presentationLink);
+                        }
+
                         // Check if the device supports ContentDirectory and add browse button
                         if (device.supportedServices && device.supportedServices.includes('urn:schemas-upnp-org:service:ContentDirectory:1')) {
                             const browseButton = document.createElement('a');
