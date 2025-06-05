@@ -15,5 +15,8 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
-  "packageManager": "bun@1.0.0"
+  "packageManager": "bun@1.0.0",
+  "dependencies": {
+    "inquirer": "^12.6.3"
+  }
 }
