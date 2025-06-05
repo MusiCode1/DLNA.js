@@ -15,7 +15,7 @@ import { sendWakeOnLan, wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan'; 
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler'; // ייבוא הפונקציות החדשות
 
 const logger = createModuleLogger('PresetManager'); // הגדרת לוגר למודול
-const PRESETS_FILE_PATH = path.join(process.cwd(), '..', 'data', 'presets.json'); // הנתיב מחושב יחסית לספריית העבודה של השרת, ועולה רמה אחת לשורש הפרויקט
+const PRESETS_FILE_PATH = path.join(process.cwd(), '..','..', 'data', 'presets.json'); // process.cwd() הוא packages/server, לכן עולים שתי רמות (../../) לשורש הפרויקט, ואז נכנסים ל-data
 
 /**
  * @hebrew טוען את הגדרות הפריסט מקובץ ה-JSON וממיר אותן למערך.

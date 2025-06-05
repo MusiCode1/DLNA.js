@@ -6,7 +6,7 @@
   ],
   "scripts": {
     "start": "bun --cwd packages/server start",
-    "build": "bun run --filter=* build",
+    "build": "bun run --filter=\"*\" build",
     "test": "bun -w run test"
   },
   "devDependencies": {
