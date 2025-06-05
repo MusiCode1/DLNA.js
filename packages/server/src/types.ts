@@ -30,6 +30,7 @@ export interface RendererPreset {
   baseURL: string;
   ipAddress: string; // שדה חובה
   macAddress: string; // שדה חובה
+  broadcastAddress: string; // כתובת השידור
 }
 
 export interface FolderPreset {

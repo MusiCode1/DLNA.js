@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const presetNameInput = document.getElementById('preset-name');
     const presetRendererUdnSelect = document.getElementById('preset-renderer-udn');
     const presetRendererMacInput = document.getElementById('preset-renderer-mac');
+    const presetRendererBroadcastInput = document.getElementById('preset-renderer-broadcast'); // הוספת שדה לכתובת שידור
     const presetMediaServerUdnSelect = document.getElementById('preset-mediaserver-udn');
     const presetFolderObjectIdInput = document.getElementById('preset-folder-object-id');
     // const savePresetButton = document.getElementById('save-preset-button'); // Not needed, using form submit
@@ -50,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * @property {string} baseURL
      * @property {string} ipAddress
      * @property {string} macAddress
+     * @property {string} broadcastAddress // הוספת כתובת שידור
      */
 
     /**
@@ -188,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let displayText = `שם: ${presetName}`;
             if (preset.renderer) {
-                displayText += ` | Renderer UDN: ${preset.renderer.udn}, MAC: ${preset.renderer.macAddress}`;
+                displayText += ` | Renderer UDN: ${preset.renderer.udn}, MAC: ${preset.renderer.macAddress}, Broadcast: ${preset.renderer.broadcastAddress || 'N/A'}`;
             }
             if (preset.mediaServer) {
                 displayText += ` | Media Server UDN: ${preset.mediaServer.udn}`;
@@ -258,9 +260,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (presetToEdit.renderer) {
             presetRendererUdnSelect.value = presetToEdit.renderer.udn || '';
             presetRendererMacInput.value = presetToEdit.renderer.macAddress || '';
+            presetRendererBroadcastInput.value = presetToEdit.renderer.broadcastAddress || ''; // טעינת כתובת שידור
         } else {
             presetRendererUdnSelect.value = '';
             presetRendererMacInput.value = '';
+            presetRendererBroadcastInput.value = ''; // איפוס כתובת שידור
         }
 
         if (presetToEdit.mediaServer) {
@@ -293,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const presetName = presetNameInput.value.trim();
         const rendererUdn = presetRendererUdnSelect.value;
         const rendererMac = presetRendererMacInput.value.trim();
+        const rendererBroadcast = presetRendererBroadcastInput.value.trim(); // קריאת כתובת שידור
         const mediaServerUdn = presetMediaServerUdnSelect.value;
         const folderObjectId = presetFolderObjectIdInput.value.trim();
 
@@ -308,6 +313,10 @@ document.addEventListener('DOMContentLoaded', () => {
             showStatusMessage(presetStatusMessageElement, 'כתובת MAC של ה-Renderer אינה תקינה.', false);
             return;
         }
+        if (!rendererBroadcast || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(rendererBroadcast)) {
+            showStatusMessage(presetStatusMessageElement, 'כתובת השידור של ה-Renderer אינה תקינה.', false);
+            return;
+        }
 
         /** @type {PresetEntry} */
         const presetData = {
@@ -315,9 +324,10 @@ document.addEventListener('DOMContentLoaded', () => {
             settings: {
                 renderer: {
                     udn: rendererUdn,
-                    baseURL: availableDevices.find(d => d.udn === rendererUdn)?.baseURL || '', // שינוי ל-string ריק במקום null כדי להתאים לטיפוס
-                    ipAddress: availableDevices.find(d => d.udn === rendererUdn)?.remoteAddress || '', // שינוי ל-string ריק
-                    macAddress: rendererMac
+                    baseURL: availableDevices.find(d => d.udn === rendererUdn)?.baseURL || '',
+                    ipAddress: availableDevices.find(d => d.udn === rendererUdn)?.remoteAddress || '',
+                    macAddress: rendererMac,
+                    broadcastAddress: rendererBroadcast // הוספת כתובת שידור
                 }
             }
         };

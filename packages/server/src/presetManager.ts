@@ -141,19 +141,20 @@ export async function handleWakePreset(req: Request, res: Response, next: NextFu
     // בדיקה אם לפריסט יש הגדרות renderer וכתובת MAC
     const rendererInfo: RendererPreset | null | undefined = presetDetails.renderer;
 
-    if (!rendererInfo || !rendererInfo.macAddress) {
-      logger.warn(`Preset '${presetName}' does not have a renderer with a MAC address.`);
-      res.status(400).json({ error: `Preset '${presetName}' is not configured with a Renderer MAC address for Wake on LAN.` });
+    if (!rendererInfo || !rendererInfo.macAddress || !rendererInfo.broadcastAddress) {
+      logger.warn(`Preset '${presetName}' does not have a renderer with a MAC address or broadcast address.`);
+      res.status(400).json({ error: `Preset '${presetName}' is not configured with a Renderer MAC address and broadcast address for Wake on LAN.` });
       return;
     }
 
     const macAddress = rendererInfo.macAddress;
+    const broadcastAddress = rendererInfo.broadcastAddress; // קבלת כתובת השידור
 
-    logger.info(`Attempting to send Wake on LAN to preset '${presetName}' (MAC: ${macAddress})`);
+    logger.info(`Attempting to send Wake on LAN to preset '${presetName}' (MAC: ${macAddress}, Broadcast: ${broadcastAddress})`);
 
-    await sendWakeOnLan(macAddress);
+    await sendWakeOnLan(macAddress, broadcastAddress); // שימוש בכתובת השידור
 
-    logger.info(`Successfully sent Wake on LAN packet to MAC address: ${macAddress} for preset '${presetName}'.`);
+    logger.info(`Successfully sent Wake on LAN packet to MAC address: ${macAddress} (Broadcast: ${broadcastAddress}) for preset '${presetName}'.`);
     res.status(200).json({ message: `Wake on LAN signal sent successfully to preset '${presetName}'.` });
 
   } catch (error: any) {
@@ -225,6 +226,7 @@ async function executePlayPresetLogic(
       !presetSettings.renderer?.baseURL ||
       !presetSettings.renderer?.ipAddress ||
       !presetSettings.renderer?.macAddress ||
+      !presetSettings.renderer?.broadcastAddress || // בדיקה עבור כתובת שידור
       !presetSettings.mediaServer?.udn ||
       !presetSettings.mediaServer?.baseURL ||
       !presetSettings.mediaServer?.folder?.objectId
@@ -249,8 +251,8 @@ async function executePlayPresetLogic(
           await wakeDeviceAndVerify(
             rendererPreset.macAddress,
             rendererPreset.ipAddress,
-            undefined,
-            undefined,
+            rendererPreset.broadcastAddress, // העברת כתובת השידור
+            undefined, // wolPort - ישאר ברירת מחדל
             18, 2, 2
           );
           logger.info(`Device ${rendererPreset.ipAddress} (Renderer) for preset '${presetName}' responded after wakeDeviceAndVerify.`);
