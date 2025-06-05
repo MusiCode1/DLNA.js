@@ -428,6 +428,7 @@ async function invokeAction(device: FullDeviceDescription, service: ServiceDescr
         logger.debug(`inquirerInput/select for argument "${arg.name}" returned. Value: ${value}`);
         inputArguments[arg.name] = value as string | number; // המרה לטיפוס המתאים
       } else if (arg.direction === 'out') {
+        outputArgumentNames.push(arg.name); // הוספת שם ארגומנט הפלט למערך
         // הקוד הבעייתי שהיה כאן הוסר ב-diff הקודם,
         // והוחלף בלוגיקה הנכונה המשתמשת ב-select, inquirerInput, inquirerConfirm.
         // ה-diff הנוכחי רק מתקן את הודעת הלוג בשורה 428.
