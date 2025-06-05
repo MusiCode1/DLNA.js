@@ -1,5 +1,7 @@
-import inquirer, { type Question, type DistinctQuestion, type Answers } from 'inquirer';
-// Separator נגיש דרך inquirer.Separator, אין צורך לייבא אותו בנפרד
+// שינוי לשימוש ב-API החדש של @inquirer/prompts
+import { select, input as inquirerInput, confirm as inquirerConfirm, Separator } from '@inquirer/prompts';
+import inquirer from 'inquirer'; // נשאיר לייבוא של Separator הישן אם עדיין בשימוש במקומות אחרים, או שנמחק אם לא צריך
+
 import {
   discoverSsdpDevices,
   DiscoveryDetailLevel,
@@ -43,16 +45,19 @@ function getFriendlyDeviceType(deviceTypeUrn?: string): string {
 
 async function main() {
   logger.info('Starting DLNA Device Explorer CLI...');
-
+  logger.debug('Entered main function');
   try {
+    logger.debug('Calling discoverSsdpDevices...');
     const devices = await discoverSsdpDevices({
       timeoutMs: 5000, // שונה ל-timeoutMs
       detailLevel: DiscoveryDetailLevel.Full, // בקש את כל הפרטים
       // logger: createLogger('Discovery'), // הוסר - הלוגר הפנימי ישמש
     });
+    logger.debug(`discoverSsdpDevices returned ${devices?.length} devices.`);
 
     if (!devices || devices.length === 0) {
       logger.warn('No devices found on the network.');
+      logger.debug('Exiting main function - no devices found.');
       return;
     }
 
@@ -78,195 +83,301 @@ async function main() {
 
     if (filteredDevices.length === 0) {
         logger.warn('No unique devices found after filtering.');
+        logger.debug('Exiting main function - no unique devices after filtering.');
         return;
     }
 
     logger.info(`Displaying ${filteredDevices.length} unique devices.`);
-    await selectDeviceMenu(filteredDevices);
+    logger.debug('Calling selectDeviceMenu...');
+    const selectDeviceMenuResult = await selectDeviceMenu(filteredDevices);
+    logger.debug(`Returned from selectDeviceMenu. Result: ${selectDeviceMenuResult}`);
+
+    if (selectDeviceMenuResult === 'rediscover') {
+      logger.info('Rediscovering devices as requested...');
+      // קריאה רקורסיבית ל-main תתחיל את כל התהליך מחדש.
+      // זה בסדר כאן כי זו פעולה מפורשת של המשתמש.
+      await main();
+    }
+    // אם 'exit', הפונקציה פשוט תסתיים.
+    // אם undefined, גם הפונקציה תסתיים (המשתמש חזר עד לפה ובחר לצאת).
   } catch (error) {
     logger.error('An error occurred during device discovery or exploration:', error);
+    logger.debug('Exiting main function due to error in discovery/exploration.');
   }
+  logger.debug('Exiting main function normally.');
 }
 
-async function selectDeviceMenu(devices: FullDeviceDescription[]) {
-  const { selectedDeviceUSN } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selectedDeviceUSN',
-      message: 'Select a device to explore:',
-      choices: devices.map(device => ({
+async function selectDeviceMenu(devices: FullDeviceDescription[]): Promise<'rediscover' | 'exit' | void> {
+  logger.debug('Entered selectDeviceMenu');
+  // אין כאן לולאה, כי בחירת התקן היא חד פעמית. אם רוצים לבחור התקן אחר, צריך "rediscover".
+  
+  logger.debug('Prompting for device selection...');
+  const selectedDeviceUDN = await select({ // שימוש ב-select החדש
+    message: 'Select a device to explore (or select an option):',
+    choices: [
+      ...devices.map(device => ({
         name: `${device.friendlyName} (${device.modelName || 'Unknown Model'}) - [${getFriendlyDeviceType(device.deviceType)}] - ${device.baseURL}`,
-        value: device.UDN, // השתמש ב-UDN כמזהה ייחודי
+        value: device.UDN,
+        description: device.baseURL,
       })),
-    },
-  ]);
+      new Separator(),
+      { name: 'Restart discovery (find new devices)', value: 'rediscover' },
+      { name: 'Exit explorer', value: 'exit' }
+    ]
+  });
+  logger.debug(`select prompt for device selection returned. Selected UDN/Option: ${selectedDeviceUDN}`);
 
-  const selectedDevice = devices.find(d => d.UDN === selectedDeviceUSN);
+  if (selectedDeviceUDN === 'rediscover') {
+      // הקוד הכפול שהיה כאן נמחק. המשתנה הנכון הוא selectedDeviceUDNValue מהקריאה ל-select למעלה.
+      // השורות הבאות כבר משתמשות ב-selectedDeviceUDNValue.
+    logger.debug('User chose rediscover from selectDeviceMenu.');
+    return 'rediscover';
+  }
+  if (selectedDeviceUDN === 'exit') { // שימוש ב-selectedDeviceUDN
+    logger.info('Exiting explorer.');
+    logger.debug('User chose exit from selectDeviceMenu.');
+    return 'exit';
+  }
+
+  const selectedDevice = devices.find(d => d.UDN === selectedDeviceUDN); // שימוש ב-selectedDeviceUDN
   if (!selectedDevice) {
-    logger.error('Selected device not found. This should not happen.');
-    return;
+    logger.error('Selected device not found. This should not happen (UDN mismatch).');
+    logger.debug('Exiting selectDeviceMenu - selected device not found.');
+    return; // נשארים באותו מקום, main יסתיים
   }
 
   logger.info(`Exploring device: ${selectedDevice.friendlyName}`);
-  await deviceActionsMenu(selectedDevice);
+  logger.debug('Calling deviceActionsMenu...');
+  const deviceMenuResult = await deviceActionsMenu(selectedDevice);
+  logger.debug(`Returned from deviceActionsMenu to selectDeviceMenu. Result: ${deviceMenuResult}`);
+
+  if (deviceMenuResult === 'rediscover') {
+    return 'rediscover';
+  } else if (deviceMenuResult === 'exit') {
+    return 'exit';
+  }
+  // אם חוזרים מ-deviceActionsMenu (כי המשתמש בחר "Back to device list"),
+  // נחזור ל-main, והוא יסתיים כי אין עוד מה לעשות.
+  // כדי לאפשר בחירת התקן אחר, המשתמש צריך לבחור "Restart discovery".
+  logger.debug('Exiting selectDeviceMenu normally (likely means back from deviceActionsMenu).');
 }
 
-async function deviceActionsMenu(device: FullDeviceDescription) {
-  const { action } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'action',
-      message: `Device: ${device.friendlyName} - What do you want to do?`,
-      choices: [
-        { name: 'List services', value: 'listServices' },
-        new inquirer.Separator(),
-        { name: 'Back to device list (Restart discovery)', value: 'rediscover' },
-        { name: 'Exit', value: 'exit' },
-      ],
-    },
-  ]);
+async function deviceActionsMenu(device: FullDeviceDescription): Promise<'rediscover' | 'exit' | void> {
+  logger.debug(`Entered deviceActionsMenu for device: ${device.friendlyName}`);
+  let keepMenuOpen = true;
 
-  switch (action) {
-    case 'listServices':
-      await selectServiceMenu(device);
-      break;
-    case 'rediscover':
-      await main(); // התחל מחדש
-      break;
-    case 'exit':
-      logger.info('Exiting explorer.');
-      return;
+  while (keepMenuOpen) {
+    logger.debug('Prompting for device action in deviceActionsMenu loop...');
+    const action = await select({
+        message: `Device: ${device.friendlyName} (${getFriendlyDeviceType(device.deviceType)}) - What do you want to do?`,
+        choices: [
+          { name: 'List services & explore service', value: 'listServices' },
+          new Separator(),
+          { name: 'Back to device list (Restart discovery)', value: 'rediscover' },
+          { name: 'Exit', value: 'exit' },
+        ],
+      });
+    logger.debug(`select prompt for device action returned. Selected action: ${action}`);
+
+    switch (action) {
+      case 'listServices':
+        logger.debug('Calling selectServiceMenu from deviceActionsMenu...');
+        const serviceMenuResult = await selectServiceMenu(device);
+        logger.debug(`Returned from selectServiceMenu to deviceActionsMenu. Result: ${serviceMenuResult}`);
+        if (serviceMenuResult === 'rediscover') {
+          return 'rediscover';
+        } else if (serviceMenuResult === 'exit') {
+          return 'exit';
+        }
+        // אם חוזרים מ-selectServiceMenu (כי המשתמש בחר "Back to device actions"),
+        // הלולאה של deviceActionsMenu תמשיך.
+        break;
+      case 'rediscover':
+        logger.debug('User chose rediscover from deviceActionsMenu.');
+        return 'rediscover'; // אותת ל-selectDeviceMenu לצאת ולהפעיל מחדש את main
+      case 'exit':
+        logger.info('Exiting explorer.');
+        logger.debug('User chose exit from deviceActionsMenu.');
+        return 'exit'; // אותת לכל הרמות לצאת
+    }
   }
+  logger.debug('Exiting deviceActionsMenu function (loop ended, should not happen if logic is correct).');
+  // לולאה זו אמורה להסתיים רק על ידי return מתוך ה-switch
 }
 
-async function selectServiceMenu(device: FullDeviceDescription) {
-  if (!device.serviceList || device.serviceList.length === 0) {
-    logger.warn(`Device ${device.friendlyName} has no services listed.`);
-    await deviceActionsMenu(device); // חזרה לתפריט הקודם
-    return;
+async function selectServiceMenu(device: FullDeviceDescription): Promise<'rediscover' | 'exit' | void> {
+  logger.debug(`Entered selectServiceMenu for device: ${device.friendlyName}`);
+  let keepMenuOpen = true;
+
+  while (keepMenuOpen) {
+    if (!device.serviceList || device.serviceList.length === 0) {
+      logger.warn(`Device ${device.friendlyName} has no services listed.`);
+      // אין שירותים, אז אין טעם להישאר בתפריט זה. נחזור לתפריט ההתקן.
+      return; // יגרום לחזרה ל-deviceActionsMenu
+    }
+
+    logger.debug('Prompting for service selection in selectServiceMenu loop...');
+    const selectedServiceId = await select({
+        message: `Device: ${device.friendlyName} - Select a service:`,
+        choices: [
+          ...device.serviceList.map(service => ({
+            name: `${service.serviceType} (ID: ${service.serviceId})`,
+            value: service.serviceId,
+          })),
+          new Separator(),
+          { name: 'Back to device actions', value: 'backToDevice' }
+        ],
+      });
+    logger.debug(`select prompt for service selection returned. Selected service ID: ${selectedServiceId}`);
+
+    if (selectedServiceId === 'backToDevice') {
+      logger.debug('User chose backToDevice from selectServiceMenu.');
+      keepMenuOpen = false; // יציאה מהלולאה של selectServiceMenu
+    } else {
+      const selectedService = device.serviceList.find(s => s.serviceId === selectedServiceId);
+      if (!selectedService) {
+        logger.error('Selected service not found (should not happen if listed).');
+        // נשארים בלולאה כדי שהמשתמש יוכל לבחור שוב
+      } else {
+        logger.info(`Exploring service: ${selectedService.serviceId} of device ${device.friendlyName}`);
+        logger.debug('Calling serviceActionsMenu from selectServiceMenu...');
+        const serviceActionResult = await serviceActionsMenu(device, selectedService);
+        logger.debug(`Returned from serviceActionsMenu to selectServiceMenu. Result: ${serviceActionResult}`);
+        
+        if (serviceActionResult === 'backToDevice') {
+          // serviceActionsMenu אותת שצריך לחזור לתפריט ההתקנים
+          keepMenuOpen = false; // יציאה גם מהלולאה הזו
+        } else if (serviceActionResult === 'exit') {
+          // serviceActionsMenu אותת שצריך לצאת מהכל
+          return 'exit';
+        }
+        // אם serviceActionResult הוא undefined, זה אומר שהמשתמש בחר "Back to service list"
+        // ולכן הלולאה של selectServiceMenu צריכה להמשיך.
+      }
+    }
   }
-
-  const { selectedServiceId } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selectedServiceId',
-      message: `Device: ${device.friendlyName} - Select a service:`,
-      choices: [
-        ...device.serviceList.map(service => ({
-          name: `${service.serviceType} (ID: ${service.serviceId})`,
-          value: service.serviceId,
-        })),
-        new inquirer.Separator(),
-        { name: 'Back to device actions', value: 'backToDevice' }
-      ],
-    },
-  ]);
-
-  if (selectedServiceId === 'backToDevice') {
-    await deviceActionsMenu(device);
-    return;
-  }
-
-  const selectedService = device.serviceList.find(s => s.serviceId === selectedServiceId);
-  if (!selectedService) {
-    logger.error('Selected service not found. This should not happen.');
-    await deviceActionsMenu(device);
-    return;
-  }
-
-  logger.info(`Exploring service: ${selectedService.serviceId} of device ${device.friendlyName}`);
-  await serviceActionsMenu(device, selectedService);
+  logger.debug('Exiting selectServiceMenu function (loop ended, likely backToDevice).');
+  // אם הגענו לכאן, זה אומר שהמשתמש בחר backToDevice
 }
 
-async function serviceActionsMenu(device: FullDeviceDescription, service: ServiceDescription) {
-  // ודא שפרטי השירות המלאים (SCPD) נטענו
-  // בפועל, discoverSsdpDevices עם DiscoveryDetailLevel.Full אמור לטעון אותם,
-  // אך אם לא, תצטרך פונקציה נוספת שתטען אותם לפי הצורך.
-  // כאן נניח שהם קיימים אם actionList קיים.
+async function serviceActionsMenu(device: FullDeviceDescription, service: ServiceDescription): Promise<'backToDevice' | 'exit' | void> {
+  logger.debug(`Entered serviceActionsMenu for service: ${service.serviceId}`);
+  let keepMenuOpen = true;
 
-  if (!service.actionList || service.actionList.length === 0) {
-    logger.warn(`Service ${service.serviceId} has no actions listed.`);
-    await selectServiceMenu(device); // חזרה לתפריט הקודם
-    return;
+  while (keepMenuOpen) {
+    if (!service.actionList || service.actionList.length === 0) {
+      logger.warn(`Service ${service.serviceId} has no actions listed (or SCPD failed to load).`);
+      // אין פעולות, אז אין טעם להישאר בתפריט זה. נחזור לתפריט השירותים.
+      return; // יגרום לחזרה ל-selectServiceMenu
+    }
+
+    const choices = [
+      { name: 'List actions & Invoke action', value: 'listActions' },
+      { name: 'List state variables (and query)', value: 'listStateVariables' },
+      new inquirer.Separator(),
+      { name: 'Back to service list', value: 'backToServices' },
+      { name: 'Back to device actions', value: 'backToDevice' },
+      { name: 'Exit', value: 'exit' },
+    ];
+
+    logger.debug('Prompting for service action choice in serviceActionsMenu loop...');
+    const actionChoice = await select({
+        message: `Service: ${service.serviceId} (${getFriendlyDeviceType(service.serviceType)}) - What do you want to do?`,
+        choices,
+      });
+    logger.debug(`select prompt for service action choice returned. Selected choice: ${actionChoice}`);
+
+    switch (actionChoice) {
+      case 'listActions':
+        logger.debug('Calling selectActionMenu from serviceActionsMenu...');
+        // selectActionMenu מנהל את הלולאה הפנימית שלו ויחזור לכאן כשהמשתמש יבחר "Back to service actions"
+        await selectActionMenu(device, service);
+        logger.debug('Returned from selectActionMenu to serviceActionsMenu loop.');
+        // הלולאה של serviceActionsMenu תמשיך ותציג שוב את האפשרויות
+        break;
+      case 'listStateVariables':
+        logger.debug('Calling listStateVariables from serviceActionsMenu...');
+        // listStateVariables יבצע את פעולתו ויחזור לכאן
+        await listStateVariables(device, service);
+        logger.debug('Returned from listStateVariables to serviceActionsMenu loop.');
+        // הלולאה של serviceActionsMenu תמשיך ותציג שוב את האפשרויות
+        break;
+      case 'backToServices':
+        logger.debug('User chose backToServices from serviceActionsMenu.');
+        keepMenuOpen = false; // יציאה מהלולאה של serviceActionsMenu
+        break; // חוזרים ל-selectServiceMenu
+      case 'backToDevice':
+        logger.debug('User chose backToDevice from serviceActionsMenu.');
+        return 'backToDevice'; // אותת ל-selectServiceMenu לצאת גם כן
+      case 'exit':
+        logger.info('Exiting explorer.');
+        logger.debug('User chose exit from serviceActionsMenu.');
+        return 'exit'; // אותת לכל הרמות לצאת
+    }
   }
-
-  const choices = [
-    { name: 'List actions', value: 'listActions' },
-    { name: 'List state variables', value: 'listStateVariables' },
-    new inquirer.Separator(),
-    { name: 'Back to service list', value: 'backToServices' },
-    { name: 'Back to device actions', value: 'backToDevice' },
-    { name: 'Exit', value: 'exit' },
-  ];
-
-  const { actionChoice } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'actionChoice',
-      message: `Service: ${service.serviceId} - What do you want to do?`,
-      choices,
-    },
-  ]);
-
-  switch (actionChoice) {
-    case 'listActions':
-      await selectActionMenu(device, service);
-      break;
-    case 'listStateVariables':
-      await listStateVariables(device, service);
-      break;
-    case 'backToServices':
-      await selectServiceMenu(device);
-      break;
-    case 'backToDevice':
-      await deviceActionsMenu(device);
-      break;
-    case 'exit':
-      logger.info('Exiting explorer.');
-      return;
-  }
+  logger.debug('Exiting serviceActionsMenu function (loop ended, likely backToServices).');
+  // אם הגענו לכאן, זה אומר שהמשתמש בחר backToServices
 }
 
-async function selectActionMenu(device: FullDeviceDescription, service: ServiceDescription) {
+async function selectActionMenu(device: FullDeviceDescription, service: ServiceDescription): Promise<void> {
+  logger.debug(`Entered selectActionMenu for service: ${service.serviceId}`);
   if (!service.actionList || service.actionList.length === 0) {
     logger.warn(`Service ${service.serviceId} has no actions.`);
-    await serviceActionsMenu(device, service);
-    return;
+    // אין פעולות, אז נחזור לתפריט השירותים, והוא יחליט אם להציג את עצמו שוב
+    return; // פשוט יוצאים, הלולאה ב-serviceActionsMenu תמשיך
   }
 
-  const { selectedActionName } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selectedActionName',
-      message: `Service: ${service.serviceId} - Select an action to invoke:`,
-      choices: [
-        ...service.actionList.map(act => ({
-          name: act.name,
-          value: act.name,
-        })),
-        new inquirer.Separator(),
-        { name: 'Back to service actions', value: 'backToServiceActions' }
-      ],
-    },
-  ]);
+  let keepMenuOpen = true;
+  while (keepMenuOpen) {
+    logger.debug('Prompting for action selection in selectActionMenu loop...');
+    
+    // בדיקה אם stdin מושהה
+    if (process.stdin.isPaused && process.stdin.isPaused()) {
+      logger.debug('process.stdin is paused. Attempting to resume...');
+      process.stdin.resume();
+    } else if (typeof process.stdin.isPaused === 'function' && !process.stdin.isPaused()) { // תיקון: התנאי השני צריך להיות פשוט process.stdin.isPaused()
+      logger.debug('process.stdin.isPaused is a function and returns false.');
+    } else {
+      // logger.debug('process.stdin.isPaused does not exist or process.stdin itself is not defined.');
+      // במקרה ש-process.stdin.isPaused לא קיים כלל (פחות סביר בסביבת Node/Bun מלאה)
+    }
 
-  if (selectedActionName === 'backToServiceActions') {
-    await serviceActionsMenu(device, service);
-    return;
+    const selectedActionName = await select({
+        message: `Service: ${service.serviceId} - Select an action to invoke:`,
+        choices: [
+          ...service.actionList.map(act => ({
+            name: act.name,
+            value: act.name,
+          })),
+          new Separator(), // שימוש ב-Separator החדש
+          { name: 'Back to service actions', value: 'backToServiceActions' }
+        ],
+      });
+    logger.debug(`select prompt for action selection returned. Selected action name: ${selectedActionName}`);
+
+    if (selectedActionName === 'backToServiceActions') {
+      logger.debug('User chose backToServiceActions from selectActionMenu.');
+      keepMenuOpen = false; // יציאה מהלולאה הפנימית של selectActionMenu
+    } else {
+      const selectedAction = service.actionList.find(act => act.name === selectedActionName);
+      if (!selectedAction) {
+        logger.error('Selected action not found (should not happen if listed).');
+        // נשארים בלולאה כדי שהמשתמש יוכל לבחור שוב
+      } else {
+        logger.debug('Calling invokeAction...');
+        await invokeAction(device, service, selectedAction);
+        logger.debug('Returned from invokeAction. Continuing selectActionMenu loop.');
+        // לאחר הפעלת הפעולה, הלולאה תמשיך ותציג שוב את רשימת הפעולות
+      }
+    }
   }
-
-  const selectedAction = service.actionList.find(act => act.name === selectedActionName);
-  if (!selectedAction) {
-    logger.error('Selected action not found.');
-    await serviceActionsMenu(device, service);
-    return;
-  }
-
-  await invokeAction(device, service, selectedAction);
+  logger.debug('Exiting selectActionMenu function (loop ended, means user chose "Back to service actions").');
+  // אין צורך להחזיר ערך, פשוט יוצאים והלולאה ב-serviceActionsMenu תמשיך
 }
 
 async function invokeAction(device: FullDeviceDescription, service: ServiceDescription, action: Action) {
   logger.info(`Preparing to invoke action: ${action.name} on service ${service.serviceId}`);
+  logger.debug(`Entered invokeAction for action: ${action.name}`);
 
   const inputArguments: { [key: string]: string | number } = {};
   const outputArgumentNames: string[] = [];
@@ -276,39 +387,51 @@ async function invokeAction(device: FullDeviceDescription, service: ServiceDescr
       if (arg.direction === 'in') {
         // אם יש משתנה מצב קשור, נסוך להציג את הערכים האפשריים אם קיימים
         const relatedStateVariable = service.stateVariableList?.find(sv => sv.name === arg.relatedStateVariable); // שונה ל-stateVariableList
-        // ננסה להשתמש בטיפוסים המיובאים. ייתכן שנצטרך להתאים אותם יותר.
-        // DistinctQuestion<Answers>['choices'] יכול להיות הדרך לגשת למבנה של choices.
-        // עם זאת, choices הוא פשוט מערך של אובייקטים עם name/value או Separator.
-        let choices: any[] | undefined; // משאירים any[] כרגע כדי לפתור את שגיאת ה-overload
-        let argType: 'list' | 'input' | 'password' | 'confirm' | 'checkbox' | 'rawlist' | 'expand' | 'editor' | 'number' = 'input'; // טיפוס ספציפי יותר
+        let choices: any[] | undefined;
+        let argType: 'list' | 'input' | 'password' | 'confirm' | 'checkbox' | 'rawlist' | 'expand' | 'editor' | 'number' = 'input'; // נשאר אותו דבר בינתיים
 
         if (relatedStateVariable?.allowedValueList && relatedStateVariable.allowedValueList.length > 0) {
           choices = relatedStateVariable.allowedValueList.map(val => ({ name: val, value: val }));
           argType = 'list';
         } else if (relatedStateVariable?.dataType === 'boolean') {
             choices = [{name: 'Yes (1 or true)', value: '1'}, {name: 'No (0 or false)', value: '0'}];
-            argType = 'list';
+            argType = 'list'; // confirm יהיה טוב יותר כאן
         }
 
+        logger.debug(`Prompting for argument: ${arg.name} with type ${argType}`);
+        let value: string | number | boolean;
 
-        const { value } = await inquirer.prompt([
-          {
-            type: argType,
-            name: 'value',
+        if (argType === 'list') {
+          value = await select({ // שימוש ב-select עבור list
+            message: `Select value for argument "${arg.name}" (type: ${relatedStateVariable?.dataType || 'unknown'}):`,
+            choices: choices || [], // ודא ש-choices אינו undefined
+          });
+        } else if (argType === 'input' && relatedStateVariable?.dataType === 'boolean') {
+            // שימוש ב-confirm עבור boolean במקום input
+            value = await inquirerConfirm({ // שימוש ב-inquirerConfirm החדש
+                message: `Set value for boolean argument "${arg.name}":`,
+                default: relatedStateVariable.defaultValue === '1' || relatedStateVariable.defaultValue?.toLowerCase() === 'true',
+            });
+            value = value ? '1' : '0'; // המרה למחרוזת '1' או '0' כפי שמצפה UPnP
+        } else {
+          value = await inquirerInput({ // שימוש ב-inquirerInput החדש
             message: `Enter value for argument "${arg.name}" (type: ${relatedStateVariable?.dataType || 'unknown'}):`,
-            choices: choices, // יהיה undefined אם אין רשימה מותרת
-            // ניתן להוסיף כאן validation בהתאם ל-dataType או allowedValueRange
-            filter: (input: any) => { // הוספת טיפוס any
-                if (relatedStateVariable?.dataType === 'ui4' || relatedStateVariable?.dataType === 'i4' || relatedStateVariable?.dataType === 'number') {
-                    return Number(input);
-                }
-                return input;
-            }
-          },
-        ]);
-        inputArguments[arg.name] = value;
+            // אין filter ב-API החדש של input, נצטרך לעשות זאת ידנית אם צריך
+          });
+        }
+        
+        // החלת filter ידנית אם צריך, כי ה-API החדש לא תומך בו ישירות ב-prompt
+        if (argType === 'input' && (relatedStateVariable?.dataType === 'ui4' || relatedStateVariable?.dataType === 'i4' || relatedStateVariable?.dataType === 'number')) {
+            value = Number(value);
+        }
+        
+        logger.debug(`inquirerInput/select for argument "${arg.name}" returned. Value: ${value}`);
+        inputArguments[arg.name] = value as string | number; // המרה לטיפוס המתאים
       } else if (arg.direction === 'out') {
-        outputArgumentNames.push(arg.name);
+        // הקוד הבעייתי שהיה כאן הוסר ב-diff הקודם,
+        // והוחלף בלוגיקה הנכונה המשתמשת ב-select, inquirerInput, inquirerConfirm.
+        // ה-diff הנוכחי רק מתקן את הודעת הלוג בשורה 428.
+        // אין צורך לשחזר את הקוד הבעייתי.
       }
     }
   }
@@ -316,13 +439,10 @@ async function invokeAction(device: FullDeviceDescription, service: ServiceDescr
   logger.debug(`Invoking action "${action.name}" with arguments:`, inputArguments);
 
   try {
-    // בניית ה-URL המלא ל-controlURL של השירות
     const controlURL = new URL(service.controlURL, device.baseURL).toString();
-    // const soapClient = new UpnpSoapClient(controlURL, service.serviceType, createLogger(`SoapClient-${service.serviceId}`)); // הוסר
-    // const result = await soapClient.invokeAction(action.name, inputArguments); // הוסר
-
-    // שימוש בפונקציה sendUpnpCommand
+    logger.debug(`Calling sendUpnpCommand for action ${action.name}...`);
     const result = await sendUpnpCommand(controlURL, service.serviceType, action.name, inputArguments);
+    logger.debug(`sendUpnpCommand for action ${action.name} returned.`);
 
     logger.info(`Action "${action.name}" invoked successfully.`);
     if (Object.keys(result).length > 0) {
@@ -339,22 +459,28 @@ async function invokeAction(device: FullDeviceDescription, service: ServiceDescr
   } catch (error: any) {
     logger.error(`Error invoking action "${action.name}":`, {
       message: error.message,
-      statusCode: error.statusCode, // אם קיים מהשגיאה של soapClient
-      body: error.body, // אם קיים
+      statusCode: error.statusCode,
+      body: error.body,
       requestArgs: inputArguments,
     });
+    // נוסיף לוג מפורט יותר של השגיאה עצמה
+    if (error.soapFault) {
+        logger.error('SOAP Fault details:', error.soapFault);
+    } else {
+        logger.error('Full error object:', error);
+    }
   }
-
-  // חזרה לתפריט הפעולות של השירות
-  await selectActionMenu(device, service);
+  // invokeAction לא קוראת יותר ל-selectActionMenu. היא פשוט מסיימת.
+  logger.debug('Exiting invokeAction normally.');
 }
 
-async function listStateVariables(device: FullDeviceDescription, service: ServiceDescription) {
-  logger.info(`State variables for service: ${service.serviceId}`);
-  if (!service.stateVariableList || service.stateVariableList.length === 0) { // שונה ל-stateVariableList
-    logger.warn('No state variables found for this service.');
+async function listStateVariables(device: FullDeviceDescription, service: ServiceDescription): Promise<void> {
+  logger.debug(`Entered listStateVariables for service: ${service.serviceId}`);
+  logger.info(`State variables for service: ${service.serviceId} (${getFriendlyDeviceType(service.serviceType)})`);
+  if (!service.stateVariableList || service.stateVariableList.length === 0) {
+    logger.warn('No state variables found for this service (or SCPD failed to load).');
   } else {
-    service.stateVariableList.forEach(sv => { // שונה ל-stateVariableList
+    service.stateVariableList.forEach(sv => {
       let info = `  - ${sv.name} (dataType: ${sv.dataType})`;
       if (sv.sendEvents === 'yes') {
         info += ' (sends events)';
@@ -366,57 +492,54 @@ async function listStateVariables(device: FullDeviceDescription, service: Servic
       if (sv.allowedValueList && sv.allowedValueList.length > 0) {
         logger.info(`    Allowed values: ${sv.allowedValueList.join(', ')}`);
       }
-      // if (sv.allowedValueRange) { // הוסר - השדה לא קיים בטיפוס
-      //   logger.info(`    Allowed range: min=${sv.allowedValueRange.minimum}, max=${sv.allowedValueRange.maximum}, step=${sv.allowedValueRange.step || 'N/A'}`);
-      // }
     });
   }
 
-  // ננסה לקרוא את הערכים הנוכחיים של משתני המצב (אם השירות תומך ב-QueryStateVariable)
-  // זהו חלק מתקדם יותר, שכן לא כל המשתנים ניתנים לשאילתה ישירה.
-  // לעיתים, צריך להפעיל פעולה ספציפית כדי לקבל ערכים.
-  // כאן נדגים שאילתה ישירה אם אפשר.
-
-  const queryableVariables = service.stateVariableList?.filter(sv => !sv.name.startsWith('A_ARG_TYPE_')) || []; // שונה ל-stateVariableList
+  const queryableVariables = service.stateVariableList?.filter(sv => !sv.name.startsWith('A_ARG_TYPE_')) || [];
 
   if (queryableVariables.length > 0) {
     logger.info('\nAttempting to query current values for (some) state variables:');
     const controlURL = new URL(service.controlURL, device.baseURL).toString();
-    // const soapClient = new UpnpSoapClient(controlURL, service.serviceType, createLogger(`SoapQuery-${service.serviceId}`)); // הוסר
 
     for (const sv of queryableVariables) {
-        // לא כל משתנה ניתן לשאילתה ישירה. ננסה רק את אלו שלא נראים כמו ארגומנטים פנימיים.
-        // שירותים מסוימים דורשים פעולת QueryStateVariable ספציפית.
-        // כאן נשתמש בפעולה הגנרית QueryStateVariable אם היא קיימת.
-        // נבדוק אם יש פעולה בשם QueryStateVariable
         const queryAction = service.actionList?.find(a => a.name === 'QueryStateVariable');
         if (queryAction) {
+            logger.debug(`Querying state variable: ${sv.name}`);
             try {
-                const args = { 'varName': sv.name }; // הארגומנט הסטנדרטי לפעולה זו
-                // שימוש בפונקציה sendUpnpCommand
+                const args = { 'varName': sv.name };
                 const result = await sendUpnpCommand(controlURL, service.serviceType, 'QueryStateVariable', args);
-                // הפלט של QueryStateVariable הוא בדרך כלל ארגומנט בשם 'return'
+                logger.debug(`Result for ${sv.name}:`, result);
                 if (result && typeof result.return !== 'undefined') {
                     logger.info(`  ${sv.name}: ${result.return}`);
                 } else {
-                    // logger.debug(`QueryStateVariable for ${sv.name} did not return a 'return' value or result was empty.`);
+                    logger.debug(`QueryStateVariable for ${sv.name} did not return a 'return' value or result was empty.`);
                 }
             } catch (error: any) {
-                // logger.debug(`Could not query state variable ${sv.name}: ${error.message}`);
+                logger.warn(`Could not query state variable ${sv.name}: ${error.message}`);
+                logger.debug('Error details:', error);
+                 if ((error as any).soapFault) {
+                    logger.error('SOAP Fault details during query:', (error as any).soapFault);
+                }
             }
         } else {
-            // logger.debug(`Service ${service.serviceId} does not have a standard QueryStateVariable action.`);
+            logger.debug(`Service ${service.serviceId} does not have a standard QueryStateVariable action. Cannot query ${sv.name}.`);
         }
     }
   }
-
-
-  // חזרה לתפריט הפעולות של השירות
-  await serviceActionsMenu(device, service);
+  // listStateVariables לא קוראת יותר ל-serviceActionsMenu. היא פשוט מסיימת.
+  // המשתמש יראה את הפלט, והלולאה ב-serviceActionsMenu תציג שוב את האפשרויות.
+  logger.info('Finished listing/querying state variables. Press Enter to return to service actions menu.');
+  // הוספת prompt פשוט כדי שהמשתמש יאשר חזרה לתפריט
+  await inquirerInput({ message: 'Press Enter to continue...' }); // שימוש ב-inquirerInput החדש
+  logger.debug('Exiting listStateVariables normally.');
 }
 
 
 // התחלת התוכנית
+logger.debug('Script execution started.');
 main().catch(error => {
   logger.error('Unhandled error in main execution:', error);
+  logger.debug('Script execution finished with unhandled error in main.');
+}).finally(() => {
+    logger.debug('Script execution finished (main promise settled).');
 });

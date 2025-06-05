@@ -17,6 +17,7 @@
   },
   "packageManager": "bun@1.0.0",
   "dependencies": {
+    "@inquirer/prompts": "^7.5.3",
     "inquirer": "^12.6.3"
   }
 }
