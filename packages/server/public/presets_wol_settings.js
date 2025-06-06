@@ -160,43 +160,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 const preset = existingPresets[presetName];
                 const li = document.createElement('li');
                 
-                let displayText = `שם: ${presetName}`;
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'preset-item-details';
+
+                let detailsHTML = `<span class="preset-name">שם: ${presetName}</span>`;
                 if (preset.renderer) {
-                    displayText += ` | Renderer UDN: ${preset.renderer.udn}, MAC: ${preset.renderer.macAddress}, Broadcast: ${preset.renderer.broadcastAddress || 'N/A'}`;
+                    detailsHTML += `<span class="detail-label">Renderer UDN:</span> <span class="detail-value">${preset.renderer.udn}</span><br>`;
+                    detailsHTML += `<span class="detail-label">MAC:</span> <span class="detail-value">${preset.renderer.macAddress}</span><br>`;
+                    detailsHTML += `<span class="detail-label">Broadcast:</span> <span class="detail-value">${preset.renderer.broadcastAddress || 'N/A'}</span><br>`;
                 }
                 if (preset.mediaServer) {
-                    displayText += ` | Media Server UDN: ${preset.mediaServer.udn}`;
+                    detailsHTML += `<span class="detail-label">Media Server UDN:</span> <span class="detail-value">${preset.mediaServer.udn}</span><br>`;
                     if (preset.mediaServer.folder) {
-                        displayText += `, Folder ID: ${preset.mediaServer.folder.objectId}`;
+                        detailsHTML += `<span class="detail-label">Folder ID:</span> <span class="detail-value">${preset.mediaServer.folder.objectId}</span>`;
                     }
                 }
-                
-                const textSpan = document.createElement('span');
-                textSpan.textContent = displayText;
+                detailsDiv.innerHTML = detailsHTML;
 
                 const buttonsDiv = document.createElement('div');
+                buttonsDiv.className = 'preset-actions'; // Add class for styling button group
+
+                const playButton = document.createElement('button');
+                playButton.innerHTML = '<i class="fas fa-play"></i>';
+                playButton.title = 'הפעל פריסט'; // Tooltip
+                playButton.className = 'btn btn-success';
+                playButton.onclick = () => playPreset(presetName);
 
                 const editButton = document.createElement('button');
-                editButton.textContent = 'טען לעריכה';
-                editButton.className = 'btn btn-primary';
-                editButton.style.backgroundColor = '#ffc107'; // צבע אזהרה לטעינה
+                editButton.innerHTML = '<i class="fas fa-edit"></i>';
+                editButton.title = 'טען פריסט לעריכה'; // Tooltip
+                editButton.className = 'btn btn-primary'; // Standard primary color
+                editButton.style.backgroundColor = '#ffc107'; // Keep warning color for edit load
                 editButton.onclick = () => loadPresetForEditing(presetName);
                 
                 const deleteButton = document.createElement('button');
-                deleteButton.textContent = 'מחק';
+                deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                deleteButton.title = 'מחק פריסט'; // Tooltip
                 deleteButton.className = 'btn btn-danger';
                 deleteButton.onclick = () => deletePreset(presetName);
 
-                const playButton = document.createElement('button');
-                playButton.textContent = 'הפעל';
-                playButton.className = 'btn btn-success'; // צבע ירוק להפעלה
-                playButton.onclick = () => playPreset(presetName);
-
-                buttonsDiv.appendChild(playButton); // הוספת כפתור הפעלה
+                buttonsDiv.appendChild(playButton);
                 buttonsDiv.appendChild(editButton);
                 buttonsDiv.appendChild(deleteButton);
                 
-                li.appendChild(textSpan);
+                li.appendChild(detailsDiv); // Changed from textSpan to detailsDiv
                 li.appendChild(buttonsDiv);
                 presetListDisplayElement.appendChild(li);
             }

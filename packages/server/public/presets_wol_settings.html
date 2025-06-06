@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ניהול פריסטים ו-Wake on LAN</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         body {
-            font-family: sans-serif;
+            font-family: 'Roboto', sans-serif;
             margin: 20px;
             background-color: #f4f4f4;
             color: #333;
@@ -32,6 +34,9 @@
         }
         .presets-section h2, .wol-section h2 {
             margin-top: 0;
+            padding-bottom: 10px; /* Added padding */
+            border-bottom: 2px solid #eee; /* Added bottom border */
+            margin-bottom: 20px; /* Added margin for spacing */
         }
         .form-group {
             margin-bottom: 10px;
@@ -43,11 +48,17 @@
         }
         .form-group input[type="text"],
         .form-group select {
-            width: calc(100% - 22px); /* Account for padding and border */
+            width: 100%; /* box-sizing: border-box handles padding and border */
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 3px;
             box-sizing: border-box;
+            transition: border-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out; /* Added transition for focus */
+        }
+        .form-group input[type="text"]:focus,
+        .form-group select:focus {
+            border-color: #007bff; /* Highlight border on focus */
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); /* Add a glow effect on focus */
         }
         .btn {
             padding: 10px 15px;
@@ -56,6 +67,7 @@
             cursor: pointer;
             font-size: 1em;
             margin-right: 5px;
+            transition: background-color 0.3s ease; /* Smoother background color transition */
         }
         .btn-primary {
             background-color: #007bff;
@@ -88,14 +100,40 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap; /* Allow items to wrap to the next line */
+            overflow-wrap: break-word; /* Break long words/strings to prevent overflow */
         }
         #preset-list-display li:last-child {
             border-bottom: none;
         }
-        #preset-list-display li button {
-            margin-left: 5px;
-            padding: 5px 8px;
-            font-size: 0.9em;
+        #preset-list-display li .preset-item-details {
+            flex-grow: 1; /* Allow text to take available space */
+            margin-right: 15px; /* Space before buttons */
+        }
+        #preset-list-display li .preset-item-details .preset-name {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        #preset-list-display li .preset-item-details .detail-label {
+            font-weight: normal;
+            color: #555;
+        }
+        #preset-list-display li .preset-item-details .detail-value {
+            color: #333;
+            word-break: break-all; /* Ensure long UDNs/MACs wrap */
+        }
+        #preset-list-display li .preset-actions button {
+            margin-left: 8px; /* Increased spacing between icon buttons */
+            padding: 8px 10px; /* Adjust padding for icons */
+            font-size: 1em; /* Ensure icons are reasonably sized */
+            line-height: 1; /* Align icon nicely */
+        }
+        #preset-list-display li .preset-actions button:first-child {
+            margin-left: 0;
+        }
+        #preset-list-display li .preset-actions .btn i {
+            /* font-size: 1.1em; */ /* Optional: slightly larger icons */
         }
         .status-message {
             padding: 10px;
