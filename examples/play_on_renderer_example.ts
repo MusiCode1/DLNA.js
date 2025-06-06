@@ -78,8 +78,8 @@ function findService(
         logger.warn(`Device ${device.friendlyName} has no service list.`);
         return undefined;
     }
-    return device.serviceList.find(
-        (s) => s.serviceType === serviceTypeOrId || s.serviceId === serviceTypeOrId
+    return Array.from(device.serviceList.values()).find( // המרה ל-Array והוספת טיפוס
+        (s: ServiceDescription) => s.serviceType === serviceTypeOrId || s.serviceId === serviceTypeOrId
     );
 }
 
@@ -97,7 +97,7 @@ function findAction(
         logger.warn(`Service ${service.serviceId} has no action list.`);
         return undefined;
     }
-    return service.actionList.find((a) => a.name === actionName);
+    return Array.from(service.actionList.values()).find((a: Action) => a.name === actionName); // המרה ל-Array והוספת טיפוס
 }
 
 // --- פונקציה ראשית ---

@@ -18,7 +18,7 @@ async function startServer(): Promise<Subprocess> {
       cwd: serverDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...Bun.env, LOG_LEVEL: 'debug', NODE_ENV: 'development' },
-      shell: true, // הוספת shell: true
+      // shell: true, // הוסר - גורם לשגיאת TS2353 עם Bun.spawn
     }
   );
 

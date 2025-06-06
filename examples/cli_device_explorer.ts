@@ -3,7 +3,7 @@ import { select, input as inquirerInput, confirm as inquirerConfirm, Separator }
 import inquirer from 'inquirer'; // נשאיר לייבוא של Separator הישן אם עדיין בשימוש במקומות אחרים, או שנמחק אם לא צריך
 
 import {
-  discoverSsdpDevices,
+  // discoverSsdpDevices, // הוסר, יש להשתמש ב-ActiveDeviceManager או discoverSsdpDevicesIterable
   DiscoveryDetailLevel,
   type FullDeviceDescription,
   type ServiceDescription,
@@ -47,42 +47,45 @@ async function main() {
   logger.info('Starting DLNA Device Explorer CLI...');
   logger.debug('Entered main function');
   try {
-    logger.debug('Calling discoverSsdpDevices...');
-    const devices = await discoverSsdpDevices({
-      timeoutMs: 5000, // שונה ל-timeoutMs
-      detailLevel: DiscoveryDetailLevel.Full, // בקש את כל הפרטים
-      // logger: createLogger('Discovery'), // הוסר - הלוגר הפנימי ישמש
-    });
-    logger.debug(`discoverSsdpDevices returned ${devices?.length} devices.`);
+    // logger.debug('Calling discoverSsdpDevices...');
+    // const devices = await discoverSsdpDevices({
+    //   timeoutMs: 5000, // שונה ל-timeoutMs
+    //   detailLevel: DiscoveryDetailLevel.Full, // בקש את כל הפרטים
+    //   // logger: createLogger('Discovery'), // הוסר - הלוגר הפנימי ישמש
+    // });
+    // logger.debug(`discoverSsdpDevices returned ${devices?.length} devices.`);
 
-    if (!devices || devices.length === 0) {
-      logger.warn('No devices found on the network.');
-      logger.debug('Exiting main function - no devices found.');
-      return;
-    }
+    // if (!devices || devices.length === 0) {
+    //   logger.warn('No devices found on the network.');
+    //   logger.debug('Exiting main function - no devices found.');
+    //   return;
+    // }
 
-    logger.info(`Found ${devices.length} raw device entries.`);
+    // logger.info(`Found ${devices.length} raw device entries.`);
 
-    // סינון התקנים כפולים לפי UDN
-    const uniqueDevicesMap = new Map<string, FullDeviceDescription>();
-    for (const device of devices as FullDeviceDescription[]) {
-      if (device.UDN && !uniqueDevicesMap.has(device.UDN)) {
-        uniqueDevicesMap.set(device.UDN, device);
-      } else if (!device.UDN) {
-        // במקרה שאין UDN (לא אמור לקרות עם FullDetailLevel, אבל ליתר ביטחון)
-        // נשתמש ב-USN או ב-location כמפתח גיבוי, פחות אידיאלי
-        const backupKey = device.usn || device.location;
-        if (backupKey && !uniqueDevicesMap.has(backupKey)) {
-            logger.warn(`Device ${device.friendlyName || device.usn} missing UDN, using ${backupKey} as unique key.`);
-            uniqueDevicesMap.set(backupKey, device);
-        }
-      }
-    }
+    // // סינון התקנים כפולים לפי UDN
+    // const uniqueDevicesMap = new Map<string, FullDeviceDescription>();
+    // for (const device of devices as FullDeviceDescription[]) {
+    //   if (device.UDN && !uniqueDevicesMap.has(device.UDN)) {
+    //     uniqueDevicesMap.set(device.UDN, device);
+    //   } else if (!device.UDN) {
+    //     // במקרה שאין UDN (לא אמור לקרות עם FullDetailLevel, אבל ליתר ביטחון)
+    //     // נשתמש ב-USN או ב-location כמפתח גיבוי, פחות אידיאלי
+    //     const backupKey = device.usn || device.location;
+    //     if (backupKey && !uniqueDevicesMap.has(backupKey)) {
+    //         logger.warn(`Device ${device.friendlyName || device.usn} missing UDN, using ${backupKey} as unique key.`);
+    //         uniqueDevicesMap.set(backupKey, device);
+    //     }
+    //   }
+    // }
 
-    const filteredDevices = Array.from(uniqueDevicesMap.values());
+    // const filteredDevices = Array.from(uniqueDevicesMap.values());
+    const filteredDevices: FullDeviceDescription[] = []; // מערך ריק זמני עד למימוש discoverSsdpDevicesIterable
+    logger.warn('Device discovery is currently commented out. Using an empty list of devices.');
+
 
     if (filteredDevices.length === 0) {
-        logger.warn('No unique devices found after filtering.');
+        logger.warn('No unique devices found after filtering (or discovery is off).');
         logger.debug('Exiting main function - no unique devices after filtering.');
         return;
     }
@@ -210,7 +213,7 @@ async function selectServiceMenu(device: FullDeviceDescription): Promise<'redisc
   let keepMenuOpen = true;
 
   while (keepMenuOpen) {
-    if (!device.serviceList || device.serviceList.length === 0) {
+    if (!device.serviceList || device.serviceList.size === 0) {
       logger.warn(`Device ${device.friendlyName} has no services listed.`);
       // אין שירותים, אז אין טעם להישאר בתפריט זה. נחזור לתפריט ההתקן.
       return; // יגרום לחזרה ל-deviceActionsMenu
@@ -220,7 +223,7 @@ async function selectServiceMenu(device: FullDeviceDescription): Promise<'redisc
     const selectedServiceId = await select({
         message: `Device: ${device.friendlyName} - Select a service:`,
         choices: [
-          ...device.serviceList.map(service => ({
+          ...Array.from(device.serviceList.values()).map((service: ServiceDescription) => ({
             name: `${service.serviceType} (ID: ${service.serviceId})`,
             value: service.serviceId,
           })),
@@ -234,7 +237,7 @@ async function selectServiceMenu(device: FullDeviceDescription): Promise<'redisc
       logger.debug('User chose backToDevice from selectServiceMenu.');
       keepMenuOpen = false; // יציאה מהלולאה של selectServiceMenu
     } else {
-      const selectedService = device.serviceList.find(s => s.serviceId === selectedServiceId);
+      const selectedService = Array.from(device.serviceList.values()).find((s: ServiceDescription) => s.serviceId === selectedServiceId);
       if (!selectedService) {
         logger.error('Selected service not found (should not happen if listed).');
         // נשארים בלולאה כדי שהמשתמש יוכל לבחור שוב
@@ -265,7 +268,7 @@ async function serviceActionsMenu(device: FullDeviceDescription, service: Servic
   let keepMenuOpen = true;
 
   while (keepMenuOpen) {
-    if (!service.actionList || service.actionList.length === 0) {
+    if (!service.actionList || service.actionList.size === 0) {
       logger.warn(`Service ${service.serviceId} has no actions listed (or SCPD failed to load).`);
       // אין פעולות, אז אין טעם להישאר בתפריט זה. נחזור לתפריט השירותים.
       return; // יגרום לחזרה ל-selectServiceMenu
@@ -321,7 +324,7 @@ async function serviceActionsMenu(device: FullDeviceDescription, service: Servic
 
 async function selectActionMenu(device: FullDeviceDescription, service: ServiceDescription): Promise<void> {
   logger.debug(`Entered selectActionMenu for service: ${service.serviceId}`);
-  if (!service.actionList || service.actionList.length === 0) {
+  if (!service.actionList || service.actionList.size === 0) {
     logger.warn(`Service ${service.serviceId} has no actions.`);
     // אין פעולות, אז נחזור לתפריט השירותים, והוא יחליט אם להציג את עצמו שוב
     return; // פשוט יוצאים, הלולאה ב-serviceActionsMenu תמשיך
@@ -345,7 +348,7 @@ async function selectActionMenu(device: FullDeviceDescription, service: ServiceD
     const selectedActionName = await select({
         message: `Service: ${service.serviceId} - Select an action to invoke:`,
         choices: [
-          ...service.actionList.map(act => ({
+          ...Array.from(service.actionList.values()).map((act: Action) => ({
             name: act.name,
             value: act.name,
           })),
@@ -359,7 +362,7 @@ async function selectActionMenu(device: FullDeviceDescription, service: ServiceD
       logger.debug('User chose backToServiceActions from selectActionMenu.');
       keepMenuOpen = false; // יציאה מהלולאה הפנימית של selectActionMenu
     } else {
-      const selectedAction = service.actionList.find(act => act.name === selectedActionName);
+      const selectedAction = Array.from(service.actionList.values()).find((act: Action) => act.name === selectedActionName);
       if (!selectedAction) {
         logger.error('Selected action not found (should not happen if listed).');
         // נשארים בלולאה כדי שהמשתמש יוכל לבחור שוב
@@ -386,12 +389,12 @@ async function invokeAction(device: FullDeviceDescription, service: ServiceDescr
     for (const arg of action.arguments) { // שונה ל-arguments
       if (arg.direction === 'in') {
         // אם יש משתנה מצב קשור, נסוך להציג את הערכים האפשריים אם קיימים
-        const relatedStateVariable = service.stateVariableList?.find(sv => sv.name === arg.relatedStateVariable); // שונה ל-stateVariableList
+        const relatedStateVariable = service.stateVariableList ? Array.from(service.stateVariableList.values()).find((sv: StateVariable) => sv.name === arg.relatedStateVariable) : undefined;
         let choices: any[] | undefined;
         let argType: 'list' | 'input' | 'password' | 'confirm' | 'checkbox' | 'rawlist' | 'expand' | 'editor' | 'number' = 'input'; // נשאר אותו דבר בינתיים
 
         if (relatedStateVariable?.allowedValueList && relatedStateVariable.allowedValueList.length > 0) {
-          choices = relatedStateVariable.allowedValueList.map(val => ({ name: val, value: val }));
+          choices = relatedStateVariable.allowedValueList.map((val: string) => ({ name: val, value: val }));
           argType = 'list';
         } else if (relatedStateVariable?.dataType === 'boolean') {
             choices = [{name: 'Yes (1 or true)', value: '1'}, {name: 'No (0 or false)', value: '0'}];
@@ -478,10 +481,10 @@ async function invokeAction(device: FullDeviceDescription, service: ServiceDescr
 async function listStateVariables(device: FullDeviceDescription, service: ServiceDescription): Promise<void> {
   logger.debug(`Entered listStateVariables for service: ${service.serviceId}`);
   logger.info(`State variables for service: ${service.serviceId} (${getFriendlyDeviceType(service.serviceType)})`);
-  if (!service.stateVariableList || service.stateVariableList.length === 0) {
+  if (!service.stateVariableList || service.stateVariableList.size === 0) { // שגיאה 484: length -> size
     logger.warn('No state variables found for this service (or SCPD failed to load).');
   } else {
-    service.stateVariableList.forEach(sv => {
+    Array.from(service.stateVariableList.values()).forEach((sv: StateVariable) => { // הוספת טיפוס והמרה ל-Array
       let info = `  - ${sv.name} (dataType: ${sv.dataType})`;
       if (sv.sendEvents === 'yes') {
         info += ' (sends events)';
@@ -496,14 +499,14 @@ async function listStateVariables(device: FullDeviceDescription, service: Servic
     });
   }
 
-  const queryableVariables = service.stateVariableList?.filter(sv => !sv.name.startsWith('A_ARG_TYPE_')) || [];
+  const queryableVariables = service.stateVariableList ? Array.from(service.stateVariableList.values()).filter((sv: StateVariable) => !sv.name.startsWith('A_ARG_TYPE_')) : []; // שגיאה 502: המרה ל-Array והוספת טיפוס
 
   if (queryableVariables.length > 0) {
     logger.info('\nAttempting to query current values for (some) state variables:');
     const controlURL = new URL(service.controlURL, device.baseURL).toString();
 
     for (const sv of queryableVariables) {
-        const queryAction = service.actionList?.find(a => a.name === 'QueryStateVariable');
+        const queryAction = service.actionList ? Array.from(service.actionList.values()).find((a: Action) => a.name === 'QueryStateVariable') : undefined; // שגיאה 509: המרה ל-Array והוספת טיפוס
         if (queryAction) {
             logger.debug(`Querying state variable: ${sv.name}`);
             try {
