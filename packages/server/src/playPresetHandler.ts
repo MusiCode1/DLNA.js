@@ -77,6 +77,40 @@ async function reviveRendererDetails(
   return revivedDevice;
 }
 
+/**
+ * @hebrew מאשר שהתקן מגיב לבקשה דרך ה-URL שלו.
+ * @description פונקציה זו מנסה לאחזר פרטים בסיסיים של ההתקן מה-URL שסופק
+ * כדי לוודא שהוא פעיל ומגיב כצפוי.
+ * @param deviceToConfirm - אובייקט ה-ApiDevice שיש לאשר (מתוך activeDevices).
+ * @param deviceBaseURL - ה-baseURL של ההתקן לבדיקה.
+ * @param presetName - שם הפריסט (לצורך לוגים).
+ * @returns true אם ההתקן מגיב עם UDN תואם, false אחרת.
+ */
+async function confirmDeviceRespondsViaUrl(
+  deviceToConfirm: ApiDevice,
+  deviceBaseURL: string,
+  presetName: string
+): Promise<boolean> {
+  logger.info(`Confirming renderer ${deviceToConfirm.UDN} responds via URL: ${deviceBaseURL} for preset '${presetName}'.`);
+  try {
+    // שימוש ב-DiscoveryDetailLevel.Basic מספיק לבדיקת תגובה מהירה.
+    // הוא מאחזר את קובץ התיאור הראשי של ההתקן.
+    const checkedDevice = await processUpnpDeviceFromUrl(deviceBaseURL, DiscoveryDetailLevel.Basic);
+    
+    if (checkedDevice && 'UDN' in checkedDevice && checkedDevice.UDN === deviceToConfirm.UDN) {
+      logger.info(`Confirmation successful: Renderer ${deviceToConfirm.UDN} (preset '${presetName}') responded as expected.`);
+      return true;
+    } else {
+      const receivedUdn = checkedDevice && 'UDN' in checkedDevice && checkedDevice.UDN ? checkedDevice.UDN : 'N/A or not present';
+      logger.warn(`Confirmation failed for renderer ${deviceToConfirm.UDN} (preset '${presetName}'). Device from URL did not match or was incomplete. Expected UDN: ${deviceToConfirm.UDN}, Received UDN: ${receivedUdn}. URL: ${deviceBaseURL}`);
+      return false;
+    }
+  } catch (error: any) {
+    logger.warn(`Confirmation failed for renderer ${deviceToConfirm.UDN} (preset '${presetName}') with error: ${error.message}. URL: ${deviceBaseURL}`);
+    return false;
+  }
+}
+
 const INITIAL_POLLING_INTERVAL_MS = 250; // מרווח התחלתי
 const MAX_POLLING_INTERVAL_MS = 1500;    // מרווח מקסימלי בין בדיקות
 const POLLING_TIMEOUT_MS = 7000;         // זמן פולינג כולל (למשל 7 שניות)
@@ -181,31 +215,41 @@ export async function executePlayPresetLogic(
 
   // משימה 1: טיפול ב-Renderer (הערה והחייאה במידת הצורך)
   const handleRendererTask = async (): Promise<ApiDevice> => {
-    let device = activeDevices.get(rendererPreset.udn); // Check initial active devices map passed to executePlayPresetLogic
-    if (device) {
-      logger.info(`Renderer ${rendererPreset.udn} for preset '${presetName}' is already in the initial active devices list.`);
-      return device;
+    let deviceFromActiveList = activeDevices.get(rendererPreset.udn); // Check initial active devices map
+
+    if (deviceFromActiveList) {
+      logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') found in initial active devices. Confirming it responds via URL: ${rendererPreset.baseURL}...`);
+      const respondsViaUrl = await confirmDeviceRespondsViaUrl(deviceFromActiveList, rendererPreset.baseURL, presetName);
+      if (respondsViaUrl) {
+        logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') confirmed responsive. Using this device instance.`);
+        return deviceFromActiveList;
+      } else {
+        logger.warn(`Renderer ${rendererPreset.udn} (preset '${presetName}') failed to respond as expected via URL. Will proceed as if not found in active list (requires WOL, revival, polling).`);
+        // התקן נכשל באישור התגובה, נמשיך כאילו לא היה קיים ברשימה הפעילה.
+        // אין צורך לשנות את deviceFromActiveList, פשוט נגיע לקוד הבא.
+      }
     }
 
-    logger.info(`Renderer ${rendererPreset.udn} for preset '${presetName}' is not in initial active devices. Attempting WOL, revival, and polling.`);
+    // אם ההתקן לא היה ברשימה הפעילה, או שהיה ונכשל בבדיקת החיות:
+    logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') requires full processing: WOL, device details revival, and polling in active devices list.`);
 
-    // שלב 1: הערה ואימות
+    // שלב 1: הערה ואימות (WOL and ping)
     await wakeAndVerifyRenderer(rendererPreset, presetName);
 
-    // שלב 2: החייאת פרטי ההתקן
-    const revivedDevice = await reviveRendererDetails(rendererPreset, presetName);
+    // שלב 2: החייאת פרטי ההתקן המלאים מה-URL שלו
+    // פונקציה זו קוראת ל-processUpnpDeviceFromUrl עם DiscoveryDetailLevel.Services
+    // ומבצעת ולידציה בסיסית על התוצאה (למשל, קיום UDN).
+    const revivedDeviceDescription = await reviveRendererDetails(rendererPreset, presetName);
+    // revivedDeviceDescription הוא אובייקט תיאור מהספרייה, לא ApiDevice.
+    // ה-UDN שלו אמור להיות זהה ל-rendererPreset.udn.
+    logger.info(`Successfully revived details for renderer UDN: ${revivedDeviceDescription.UDN} (preset '${presetName}'). Now polling for its managed instance in active devices list.`);
 
-    // revivedDevice מובטח להיות תקין ולהכיל UDN אם הפונקציה reviveRendererDetails לא זרקה שגיאה.
-    // הבדיקה על friendlyName ו-modelName הוסרה מכאן כי היא פחות קריטית להמשך התהליך אם UDN קיים.
-    // אם יש צורך לוודא את קיומם, יש להוסיף את הבדיקה בתוך reviveRendererDetails או כאן.
-    logger.info(`Successfully processed renderer UDN: ${revivedDevice.UDN} for preset '${presetName}'. Now polling active device list.`);
-
-    // שלב 3: פולינג לאיתור ברשימה המרכזית
-    // אנחנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנחנו בטוחים בו מההגדרות.
-    // revivedDevice.UDN אמור להיות זהה, אבל עדיף להשתמש במקור הבטוח.
-    const foundDeviceInGlobalList = await pollForRendererInActiveDevices(rendererPreset.udn, presetName);
+    // שלב 3: פולינג לאיתור ההתקן המנוהל (ApiDevice) ברשימה המרכזית (activeDevices)
+    // זה חשוב כדי לקבל את האובייקט המלא שמנוהל על ידי המערכת, כולל שירותים שעובדו.
+    // אנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנו מצפים לו.
+    const polledApiDevice = await pollForRendererInActiveDevices(rendererPreset.udn, presetName);
     
-    return foundDeviceInGlobalList;
+    return polledApiDevice;
   };
 
   // משימה 2: טיפול ב-Media Server (קבלת פריטים)
