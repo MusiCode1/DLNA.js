@@ -1,10 +1,13 @@
 // server/rendererHandler.ts
 import { Request, Response, NextFunction, Router } from 'express';
 import {
-  sendUpnpCommand, createModuleLogger,
-  ContentDirectoryService, BrowseFlag
+  createModuleLogger,
+  ContentDirectoryService, BrowseFlag,
+  createSingleItemDidlLiteXml // ייבוא הפונקציה החדשה
 } from 'dlna.js';
-import type { ServiceDescription } from "dlna.js";
+// נניח שהטיפוסים DidlLiteObject ו-Resource מיוצאים גם הם מ-dlna.js
+// אם לא, נצטרך להתאים את הנתיב ל: import type { DidlLiteObject, Resource } from '@dlna-vision/dlna-core/src/types';
+import type { ServiceDescription, DidlLiteObject, Resource } from "dlna.js";
 import type { ApiDevice } from './types';
 
 // טיפוס חדש לפריט וידאו מעובד שמוכן לניגון
@@ -110,14 +113,37 @@ export async function getFolderItemsFromMediaServer(
       }
     }
 
-    const didl = `<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
-<item id="${xmlEscape(itemIdForDidl)}" parentID="${xmlEscape(parentIdForDidl)}" restricted="1">
-<dc:title>${xmlEscape(itemTitle)}</dc:title>
-<upnp:class>${xmlEscape(itemUpnpClass)}</upnp:class>
-<res protocolInfo="${xmlEscape(protocolInfo)}">${xmlEscape(absoluteItemUrl)}</res>
-</item>
-</DIDL-Lite>`;
-    return { uri: absoluteItemUrl, didlXml: didl, title: itemTitle };
+    const itemObject: DidlLiteObject = {
+      id: itemIdForDidl,
+      parentId: parentIdForDidl, // parentIdForDidl הוא ה-ID של התיקייה
+      restricted: true, // בדרך כלל פריטים מוגבלים
+      title: itemTitle,
+      class: itemUpnpClass,
+      // מאפיינים נוספים שיכולים להגיע מ-itemData כמו artist, album, genre וכו' אפשר להוסיף כאן אם רלוונטי
+    };
+
+    const resourceObject: Resource = {
+      uri: absoluteItemUrl,
+      protocolInfo: protocolInfo,
+      // מאפיינים נוספים כמו size, duration, bitrate, resolution אפשר להוסיף כאן אם קיימים ב-itemData.res
+      // למשל: size: itemData.res[0].$.size, duration: itemData.res[0].$.duration
+    };
+
+    // אם יש מידע נוסף על המשאב ב-itemData.res[0].$ (כמו size, duration), נוסיף אותו
+    if (itemData.res && Array.isArray(itemData.res) && itemData.res[0] && itemData.res[0].$) {
+        if (itemData.res[0].$.size) resourceObject.size = parseInt(itemData.res[0].$.size, 10);
+        if (itemData.res[0].$.duration) resourceObject.duration = itemData.res[0].$.duration;
+        // ניתן להוסיף עוד מאפיינים כמו bitrate, sampleFrequency, nrAudioChannels, resolution
+    } else if (itemData.resources && itemData.resources[0]) {
+        // טיפול במקרה שהמידע נמצא תחת itemData.resources[0]
+        // (הלוגיקה הזו עשויה להזדקק להתאמה לפי מבנה הנתונים המדויק של המקור)
+        if (itemData.resources[0].size) resourceObject.size = parseInt(itemData.resources[0].size, 10);
+        if (itemData.resources[0].duration) resourceObject.duration = itemData.resources[0].duration;
+    }
+
+
+    const didlXml = createSingleItemDidlLiteXml(itemObject, resourceObject);
+    return { uri: absoluteItemUrl, didlXml: didlXml, title: itemTitle };
   };
 
   for (let i = 0; i < videoItemsRaw.length; i++) {
@@ -127,11 +153,11 @@ export async function getFolderItemsFromMediaServer(
       processedItems.push(processed);
     }
   }
-  
+
   if (processedItems.length === 0) {
-      const message = `No processable video items found in folder ${folderObjectId} on media server ${mediaServerUdn} after attempting to resolve URLs.`;
-      parentLogger.warn(message);
-      throw new Error(message);
+    const message = `No processable video items found in folder ${folderObjectId} on media server ${mediaServerUdn} after attempting to resolve URLs.`;
+    parentLogger.warn(message);
+    throw new Error(message);
   }
 
   parentLogger.info(`Successfully processed ${processedItems.length} video items from folder ${folderObjectId}.`);
@@ -175,23 +201,68 @@ export async function playProcessedItemsOnRenderer(
 
   try {
     const firstItem = processedItems[0];
-    
-    await stopPlayback(avTransportService, renderer.UDN);
-    await setAvTransportUri(avTransportService, renderer.UDN, firstItem.uri, firstItem.didlXml);
-    await startPlayback(avTransportService, renderer.UDN);
+    const avTransportActionList = renderer.serviceList.get('AVTransport')?.actionList;
 
+    const stopCommand = avTransportActionList?.get('Stop')?.invoke;
+    const setMediaUriCommand = avTransportActionList?.get('SetAVTransportURI')?.invoke;
+    const playMediaCommand = avTransportActionList?.get('Play')?.invoke;
+
+    if (!stopCommand || !setMediaUriCommand || !playMediaCommand) {
+      const missingActions = [
+        !stopCommand ? 'Stop' : null,
+        !setMediaUriCommand ? 'SetAVTransportURI' : null,
+        !playMediaCommand ? 'Play' : null,
+      ].filter(Boolean).join(', ');
+      const message = `Renderer ${rendererUdn} is missing required AVTransport actions: ${missingActions}. Cannot initiate playback.`;
+      parentLogger.error(message);
+      return { success: false, message, statusCode: 501 };
+    }
+
+    parentLogger.debug(`Attempting to stop playback on renderer ${renderer.UDN}...`);
+    try {
+      await stopCommand({ InstanceID: '0' });
+      parentLogger.info(`Stop command successful for renderer ${renderer.UDN}.`);
+    } catch (error: any) {
+      parentLogger.warn(`Error or warning sending Stop command for renderer ${renderer.UDN}: ${error.message}`, { fault: error.soapFault });
+      // ממשיכים בכל מקרה, כפי שהיה בלוגיקה של stopPlayback המקורית
+    }
+
+    parentLogger.debug(`Attempting SetAVTransportURI on renderer ${renderer.UDN} with URI: ${firstItem.uri} and MetaData length: ${firstItem.didlXml.length}`);
+    await setMediaUriCommand({
+      InstanceID: '0',
+      CurrentURI: firstItem.uri,
+      CurrentURIMetaData: firstItem.didlXml,
+    });
+    parentLogger.info(`SetAVTransportURI successful for renderer ${renderer.UDN}.`);
+
+    parentLogger.debug(`Attempting Play action on renderer ${renderer.UDN}.`);
+    await playMediaCommand({
+      InstanceID: '0',
+      Speed: '1',
+    });
+    parentLogger.info(`Play command successful for renderer ${renderer.UDN}.`);
     parentLogger.info(`Playback started for first item: ${firstItem.title} on renderer ${renderer.friendlyName}`);
 
     if (processedItems.length > 1) {
-      for (let i = 1; i < processedItems.length; i++) {
-        const nextItem = processedItems[i];
-        try {
-          await setNextAvTransportUri(avTransportService, renderer.UDN, nextItem.uri, nextItem.didlXml);
-          parentLogger.info(`Added to playlist: ${nextItem.title}`);
-        } catch (playlistError: any) {
-          parentLogger.warn(`Error adding item '${nextItem.title}' to playlist: ${playlistError.message}`);
-          // לא נכשל את כל הפעולה בגלל פריט בודד בפלייליסט
+      const setNextMediaUriCommand = avTransportActionList?.get('SetNextAVTransportURI')?.invoke;
+      if (setNextMediaUriCommand) {
+        for (let i = 1; i < processedItems.length; i++) {
+          const nextItem = processedItems[i];
+          try {
+            parentLogger.debug(`Attempting SetNextAVTransportURI on renderer ${renderer.UDN} with NextURI: ${nextItem.uri} and NextMetaData length: ${nextItem.didlXml.length}`);
+            await setNextMediaUriCommand({
+              InstanceID: '0',
+              NextURI: nextItem.uri,
+              NextURIMetaData: nextItem.didlXml,
+            });
+            parentLogger.info(`Added to playlist: ${nextItem.title}`);
+          } catch (playlistError: any) {
+            parentLogger.warn(`Error adding item '${nextItem.title}' to playlist: ${playlistError.message}`);
+            // לא נכשל את כל הפעולה בגלל פריט בודד בפלייליסט
+          }
         }
+      } else {
+        parentLogger.warn(`SetNextAVTransportURI action not found or not invokable on renderer ${renderer.UDN}. Cannot add subsequent items to playlist.`);
       }
     }
     return { success: true, message: `Playback initiated on ${renderer.friendlyName} for ${processedItems.length} items.` };
@@ -219,20 +290,7 @@ interface PlayFolderRequestBody { // שם הממשק הוחזר למקורי
   folderObjectID: string;   // ID של התיקייה בשרת המדיה
 }
 
-// פונקציית עזר ל-escape של תווים מיוחדים ב-XML
-function xmlEscape(str: string): string {
-  if (typeof str !== 'string') return '';
-  return str.replace(/[<>&'""]/g, (char) => {
-    switch (char) {
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '&': return '&amp;';
-      case "'": return '&apos;';
-      case '"': return '&quot;';
-      default: return char;
-    }
-  });
-}
+// פונקציית xmlEscape הוסרה מכיוון ש-xmlbuilder2 (המשמשת ב-createSingleItemDidlLiteXml) מטפלת בזה.
 
 // Helper function to get and validate a device
 function getValidatedDevice(
@@ -277,135 +335,8 @@ function getValidatedService(
   return service;
 }
 
-// Helper function to stop playback
-async function stopPlayback(avTransportService: ServiceDescription, rendererUdn: string): Promise<void> {
-  // actionList הוא Map, לא מערך. יש להשתמש ב-values()
-  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
-    logger.warn(`Stop command skipped: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
-    return;
-  }
-  const stopAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'Stop');
-  if (stopAction?.invoke) {
-    logger.debug(`Attempting to stop playback on renderer ${rendererUdn}...`);
-    try {
-      await stopAction.invoke({ InstanceID: '0' });
-      logger.info(`Stop command successful for renderer ${rendererUdn}.`);
-    } catch (error: any) {
-      // Log warning for stop, but don't let it fail the whole operation
-      logger.warn(`Error or warning sending Stop command for renderer ${rendererUdn}: ${error.message}`, { fault: error.soapFault });
-    }
-  } else {
-    logger.warn(`Stop action not available on AVTransport service for renderer ${rendererUdn}`);
-  }
-}
-
-// Helper function to set AVTransportURI
-async function setAvTransportUri(
-  avTransportService: ServiceDescription,
-  rendererUdn: string,
-  itemUrl: string,
-  itemMetadataXml: string
-): Promise<void> {
-  // actionList הוא Map
-  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
-    throw new Error(`SetAVTransportURI failed: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
-  }
-  const setUriAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'SetAVTransportURI');
-  if (!setUriAction?.invoke) {
-    throw new Error(`SetAVTransportURI action not found or not invokable on renderer ${rendererUdn}`);
-  }
-  logger.debug(`Attempting SetAVTransportURI on renderer ${rendererUdn} with URI: ${itemUrl} and MetaData length: ${itemMetadataXml.length}`);
-  await setUriAction.invoke({
-    InstanceID: '0',
-    CurrentURI: itemUrl,
-    CurrentURIMetaData: itemMetadataXml,
-  });
-  logger.info(`SetAVTransportURI successful for renderer ${rendererUdn}.`);
-}
-
-// Helper function to start Play
-async function startPlayback(avTransportService: ServiceDescription, rendererUdn: string): Promise<void> {
-  // actionList הוא Map
-  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
-    throw new Error(`Play command failed: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
-  }
-  const playAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'Play');
-  if (!playAction?.invoke) {
-    throw new Error(`Play action not found or not invokable on renderer ${rendererUdn}`);
-  }
-  logger.debug(`Attempting Play action on renderer ${rendererUdn}.`);
-  await playAction.invoke({
-    InstanceID: '0',
-    Speed: '1',
-  });
-  logger.info(`Play command successful for renderer ${rendererUdn}.`);
-}
-
-// Helper function to set NextAVTransportURI
-async function setNextAvTransportUri(
-  avTransportService: ServiceDescription,
-  rendererUdn: string,
-  itemUrl: string,
-  itemMetadataXml: string
-): Promise<void> {
-  // actionList הוא Map
-  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
-    // Log a warning but don't throw, as the primary playback might have started.
-    logger.warn(`SetNextAVTransportURI skipped: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
-    return;
-  }
-  const setNextUriAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'SetNextAVTransportURI');
-  if (!setNextUriAction?.invoke) {
-    logger.warn(`SetNextAVTransportURI action not found or not invokable on renderer ${rendererUdn}. Cannot add to playlist.`);
-    return;
-  }
-  logger.debug(`Attempting SetNextAVTransportURI on renderer ${rendererUdn} with NextURI: ${itemUrl} and NextMetaData length: ${itemMetadataXml.length}`);
-  await setNextUriAction.invoke({
-    InstanceID: '0',
-    NextURI: itemUrl,
-    NextURIMetaData: itemMetadataXml, // Note: Parameter name is NextURIMetaData for this action
-  });
-  logger.info(`SetNextAVTransportURI successful for renderer ${rendererUdn} for item ${itemUrl}.`);
-}
-
-
-// Main handler function, refactored to use the new helpers
-async function executePlaybackCommands(
-  renderer: ApiDevice,
-  avTransportService: ServiceDescription,
-  itemUrl: string,
-  itemMetadataXml: string,
-  res: Response,
-  next: NextFunction,
-  itemNameForLog: string
-): Promise<void> {
-  if (!renderer.baseURL) {
-    logger.error(`executePlaybackCommands: Renderer ${renderer.UDN} is missing baseURL.`);
-    res.status(500).send({ error: `Renderer ${renderer.UDN} is missing essential information (baseURL).` });
-    return;
-  }
-
-  try {
-    await stopPlayback(avTransportService, renderer.UDN); // Good practice to stop first
-    await setAvTransportUri(avTransportService, renderer.UDN, itemUrl, itemMetadataXml);
-    await startPlayback(avTransportService, renderer.UDN);
-    res.status(200).send({ success: true, message: `Playback started on ${renderer.friendlyName} for item ${itemNameForLog}` });
-  } catch (error: any) {
-    logger.error(`SOAP command failed for renderer ${renderer.UDN} during single item playback:`, {
-      message: error.message,
-      stack: error.stack,
-      details: error.soapFault || error.details
-    });
-    if (error.soapFault && error.soapFault.upnpErrorCode) {
-      (error as any).statusCode = 502;
-      (error as any).customMessage = `SOAP Fault: ${error.soapFault.faultString} (UPnP Code: ${error.soapFault.upnpErrorCode})`;
-    } else if (!error.statusCode) {
-      (error as any).statusCode = 500;
-    }
-    next(error);
-  }
-}
-
+// פונקציות העזר stopPlayback, setAvTransportUri, startPlayback, setNextAvTransportUri ו-executePlaybackCommands הוסרו
+// מכיוון שהלוגיקה שלהן שולבה ישירות ב-playProcessedItemsOnRenderer וב-route handler /:rendererUdn/play.
 
 export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Router {
   const router = Router();
@@ -435,6 +366,7 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
 
       let itemMetadataXml: string = "";
       let itemUrl: string = "";
+      let itemTitleForPlayback: string = objectID; // ערך ברירת מחדל אם לא נמצא title
 
       try {
         const absoluteCdControlURL = new URL(cdServiceDescriptionOriginal.controlURL, mediaServer.baseURL).href;
@@ -444,7 +376,7 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
         };
 
         const cds = new ContentDirectoryService(cdServiceForBrowse);
-        const browseResult = await cds.browse(objectID, BrowseFlag.BrowseMetadata,  '*', 0, 1);
+        const browseResult = await cds.browse(objectID, BrowseFlag.BrowseMetadata, '*', 0, 1);
 
         if (!browseResult || browseResult.numberReturned === 0 || !browseResult.items || browseResult.items.length === 0) {
           logger.warn(`Play request failed: Object with ID ${objectID} not found on media server ${mediaServerUdn}.`);
@@ -452,7 +384,9 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
           return;
         }
 
-        const itemData = browseResult.items[0] as any;
+        const itemData = browseResult.items[0] as any; // itemData מוגדר כאן
+        itemTitleForPlayback = itemData.title || itemData['dc:title'] || objectID; // עדכון itemTitleForPlayback
+
         if (itemData.resources && itemData.resources[0] && itemData.resources[0].uri) {
           itemUrl = itemData.resources[0].uri;
         } else if (itemData.res && typeof itemData.res === 'string') {
@@ -473,25 +407,50 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
         if (browseResult.rawResponse && typeof browseResult.rawResponse.Result === 'string') {
           const didlResultString = browseResult.rawResponse.Result;
           // Attempt to extract the <item> ... </item> XML directly
-          const itemMatch = didlResultString.match(/<item[\s\S]*?<\/item>/i); // Case-insensitive for item tag
-          if (itemMatch && itemMatch[0]) {
-            const extractedItemXml = itemMatch[0]
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/&quot;/g, '"')
-              .replace(/&apos;/g, "'")
-              .replace(/&amp;/g, '&'); // Must be last
+          const itemMatch = didlResultString.match(/<item[\s\S]*?<\/item>/i); // חיפוש אחר התג עם ישויות XML
 
-            // Check if the result is already a full DIDL-Lite or just the item
+          if (itemMatch && itemMatch[0]) {
+            // Check if the result is already a full DIDL-Lite
             if (didlResultString.toLowerCase().includes('<didl-lite')) {
               itemMetadataXml = didlResultString
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"')
-                .replace(/&apos;/g, "'")
-                .replace(/&amp;/g, '&');
+                .replace(/</g, '<')
+                .replace(/>/g, '>')
+                .replace(/"/g, '"')
+                .replace(/'/g, "'")
+                .replace(/&/g, '&'); // החלפת ישויות XML חזרה לתווים
+            } else if (itemData) { // אם יש לנו itemData (שחולץ מ-browseResult.items[0]), נשתמש בו לבנות את ה-XML המלא
+              logger.info(`Extracted <item> XML from raw response, but not full DIDL-Lite. Rebuilding with createSingleItemDidlLiteXml for ${objectID}`);
+              const itemDetails: DidlLiteObject = {
+                id: objectID,
+                parentId: itemData.parentId || '-1',
+                restricted: true, // הנחה סבירה, ניתן להתאים אם יש מידע אחר
+                title: itemData.title || itemData['dc:title'] || 'Video Item',
+                class: itemData.class || itemData['upnp:class'] || 'object.item.videoItem',
+              };
+              const resourceDetails: Resource = {
+                uri: itemUrl, // itemUrl כבר חושב והפך לאבסולוטי
+                protocolInfo: (itemData.resources && itemData.resources[0] && itemData.resources[0].protocolInfo) ||
+                              (itemData.res && itemData.res[0] && itemData.res[0].$ && itemData.res[0].$.protocolInfo) ||
+                              "http-get:*:video/*:*", // ערך ברירת מחדל
+              };
+              // הוספת פרטים נוספים למשאב אם קיימים
+              if (itemData.res) {
+                if (Array.isArray(itemData.res) && itemData.res[0] && itemData.res[0].$) {
+                  if (itemData.res[0].$.size) resourceDetails.size = parseInt(itemData.res[0].$.size, 10);
+                  if (itemData.res[0].$.duration) resourceDetails.duration = itemData.res[0].$.duration;
+                }
+              } else if (itemData.resources && itemData.resources[0]) {
+                if (itemData.resources[0].size) resourceDetails.size = parseInt(itemData.resources[0].size, 10);
+                if (itemData.resources[0].duration) resourceDetails.duration = itemData.resources[0].duration;
+              }
+              itemMetadataXml = createSingleItemDidlLiteXml(itemDetails, resourceDetails);
             } else {
-              itemMetadataXml = `<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">${extractedItemXml}</DIDL-Lite>`;
+              // מקרה קצה: הצלחנו לחלץ extractedItemXml אבל אין itemData זמין (לא אמור לקרות אם itemMatch הצליח ו-browseResult.items[0] קיים)
+              // במקרה כזה, אין לנו מספיק מידע לבנות DIDL-Lite תקין עם הפונקציה.
+              // נשאיר אזהרה ונמנע מיצירת XML שגוי.
+              const extractedItemXmlForLog = itemMatch[0].replace(/</g, '<').replace(/>/g, '>'); // ללוג בלבד
+              logger.warn(`Could not rebuild full DIDL-Lite for ${objectID} as itemData was not available, though <item> XML was extracted. extractedItemXml (first 200 chars): ${extractedItemXmlForLog.substring(0,200)}`);
+              // itemMetadataXml יישאר ריק, והלוגיקה בהמשך תטפל בזה.
             }
           } else {
             logger.warn(`Could not extract <item> XML from browse result for ${objectID}. DIDL Result (first 500 chars): ${didlResultString.substring(0, 500)}`);
@@ -500,20 +459,37 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
           logger.warn(`Raw XML result (browseResult.rawResponse.Result) not found or not a string in browseResult for ${objectID}.`);
         }
 
-        if (!itemMetadataXml && itemData) {
-          logger.info(`Attempting to build fallback DIDL-Lite for ${objectID}`);
-          const title = itemData.title || 'Video Item';
-          const upnpClass = itemData.class || 'object.item.videoItem';
-          const protocolInfo = (itemData.resources && itemData.resources[0] && itemData.resources[0].protocolInfo) || "http-get:*:video/*:*";
+        if (!itemMetadataXml && itemData) { // itemData זמין כאן מה-browseResult
+          logger.info(`Attempting to build fallback DIDL-Lite for ${objectID} using createSingleItemDidlLiteXml (second attempt if raw parsing failed)`);
+          
+          const itemDetails: DidlLiteObject = {
+            id: objectID,
+            parentId: itemData.parentId || '-1', // parentID עשוי להיות זמין ב-itemData
+            restricted: true, // הנחה סבירה
+            title: itemData.title || itemData['dc:title'] || 'Video Item', // שימוש ב-title מ-itemData אם קיים
+            class: itemData.class || itemData['upnp:class'] || 'object.item.videoItem',
+          };
 
-          itemMetadataXml = `<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
-  <item id="${xmlEscape(objectID)}" parentID="${xmlEscape(itemData.parentId || '-1')}" restricted="1">
-    <dc:title>${xmlEscape(title)}</dc:title>
-    <upnp:class>${xmlEscape(upnpClass)}</upnp:class>
-    <res protocolInfo="${xmlEscape(protocolInfo)}">${xmlEscape(itemUrl)}</res>
-  </item>
-</DIDL-Lite>`.trim();
-          logger.debug(`Fallback DIDL-Lite generated: ${itemMetadataXml}`);
+          const resourceDetails: Resource = {
+            uri: itemUrl,
+            protocolInfo: (itemData.resources && itemData.resources[0] && itemData.resources[0].protocolInfo) ||
+                          (itemData.res && itemData.res[0] && itemData.res[0].$ && itemData.res[0].$.protocolInfo) ||
+                          "http-get:*:video/*:*",
+          };
+          
+          // לוגיקה דומה לזו שב-getFolderItemsFromMediaServer להוספת פרטי משאב
+          if (itemData.res) {
+            if (Array.isArray(itemData.res) && itemData.res[0] && itemData.res[0].$) {
+              if (itemData.res[0].$.size) resourceDetails.size = parseInt(itemData.res[0].$.size, 10);
+              if (itemData.res[0].$.duration) resourceDetails.duration = itemData.res[0].$.duration;
+            }
+          } else if (itemData.resources && itemData.resources[0]) {
+            if (itemData.resources[0].size) resourceDetails.size = parseInt(itemData.resources[0].size, 10);
+            if (itemData.resources[0].duration) resourceDetails.duration = itemData.resources[0].duration;
+          }
+
+          itemMetadataXml = createSingleItemDidlLiteXml(itemDetails, resourceDetails);
+          logger.debug(`Fallback DIDL-Lite generated using util (second attempt): ${itemMetadataXml}`);
         }
 
         logger.debug(`Using Item URL: ${itemUrl}, Item Metadata XML length: ${itemMetadataXml.length}`);
@@ -535,10 +511,33 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
         return;
       }
 
-      const avTransportService = getValidatedService(renderer, 'AVTransport', 'AVTransport', res);
-      if (!avTransportService) return;
+      const singleProcessedItem: ProcessedPlaylistItem = {
+        uri: itemUrl,
+        didlXml: itemMetadataXml,
+        title: itemTitleForPlayback // שימוש במשתנה שהוגדר בהיקף הנכון
+      };
 
-      await executePlaybackCommands(renderer, avTransportService, itemUrl, itemMetadataXml, res, next, objectID);
+      try {
+        const result = await playProcessedItemsOnRenderer(
+          renderer.UDN,
+          [singleProcessedItem],
+          activeDevices,
+          logger
+        );
+
+        if (result.success) {
+          res.status(200).send({ success: true, message: result.message });
+        } else {
+          res.status(result.statusCode || 500).send({ error: result.message });
+        }
+      } catch (error: any) {
+        logger.error(`Error in /play route for renderer ${rendererUdn}, item ${objectID}:`, error);
+        if (!res.headersSent) {
+          const statusCode = error.statusCode || (error.soapFault && error.soapFault.upnpErrorCode ? 502 : 500);
+          const message = error.message || "An unexpected error occurred during single item playback.";
+          res.status(statusCode).send({ error: message });
+        }
+      }
     }
   );
 

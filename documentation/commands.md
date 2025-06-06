@@ -17,6 +17,11 @@ Rule1 ON Button1#state=12 DO WebSend [192.168.1.102:3300] /api/play-preset?prese
 
 Rule1 ON Button1#state=2 DO WebQuery http://192.168.1.102:3300/api/play-preset/Moishy GET ENDON 
 
+
+https://v6vbmfkm-3300.euw.devtunnels.ms/api/play-preset/moishy-tv
+
+Rule1 ON Button1#state=2 DO WebQuery https://v6vbmfkm-3300.euw.devtunnels.ms/api/play-preset/moishy-tv GET ENDON 
+
 WebSend [myserver.com] /fancy/data.php?log=1234
 
 WebSend [192.168.1.102:3300] /api/play-preset/Moishy
