@@ -1,21 +1,22 @@
+// @ts-check
 // קובץ זה מכיל את הלוגיקה של צד הלקוח עבור דף ניהול הפריסטים וה-Wake on LAN
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
-    const presetForm = document.getElementById('preset-form');
-    const presetNameInput = document.getElementById('preset-name');
-    const presetRendererUdnSelect = document.getElementById('preset-renderer-udn');
-    const presetRendererMacInput = document.getElementById('preset-renderer-mac');
-    const presetRendererBroadcastInput = document.getElementById('preset-renderer-broadcast'); // הוספת שדה לכתובת שידור
-    const presetMediaServerUdnSelect = document.getElementById('preset-mediaserver-udn');
-    const presetFolderObjectIdInput = document.getElementById('preset-folder-object-id');
+    const presetForm = /** @type {HTMLFormElement | null} */ (document.getElementById('preset-form'));
+    const presetNameInput = /** @type {HTMLInputElement | null} */ (document.getElementById('preset-name'));
+    const presetRendererUdnSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('preset-renderer-udn'));
+    const presetRendererMacInput = /** @type {HTMLInputElement | null} */ (document.getElementById('preset-renderer-mac'));
+    const presetRendererBroadcastInput = /** @type {HTMLInputElement | null} */ (document.getElementById('preset-renderer-broadcast')); // הוספת שדה לכתובת שידור
+    const presetMediaServerUdnSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('preset-mediaserver-udn'));
+    const presetFolderObjectIdInput = /** @type {HTMLInputElement | null} */ (document.getElementById('preset-folder-object-id'));
     // const savePresetButton = document.getElementById('save-preset-button'); // Not needed, using form submit
-    const clearPresetFormButton = document.getElementById('clear-preset-form-button');
-    const presetListDisplayElement = document.getElementById('preset-list-display');
-    const presetStatusMessageElement = document.getElementById('preset-status-message');
+    const clearPresetFormButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('clear-preset-form-button'));
+    const presetListDisplayElement = /** @type {HTMLElement | null} */ (document.getElementById('preset-list-display'));
+    const presetStatusMessageElement = /** @type {HTMLElement | null} */ (document.getElementById('preset-status-message'));
 
-    const wolPresetSelect = document.getElementById('wol-preset-select');
-    const sendWolButton = document.getElementById('send-wol-button');
-    const wolStatusMessageElement = document.getElementById('wol-status-message');
+    const wolPresetSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('wol-preset-select'));
+    const sendWolButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('send-wol-button'));
+    const wolStatusMessageElement = /** @type {HTMLElement | null} */ (document.getElementById('wol-status-message'));
 
     /** @type {ApiDevice[]} */
     let availableDevices = []; // לשמירת כל המכשירים שנטענו
@@ -34,49 +35,20 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     // ServiceDescription מיובא ומשמש בתוך ApiDevice מ-../src/types
 
-    /**
-     * @typedef {object} RendererPreset
-     * @property {string} udn
-     * @property {string} baseURL
-     * @property {string} ipAddress
-     * @property {string} macAddress
-     * @property {string} broadcastAddress // הוספת כתובת שידור
-     */
-
-    /**
-     * @typedef {object} FolderPreset
-     * @property {string} objectId
-     * @property {string|null} [path]
-     */
-
-    /**
-     * @typedef {object} MediaServerPreset
-     * @property {string} udn
-     * @property {string} baseURL
-     * @property {FolderPreset} folder
-     */
-
-    /**
-     * @typedef {object} PresetSettings
-     * @property {RendererPreset|null} [renderer]
-     * @property {MediaServerPreset|null} [mediaServer]
-     */
-
-    /**
-     * @typedef {object} PresetEntry
-     * @property {string} name
-     * @property {PresetSettings} settings
-     */
 
 
     // Utility function to show status messages
     function showStatusMessage(element, message, isSuccess = true) {
-        element.textContent = message;
-        element.className = `status-message ${isSuccess ? 'success' : 'error'}`;
-        element.style.display = 'block';
-        setTimeout(() => {
-            element.style.display = 'none';
-        }, 5000); // הסתר הודעה אחרי 5 שניות
+        if (element) {
+            element.textContent = message;
+            element.className = `status-message ${isSuccess ? 'success' : 'error'}`;
+            element.style.display = 'block';
+            setTimeout(() => {
+                if (element) {
+                    element.style.display = 'none';
+                }
+            }, 5000); // הסתר הודעה אחרי 5 שניות
+        }
     }
 
     // פונקציה לאכלוס רשימות נפתחות של מכשירים
@@ -136,8 +108,12 @@ document.addEventListener('DOMContentLoaded', () => {
             /** @type {ApiDevice[]} */
             const loadedDevices = await response.json();
             availableDevices = loadedDevices;
-            populateDeviceSelect(presetRendererUdnSelect, availableDevices, 'renderer');
-            populateDeviceSelect(presetMediaServerUdnSelect, availableDevices, 'mediaserver');
+            if (presetRendererUdnSelect) {
+                populateDeviceSelect(presetRendererUdnSelect, availableDevices, 'renderer');
+            }
+            if (presetMediaServerUdnSelect) {
+                populateDeviceSelect(presetMediaServerUdnSelect, availableDevices, 'mediaserver');
+            }
         } catch (error) {
             console.error('שגיאה בטעינת מכשירים:', error);
             showStatusMessage(presetStatusMessageElement, `שגיאה בטעינת רשימת המכשירים: ${error.message}`, false);
@@ -171,77 +147,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // פונקציה להצגת רשימת הפריסטים
     function renderPresetList() {
-        presetListDisplayElement.innerHTML = ''; // ניקוי הרשימה
-        if (Object.keys(existingPresets).length === 0) {
-            const li = document.createElement('li');
-            li.textContent = 'לא נמצאו פריסטים שמורים.';
-            presetListDisplayElement.appendChild(li);
-            return;
-        }
-
-        for (const presetName in existingPresets) {
-            const preset = existingPresets[presetName];
-            const li = document.createElement('li');
-            
-            let displayText = `שם: ${presetName}`;
-            if (preset.renderer) {
-                displayText += ` | Renderer UDN: ${preset.renderer.udn}, MAC: ${preset.renderer.macAddress}, Broadcast: ${preset.renderer.broadcastAddress || 'N/A'}`;
+        if (presetListDisplayElement) {
+            presetListDisplayElement.innerHTML = ''; // ניקוי הרשימה
+            if (Object.keys(existingPresets).length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'לא נמצאו פריסטים שמורים.';
+                presetListDisplayElement.appendChild(li);
+                return;
             }
-            if (preset.mediaServer) {
-                displayText += ` | Media Server UDN: ${preset.mediaServer.udn}`;
-                if (preset.mediaServer.folder) {
-                    displayText += `, Folder ID: ${preset.mediaServer.folder.objectId}`;
+
+            for (const presetName in existingPresets) {
+                const preset = existingPresets[presetName];
+                const li = document.createElement('li');
+                
+                let displayText = `שם: ${presetName}`;
+                if (preset.renderer) {
+                    displayText += ` | Renderer UDN: ${preset.renderer.udn}, MAC: ${preset.renderer.macAddress}, Broadcast: ${preset.renderer.broadcastAddress || 'N/A'}`;
                 }
+                if (preset.mediaServer) {
+                    displayText += ` | Media Server UDN: ${preset.mediaServer.udn}`;
+                    if (preset.mediaServer.folder) {
+                        displayText += `, Folder ID: ${preset.mediaServer.folder.objectId}`;
+                    }
+                }
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = displayText;
+
+                const buttonsDiv = document.createElement('div');
+
+                const editButton = document.createElement('button');
+                editButton.textContent = 'טען לעריכה';
+                editButton.className = 'btn btn-primary';
+                editButton.style.backgroundColor = '#ffc107'; // צבע אזהרה לטעינה
+                editButton.onclick = () => loadPresetForEditing(presetName);
+                
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'מחק';
+                deleteButton.className = 'btn btn-danger';
+                deleteButton.onclick = () => deletePreset(presetName);
+
+                const playButton = document.createElement('button');
+                playButton.textContent = 'הפעל';
+                playButton.className = 'btn btn-success'; // צבע ירוק להפעלה
+                playButton.onclick = () => playPreset(presetName);
+
+                buttonsDiv.appendChild(playButton); // הוספת כפתור הפעלה
+                buttonsDiv.appendChild(editButton);
+                buttonsDiv.appendChild(deleteButton);
+                
+                li.appendChild(textSpan);
+                li.appendChild(buttonsDiv);
+                presetListDisplayElement.appendChild(li);
             }
-            
-            const textSpan = document.createElement('span');
-            textSpan.textContent = displayText;
-
-            const buttonsDiv = document.createElement('div');
-
-            const editButton = document.createElement('button');
-            editButton.textContent = 'טען לעריכה';
-            editButton.className = 'btn btn-primary';
-            editButton.style.backgroundColor = '#ffc107'; // צבע אזהרה לטעינה
-            editButton.onclick = () => loadPresetForEditing(presetName);
-            
-            const deleteButton = document.createElement('button');
-            deleteButton.textContent = 'מחק';
-            deleteButton.className = 'btn btn-danger';
-            deleteButton.onclick = () => deletePreset(presetName);
-
-            const playButton = document.createElement('button');
-            playButton.textContent = 'הפעל';
-            playButton.className = 'btn btn-success'; // צבע ירוק להפעלה
-            playButton.onclick = () => playPreset(presetName);
-
-            buttonsDiv.appendChild(playButton); // הוספת כפתור הפעלה
-            buttonsDiv.appendChild(editButton);
-            buttonsDiv.appendChild(deleteButton);
-            
-            li.appendChild(textSpan);
-            li.appendChild(buttonsDiv);
-            presetListDisplayElement.appendChild(li);
         }
     }
 
     // פונקציה לאכלוס הרשימה הנפתחת של פריסטים עבור WOL
     function populateWolPresetSelect() {
-        // שמירת הערך הנבחר הנוכחי
-        const currentValue = wolPresetSelect.value;
-        wolPresetSelect.innerHTML = '<option value="">בחר פריסט</option>'; // איפוס
-        for (const presetName in existingPresets) {
-            // רק פריסטים עם MAC Address רלוונטיים ל-WOL
-            if (existingPresets[presetName].renderer && existingPresets[presetName].renderer.macAddress) {
-                const option = document.createElement('option');
-                option.value = presetName;
-                option.textContent = presetName;
-                wolPresetSelect.appendChild(option);
+        if (wolPresetSelect) {
+            // שמירת הערך הנבחר הנוכחי
+            const currentValue = wolPresetSelect.value;
+            wolPresetSelect.innerHTML = '<option value="">בחר פריסט</option>'; // איפוס
+            for (const presetName in existingPresets) {
+                // רק פריסטים עם MAC Address רלוונטיים ל-WOL
+                if (existingPresets[presetName].renderer && existingPresets[presetName].renderer.macAddress) {
+                    const option = document.createElement('option');
+                    option.value = presetName;
+                    option.textContent = presetName;
+                    wolPresetSelect.appendChild(option);
+                }
             }
-        }
-        // שחזור הערך הנבחר אם הוא עדיין קיים ברשימה החדשה
-         if (currentValue && Array.from(wolPresetSelect.options).some(opt => opt.value === currentValue)) {
-            wolPresetSelect.value = currentValue;
+            // שחזור הערך הנבחר אם הוא עדיין קיים ברשימה החדשה
+            if (currentValue && Array.from(wolPresetSelect.options).some(opt => opt.value === currentValue)) {
+                wolPresetSelect.value = currentValue;
+            }
         }
     }
 
@@ -250,51 +230,52 @@ document.addEventListener('DOMContentLoaded', () => {
         const presetToEdit = existingPresets[presetName];
         if (!presetToEdit) return;
 
-        presetNameInput.value = presetName;
+        if (presetNameInput) presetNameInput.value = presetName;
         
         if (presetToEdit.renderer) {
-            presetRendererUdnSelect.value = presetToEdit.renderer.udn || '';
-            presetRendererMacInput.value = presetToEdit.renderer.macAddress || '';
-            presetRendererBroadcastInput.value = presetToEdit.renderer.broadcastAddress || ''; // טעינת כתובת שידור
+            if (presetRendererUdnSelect) presetRendererUdnSelect.value = presetToEdit.renderer.udn || '';
+            if (presetRendererMacInput) presetRendererMacInput.value = presetToEdit.renderer.macAddress || '';
+            if (presetRendererBroadcastInput) presetRendererBroadcastInput.value = presetToEdit.renderer.broadcastAddress || ''; // טעינת כתובת שידור
         } else {
-            presetRendererUdnSelect.value = '';
-            presetRendererMacInput.value = '';
-            presetRendererBroadcastInput.value = ''; // איפוס כתובת שידור
+            if (presetRendererUdnSelect) presetRendererUdnSelect.value = '';
+            if (presetRendererMacInput) presetRendererMacInput.value = '';
+            if (presetRendererBroadcastInput) presetRendererBroadcastInput.value = ''; // איפוס כתובת שידור
         }
 
         if (presetToEdit.mediaServer) {
-            presetMediaServerUdnSelect.value = presetToEdit.mediaServer.udn || '';
+            if (presetMediaServerUdnSelect) presetMediaServerUdnSelect.value = presetToEdit.mediaServer.udn || '';
             if (presetToEdit.mediaServer.folder) {
-                presetFolderObjectIdInput.value = presetToEdit.mediaServer.folder.objectId || '';
+                if (presetFolderObjectIdInput) presetFolderObjectIdInput.value = presetToEdit.mediaServer.folder.objectId || '';
             } else {
-                presetFolderObjectIdInput.value = '';
+                if (presetFolderObjectIdInput) presetFolderObjectIdInput.value = '';
             }
         } else {
-            presetMediaServerUdnSelect.value = '';
-            presetFolderObjectIdInput.value = '';
+            if (presetMediaServerUdnSelect) presetMediaServerUdnSelect.value = '';
+            if (presetFolderObjectIdInput) presetFolderObjectIdInput.value = '';
         }
-        presetNameInput.focus(); // מיקוד על שדה שם הפריסט
+        if (presetNameInput) presetNameInput.focus(); // מיקוד על שדה שם הפריסט
     }
     
     // פונקציה לניקוי טופס הפריסט
     function clearPresetForm() {
-        presetForm.reset(); // מאפס את כל שדות הטופס
-        presetRendererUdnSelect.value = ''; // ודא שגם select מאופסים
-        presetMediaServerUdnSelect.value = '';
-        presetNameInput.focus();
+        if (presetForm) presetForm.reset(); // מאפס את כל שדות הטופס
+        if (presetRendererUdnSelect) presetRendererUdnSelect.value = ''; // ודא שגם select מאופסים
+        if (presetMediaServerUdnSelect) presetMediaServerUdnSelect.value = '';
+        if (presetNameInput) presetNameInput.focus();
     }
 
 
     // טיפול בשליחת טופס הפריסט
-    presetForm.addEventListener('submit', async (event) => {
-        event.preventDefault(); // מניעת שליחה רגילה של הטופס
+    if (presetForm) {
+        presetForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // מניעת שליחה רגילה של הטופס
 
-        const presetName = presetNameInput.value.trim();
-        const rendererUdn = presetRendererUdnSelect.value;
-        const rendererMac = presetRendererMacInput.value.trim();
-        const rendererBroadcast = presetRendererBroadcastInput.value.trim(); // קריאת כתובת שידור
-        const mediaServerUdn = presetMediaServerUdnSelect.value;
-        const folderObjectId = presetFolderObjectIdInput.value.trim();
+            const presetName = presetNameInput?.value.trim() || '';
+            const rendererUdn = presetRendererUdnSelect?.value || '';
+            const rendererMac = presetRendererMacInput?.value.trim() || '';
+            const rendererBroadcast = presetRendererBroadcastInput?.value.trim() || ''; // קריאת כתובת שידור
+            const mediaServerUdn = presetMediaServerUdnSelect?.value || '';
+            const folderObjectId = presetFolderObjectIdInput?.value.trim() || '';
 
         if (!presetName) {
             showStatusMessage(presetStatusMessageElement, 'שם פריסט הוא שדה חובה.', false);
@@ -319,8 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
             settings: {
                 renderer: {
                     udn: rendererUdn,
-                    baseURL: availableDevices.find(d => d.udn === rendererUdn)?.baseURL || '',
-                    ipAddress: availableDevices.find(d => d.udn === rendererUdn)?.remoteAddress || '',
+                    baseURL: availableDevices.find(d => d.UDN === rendererUdn)?.baseURL || '',
+                    ipAddress: availableDevices.find(d => d.UDN === rendererUdn)?.remoteAddress || '',
                     macAddress: rendererMac,
                     broadcastAddress: rendererBroadcast // הוספת כתובת שידור
                 }
@@ -328,17 +309,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         if (mediaServerUdn) {
-            presetData.settings.mediaServer = {
+            const mediaServerSettings = {
                 udn: mediaServerUdn,
-                baseURL: availableDevices.find(d => d.udn === mediaServerUdn)?.baseURL || '' // שינוי ל-string ריק
+                baseURL: availableDevices.find(d => d.UDN === mediaServerUdn)?.baseURL || '',
             };
             if (folderObjectId) {
-                // @ts-ignore - TypeScript עשוי להתלונן כאן כי mediaServer יכול להיות null באופן תיאורטי, אבל הלוגיקה מבטיחה שהוא קיים
-                presetData.settings.mediaServer.folder = {
-                    objectId: folderObjectId
-                    // path יכול להתווסף כאן אם יש דרך לקבל אותו, כרגע לא נכלל
-                };
+                /** @type {any} */ (mediaServerSettings).folder = { objectId: folderObjectId };
             }
+            presetData.settings.mediaServer = /** @type {MediaServerPreset} */ (mediaServerSettings);
         } else if (folderObjectId) {
             // אם הוזן folderObjectId אבל לא נבחר Media Server
             showStatusMessage(presetStatusMessageElement, 'יש לבחור Media Server אם הוזן Folder Object ID.', false);
@@ -368,10 +346,13 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('שגיאה בשמירת פריסט:', error);
             showStatusMessage(presetStatusMessageElement, `שגיאה בשמירת פריסט: ${error.message}`, false);
         }
-    });
+        });
+    }
 
     // טיפול בכפתור ניקוי טופס
-    clearPresetFormButton.addEventListener('click', clearPresetForm);
+    if (clearPresetFormButton) {
+        clearPresetFormButton.addEventListener('click', clearPresetForm);
+    }
 
     // פונקציה למחיקת פריסט
     async function deletePreset(presetName) {
@@ -433,28 +414,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
  
     // טיפול בכפתור שליחת WOL
-    sendWolButton.addEventListener('click', async () => {
-        const selectedPresetName = wolPresetSelect.value;
-        if (!selectedPresetName) {
-            showStatusMessage(wolStatusMessageElement, 'יש לבחור פריסט לשליחת פקודת WOL.', false);
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/wol/wake/${encodeURIComponent(selectedPresetName)}`, {
-                method: 'POST',
-            });
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.message || `שגיאת HTTP! סטטוס: ${response.status}`);
+    if (sendWolButton) {
+        sendWolButton.addEventListener('click', async () => {
+            const selectedPresetName = wolPresetSelect?.value;
+            if (!selectedPresetName) {
+                showStatusMessage(wolStatusMessageElement, 'יש לבחור פריסט לשליחת פקודת WOL.', false);
+                return;
             }
-            showStatusMessage(wolStatusMessageElement, result.message || `פקודת WOL נשלחה בהצלחה לפריסט '${selectedPresetName}'.`, true);
-        } catch (error) {
-            console.error('שגיאה בשליחת WOL:', error);
-            showStatusMessage(wolStatusMessageElement, `שגיאה בשליחת WOL: ${error.message}`, false);
-        }
-    });
+
+            try {
+                const response = await fetch(`/api/wol/wake/${encodeURIComponent(selectedPresetName)}`, {
+                    method: 'POST',
+                });
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || `שגיאת HTTP! סטטוס: ${response.status}`);
+                }
+                showStatusMessage(wolStatusMessageElement, result.message || `פקודת WOL נשלחה בהצלחה לפריסט '${selectedPresetName}'.`, true);
+            } catch (error) {
+                console.error('שגיאה בשליחת WOL:', error);
+                showStatusMessage(wolStatusMessageElement, `שגיאה בשליחת WOL: ${error.message}`, false);
+            }
+        });
+    }
     
     // אתחול בעת טעינת הדף
     async function init() {
