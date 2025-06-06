@@ -20,7 +20,7 @@ import type {
 
 import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler';
-import { getActiveDevices } from './deviceManager'; 
+import { getActiveDevices } from './deviceManager';
 
 const logger = createModuleLogger('PlayPresetHandler');
 
@@ -96,7 +96,7 @@ async function confirmDeviceRespondsViaUrl(
     // שימוש ב-DiscoveryDetailLevel.Basic מספיק לבדיקת תגובה מהירה.
     // הוא מאחזר את קובץ התיאור הראשי של ההתקן.
     const checkedDevice = await processUpnpDeviceFromUrl(deviceBaseURL, DiscoveryDetailLevel.Basic);
-    
+
     if (checkedDevice && 'UDN' in checkedDevice && checkedDevice.UDN === deviceToConfirm.UDN) {
       logger.info(`Confirmation successful: Renderer ${deviceToConfirm.UDN} (preset '${presetName}') responded as expected.`);
       return true;
@@ -113,7 +113,7 @@ async function confirmDeviceRespondsViaUrl(
 
 const INITIAL_POLLING_INTERVAL_MS = 250; // מרווח התחלתי
 const MAX_POLLING_INTERVAL_MS = 1500;    // מרווח מקסימלי בין בדיקות
-const POLLING_TIMEOUT_MS = 7000;         // זמן פולינג כולל (למשל 7 שניות)
+const POLLING_TIMEOUT_MS = 20 * 1000;         // זמן פולינג כולל
 const POLLING_INTERVAL_INCREMENT_FACTOR = 1.5; // פקטור הגדלת המרווח
 
 async function pollForRendererInActiveDevices(
@@ -121,7 +121,7 @@ async function pollForRendererInActiveDevices(
   presetName: string
 ): Promise<ApiDevice> {
   logger.info(`Polling for renderer UDN: ${rendererUDN} in active devices for preset '${presetName}' (total timeout: ${POLLING_TIMEOUT_MS}ms).`);
-  
+
   // פונקציית עזר פנימית לבדיקת ההתקן ברשימה הנוכחית
   function findDeviceInCurrentList(udnToFind: string): ApiDevice | undefined {
     const currentActiveDevices = getActiveDevices();
@@ -147,13 +147,13 @@ async function pollForRendererInActiveDevices(
       // אם כן, בצע בדיקה אחרונה מיד לפני היציאה (אם נשאר זמן קטן מהאינטרוול הבא)
       const remainingTime = POLLING_TIMEOUT_MS - timeElapsed;
       if (remainingTime > 0) { // רק אם נשאר זמן כלשהו
-         logger.debug(`Approaching timeout for ${rendererUDN}. Performing one last check within ${remainingTime}ms.`);
-         // המתן את הזמן הנותר (או חלק ממנו אם הוא קטן מאוד) לפני הבדיקה האחרונה
-         await new Promise(resolve => setTimeout(resolve, Math.max(0, remainingTime - 10))); // המתן כמעט את כל הזמן הנותר
-         foundDevice = findDeviceInCurrentList(rendererUDN);
-         if (foundDevice) {
-            logger.info(`Renderer ${rendererUDN} found in active devices in final check before timeout (attempt ${attempts+1}) for preset '${presetName}'.`);
-         }
+        logger.debug(`Approaching timeout for ${rendererUDN}. Performing one last check within ${remainingTime}ms.`);
+        // המתן את הזמן הנותר (או חלק ממנו אם הוא קטן מאוד) לפני הבדיקה האחרונה
+        await new Promise(resolve => setTimeout(resolve, Math.max(0, remainingTime - 10))); // המתן כמעט את כל הזמן הנותר
+        foundDevice = findDeviceInCurrentList(rendererUDN);
+        if (foundDevice) {
+          logger.info(`Renderer ${rendererUDN} found in active devices in final check before timeout (attempt ${attempts + 1}) for preset '${presetName}'.`);
+        }
       }
       break; // צא מהלולאה, כי ההמתנה הבאה תחרוג או שהזמן נגמר
     }
@@ -164,13 +164,13 @@ async function pollForRendererInActiveDevices(
     // הגדלת המרווח לניסיון הבא
     currentInterval = Math.min(MAX_POLLING_INTERVAL_MS, Math.floor(currentInterval * POLLING_INTERVAL_INCREMENT_FACTOR));
   }
-  
+
   // אם יצאנו מהלולאה ולא מצאנו, נבצע בדיקה אחרונה למקרה שההתקן הופיע ממש ברגע האחרון
   // (זה מכסה גם את המקרה שהלולאה לא רצה כלל כי הזמן הראשוני כבר עבר את ה-timeout, או שההתקן הופיע בזמן ההמתנה האחרונה)
   if (!foundDevice) {
     foundDevice = findDeviceInCurrentList(rendererUDN);
     if (foundDevice) {
-        logger.info(`Renderer ${rendererUDN} found in active devices in post-loop final check for preset '${presetName}'.`);
+      logger.info(`Renderer ${rendererUDN} found in active devices in post-loop final check for preset '${presetName}'.`);
     }
   }
 
@@ -248,7 +248,7 @@ export async function executePlayPresetLogic(
     // זה חשוב כדי לקבל את האובייקט המלא שמנוהל על ידי המערכת, כולל שירותים שעובדו.
     // אנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנו מצפים לו.
     const polledApiDevice = await pollForRendererInActiveDevices(rendererPreset.udn, presetName);
-    
+
     return polledApiDevice;
   };
 
