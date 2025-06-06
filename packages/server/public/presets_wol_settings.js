@@ -418,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showStatusMessage(presetStatusMessageElement, `מנסה להפעיל את פריסט '${presetName}'...`, true);
 
         try {
-            const response = await fetch(`/api/play-preset?presetName=${encodeURIComponent(presetName)}`, {
+            const response = await fetch(`/api/play-preset/${encodeURIComponent(presetName)}`, {
                 method: 'GET', // השיטה היא GET לפי השרת
             });
             const result = await response.json();

@@ -192,17 +192,17 @@ export interface BaseServiceDescription {
     controlURL: string;
     eventSubURL: string;
     /**
-     * @hebrew רשימת הפעולות הזמינות בשירות.
+     * @hebrew מפת הפעולות הזמינות בשירות (מפתח: שם הפעולה מנורמל).
      * מאוכלס לאחר ניתוח SCPD. בפאזה של `DeviceWithServicesDescription`,
      * הפונקציה `invoke` על כל `Action` עדיין לא תהיה מוגדרת.
      */
-    actionList?: Action[];
+    actionList?: Map<string, Action>;
     /**
-     * @hebrew רשימת משתני המצב של השירות.
+     * @hebrew מפת משתני המצב של השירות (מפתח: שם משתנה המצב מנורמל).
      * מאוכלס לאחר ניתוח SCPD. בפאזה של `DeviceWithServicesDescription`,
      * הפונקציה `query` על כל `StateVariable` עדיין לא תהיה מוגדרת.
      */
-    stateVariableList?: StateVariable[];
+    stateVariableList?: Map<string, StateVariable>;
     /** @hebrew שגיאה אפשרית שקרתה במהלך טעינת או ניתוח ה-SCPD. */
     scpdError?: string;
 }
@@ -296,7 +296,10 @@ export interface DeviceDescription extends BasicSsdpDevice {
     UDN: string; // Unique Device Name
     presentationURL?: string;
     iconList?: DeviceIcon[];
-    serviceList?: ServiceDescription[]; // שונה מ-services: Record<string, ServiceDescription> כדי להתאים לשימוש בפועל
+    /**
+     * @hebrew מפת השירותים של ההתקן (מפתח: serviceType מנורמל).
+     */
+    serviceList?: Map<string, ServiceDescription>;
     deviceList?: DeviceDescription[]; // התקנים משוננים (נשאר כמערך)
     // שדות שנוספו כדי לשמר מידע מהגילוי הראשוני או מה-location URL
     baseURL?: string; // כתובת הבסיס של ההתקן (נגזר מ-locationUrl)
@@ -324,12 +327,12 @@ export interface DeviceWithServicesDescription extends DeviceDescription {
     // השדות שהיו כאן זהים לאלו שב-DeviceDescription ולכן הוסרו בעקבות ההרחבה.
     // ההבדל העיקרי הוא בתיאור הסמנטי של serviceList.
     /**
-     * @hebrew רשימת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם.
-     * כל `ServiceDescription` ברשימה זו יכיל `actionList` ו-`stateVariableList`
+     * @hebrew מפת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם.
+     * כל `ServiceDescription` במפה זו יכיל `actionList` ו-`stateVariableList`
      * עם הנתונים שפורסרו מה-SCPD, אך הפונקציות `invoke`/`query` בתוך
      * ה-`Action`ים וה-`StateVariable`ים יהיו `undefined`.
      */
-    serviceList: ServiceDescription[]; // serviceList כבר מוגדר ב-DeviceDescription, אך כאן הוא צפוי להיות מאוכלס יותר.
+    serviceList: Map<string, ServiceDescription>; // serviceList כבר מוגדר ב-DeviceDescription, אך כאן הוא צפוי להיות מאוכלס יותר.
 }
 
 /**
@@ -348,11 +351,11 @@ export interface FullDeviceDescription extends DeviceWithServicesDescription {
     // השדות שהיו כאן זהים לאלו שב-DeviceWithServicesDescription ולכן הוסרו בעקבות ההרחבה.
     // ההבדל העיקרי הוא בציפייה שהפונקציות invoke/query יהיו מאוכלסות.
     /**
-     * @hebrew רשימת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם,
+     * @hebrew מפת השירותים של ההתקן, לאחר טעינת וניתוח פרטי ה-SCPD שלהם,
      * ועם פונקציות `invoke` ו-`query` מוגדרות וזמינות לשימוש.
      * בשונה מ-`DeviceWithServicesDescription`, כאן הפונקציות הללו צפויות להיות מאוכלסות.
      */
-    serviceList: ServiceDescription[]; // serviceList כבר מוגדר, אך כאן הוא צפוי להיות מאוכלס במלואו.
+    serviceList: Map<string, ServiceDescription>; // serviceList כבר מוגדר, אך כאן הוא צפוי להיות מאוכלס במלואו.
 }
 
 // =======================================================================
@@ -554,3 +557,61 @@ export type ProcessedDevice =
   | DeviceDescription
   | DeviceWithServicesDescription
   | FullDeviceDescription;
+// =======================================================================
+// === טיפוסים עבור ActiveDeviceManager ===
+// =======================================================================
+
+/**
+ * @hebrew מייצג התקן כפי שהוא מנוהל על ידי ה-ActiveDeviceManager.
+ */
+export interface ApiDevice extends FullDeviceDescription {
+    /** @hebrew חותמת זמן של הפעם האחרונה שההתקן נראה (במילישניות מאז ה-epoch). */
+    lastSeen: number;
+    /** @hebrew חותמת זמן של מתי ההתקן יפוג תוקף ויסולק (במילישניות מאז ה-epoch). */
+    expiresAt: number;
+    /** @hebrew רמת הפירוט שהושגה בפועל עבור התקן זה. */
+    detailLevelAchieved: DiscoveryDetailLevel;
+    // כל המידע מ-FullDeviceDescription כבר כלול בזכות ההרחבה.
+}
+
+/**
+ * @hebrew אפשרויות עבור ה-ActiveDeviceManager.
+ */
+export interface ActiveDeviceManagerOptions {
+    /**
+     * @hebrew ה-ST (Service Type) לחיפוש.
+     * @default "ssdp:all"
+     */
+    searchTarget?: string;
+    /**
+     * @hebrew מרווח הזמן (במילישניות) בין שליחות הודעות M-SEARCH.
+     * @default 10000 (10 שניות)
+     */
+    mSearchIntervalMs?: number;
+    /**
+     * @hebrew מרווח הזמן (במילישניות) לבדיקה וניקוי התקנים שפג תוקפם.
+     * @default 60000 (דקה)
+     */
+    deviceCleanupIntervalMs?: number;
+    /**
+     * @hebrew האם לכלול ממשקי IPv6 בתהליך הגילוי.
+     * @default false
+     */
+    includeIPv6?: boolean;
+    /**
+     * @hebrew רמת הפירוט הרצויה עבור כל התקן שיימצא.
+     * @default 'full'
+     */
+    detailLevel?: DiscoveryDetailLevel;
+    /**
+     * @hebrew (אופציונלי) פונקציית קולבק שתופעל עבור כל הודעת SSDP גולמית המתקבלת.
+     * @param msg - ההודעה הגולמית.
+     * @param rinfo - מידע על השולח.
+     */
+    onRawSsdpMessage?: (msg: Buffer, rinfo: RemoteInfo) => void;
+    /**
+     * @hebrew רשימת שמות של ממשקי רשת ספציפיים לשימוש (למשל, ['eth0', 'wlan0']).
+     * אם לא יסופק, ישתמש בכל הממשקים הזמינים.
+     */
+    networkInterfaces?: string[];
+}

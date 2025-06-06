@@ -43,7 +43,7 @@ router.post('/api/wol/wake/:presetName', handleWakePreset);
 // Play preset route (using path parameter)
 // שים לב: updateDeviceList מועברת כאן. זו הפונקציה המיוצאת מ-deviceManager.
 router.get('/api/play-preset/:presetName', (req: Request, res: Response, next: NextFunction) => {
-  handlePlayPresetByParam(req, res, next, getActiveDevices(), updateDeviceList);
+  handlePlayPresetByParam(req, res, next, getActiveDevices()); // updateDeviceList הוסר
 });
 
 export default router;

@@ -16,9 +16,82 @@ import type {
 import { DiscoveryDetailLevel } from './types'; // יובא בנפרד כערך
 import { createModuleLogger } from './logger';   // ודא נתיב נכון
 import { sendUpnpCommand } from './upnpSoapClient'; // ודא נתיב נכון
+import {
+  tryCreateContentDirectoryService,
+  tryCreateAVTransportService,
+  tryCreateRenderingControlService,
+} from './upnpSpecificServiceFactory'; // ייבוא פונקציות ה-factory
 
 const logger = createModuleLogger('upnpDeviceProcessor');
 const DEFAULT_TIMEOUT_MS = 5000; // הועבר מ-upnpDeviceExplorer.ts
+
+// ==========================================================================================
+// Helper Functions for Key Normalization
+// ==========================================================================================
+
+/**
+ * @hebrew ממפה URN של שירות למפתח קצר.
+ * @param serviceType - ה-URN המלא של השירות.
+ * @returns מפתח קצר עבור השירות.
+ */
+function normalizeServiceTypeToKey(serviceType: string): string {
+  const knownServiceMappings: Record<string, string> = {
+    'urn:schemas-upnp-org:service:AVTransport:1': 'AVTransport',
+    'urn:schemas-upnp-org:service:AVTransport:2': 'AVTransport',
+    'urn:schemas-upnp-org:service:ContentDirectory:1': 'ContentDirectory',
+    'urn:schemas-upnp-org:service:ContentDirectory:2': 'ContentDirectory',
+    'urn:schemas-upnp-org:service:ContentDirectory:3': 'ContentDirectory',
+    'urn:schemas-upnp-org:service:ContentDirectory:4': 'ContentDirectory',
+    'urn:schemas-upnp-org:service:RenderingControl:1': 'RenderingControl',
+    'urn:schemas-upnp-org:service:RenderingControl:2': 'RenderingControl',
+    'urn:schemas-upnp-org:service:ConnectionManager:1': 'ConnectionManager',
+    'urn:schemas-upnp-org:service:ConnectionManager:2': 'ConnectionManager',
+    // ניתן להוסיף מיפויים נוספים לפי הצורך
+  };
+
+  if (knownServiceMappings[serviceType]) {
+    return knownServiceMappings[serviceType];
+  }
+
+  // לוגיקת fallback
+  // ננסה לחלץ את החלק האחרון של ה-URN אחרי ':'
+  const parts = serviceType.split(':');
+  if (parts.length > 2) {
+    // החלק הלפני אחרון הוא בדרך כלל שם השירות, האחרון הוא הגרסה
+    const potentialKey = parts[parts.length - 2];
+    if (potentialKey && potentialKey !== 'service' && potentialKey !== 'schemas-upnp-org') {
+        // נוודא שהמפתח אינו רק מספר (גרסה)
+        if (isNaN(parseInt(potentialKey))) {
+            return potentialKey;
+        }
+    }
+  }
+  
+  // אם לא הצלחנו, נסיר את הקידומת "urn:schemas-upnp-org:service:" ונחזיר את השאר
+  const prefixToRemove = "urn:schemas-upnp-org:service:";
+  if (serviceType.startsWith(prefixToRemove)) {
+    const stripped = serviceType.substring(prefixToRemove.length);
+    // נסיר גם את הגרסה בסוף אם קיימת (למשל, ":1")
+    return stripped.replace(/:\d+$/, '');
+  }
+  
+  // אם כלום לא עבד, נחזיר את ה-serviceType המקורי (או חלק ממנו)
+  // לדוגמה, אם זה לא URN סטנדרטי
+  const lastPart = serviceType.substring(serviceType.lastIndexOf(':') + 1);
+  if (lastPart && isNaN(parseInt(lastPart))) return lastPart; // אם החלק האחרון אינו מספר
+
+  return serviceType; // כמוצא אחרון
+}
+
+/**
+ * @hebrew מבצע נרמול בסיסי למפתחות גנריים (שמות פעולות, משתני מצב).
+ * @param key - המפתח לנרמול.
+ * @returns המפתח המנורמל.
+ */
+export function normalizeGenericKey(key: string): string {
+  return key.trim();
+}
+
 
 // ==========================================================================================
 // Device and Service Description Parsing and Processing
@@ -52,6 +125,13 @@ async function fetchAndParseDeviceDescriptionXml(
       return null;
     }
 
+    // בדיקת Content-Type
+    const contentType = response.headers['content-type'] || response.headers['Content-Type'];
+    if (contentType && typeof contentType === 'string' && !contentType.toLowerCase().includes('xml')) {
+      logger.warn(`fetchAndParseDeviceDescriptionXml: Invalid Content-Type for device description from ${locationUrl}. Expected XML, got ${contentType}.`);
+      return null;
+    }
+    
     const xmlData = response.data;
     // logger.trace(`fetchAndParseDeviceDescriptionXml: XML data received from ${locationUrl}:`, xmlData); // יכול להיות מאוד ורבלי
 
@@ -125,7 +205,7 @@ async function fetchAndParseDeviceDescriptionXml(
       UPC: getText(deviceNode, 'UPC'),
       presentationURL: resolveUrl(baseUrl, getText(deviceNode, 'presentationURL')),
       iconList: [],
-      serviceList: [],
+      serviceList: new Map<string, ServiceDescription>(), // שינוי למפה
       // התקנים משנה (deviceList) לא נתמכים כרגע במלואם, אך נשמור את המבנה
       deviceList: deviceNode.deviceList && deviceNode.deviceList.device ?
         (Array.isArray(deviceNode.deviceList.device) ? deviceNode.deviceList.device : [deviceNode.deviceList.device])
@@ -159,25 +239,34 @@ async function fetchAndParseDeviceDescriptionXml(
     // עיבוד רשימת השירותים
     if (deviceNode.serviceList && deviceNode.serviceList.service) {
       const servicesInput = Array.isArray(deviceNode.serviceList.service) ? deviceNode.serviceList.service : [deviceNode.serviceList.service];
-      description.serviceList = servicesInput.map((serviceNode: any): ServiceDescription => {
+      servicesInput.forEach((serviceNode: any) => {
+        const serviceType = getText(serviceNode, 'serviceType') || '';
+        const serviceId = getText(serviceNode, 'serviceId') || '';
+        const scpdUrl = resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'SCPDURL')) || '';
+        const controlUrl = resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'controlURL')) || '';
+        
+        if (!serviceType || !serviceId || !scpdUrl || !controlUrl) {
+          logger.warn(`fetchAndParseDeviceDescriptionXml: Missing mandatory fields for a service in ${locationUrl}. Skipping service.`, { serviceNode, serviceType, serviceId, scpdUrl, controlUrl });
+          return; // דלג על שירות זה
+        }
+
+        const serviceKey = normalizeServiceTypeToKey(serviceType);
         const service: ServiceDescription = {
-          serviceType: getText(serviceNode, 'serviceType') || '',
-          serviceId: getText(serviceNode, 'serviceId') || '',
-          SCPDURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'SCPDURL')) || '',
-          controlURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'controlURL')) || '',
+          serviceType: serviceType,
+          serviceId: serviceId,
+          SCPDURL: scpdUrl,
+          controlURL: controlUrl,
           eventSubURL: resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'eventSubURL')) || '',
           // מאפיינים אופציונליים שיתמלאו מאוחר יותר
-          actionList: [],
-          stateVariableList: [],
+          actionList: new Map<string, Action>(), // שינוי למפה
+          stateVariableList: new Map<string, StateVariable>(), // שינוי למפה
         };
-        // בדיקה ששדות החובה קיימים ואם לא, רישום אזהרה
-        if (!service.serviceType) logger.warn(`fetchAndParseDeviceDescriptionXml: Missing serviceType for a service in ${locationUrl}`, { serviceNode });
-        if (!service.serviceId) logger.warn(`fetchAndParseDeviceDescriptionXml: Missing serviceId for a service in ${locationUrl}`, { serviceNode });
-        if (!service.SCPDURL) logger.warn(`fetchAndParseDeviceDescriptionXml: Missing SCPDURL for service ${service.serviceId} in ${locationUrl}`, { serviceNode });
-        if (!service.controlURL) logger.warn(`fetchAndParseDeviceDescriptionXml: Missing controlURL for service ${service.serviceId} in ${locationUrl}`, { serviceNode });
-        if (!service.eventSubURL) logger.warn(`fetchAndParseDeviceDescriptionXml: Missing eventSubURL for service ${service.serviceId} in ${locationUrl}`, { serviceNode });
-        return service;
-      }).filter((service: ServiceDescription) => service.serviceType && service.serviceId && service.SCPDURL && service.controlURL); // סנן שירותים ללא שדות חובה (eventSubURL אינו חובה לזיהוי בסיסי)
+        
+        // בדיקה ששדות החובה קיימים ואם לא, רישום אזהרה (כבר נעשה למעלה, אבל נשאיר למקרה של eventSubURL)
+        if (!service.eventSubURL) logger.debug(`fetchAndParseDeviceDescriptionXml: Missing eventSubURL for service ${service.serviceId} in ${locationUrl}`, { serviceNode });
+
+        description.serviceList!.set(serviceKey, service);
+      });
     }
 
     // logger.debug(`fetchAndParseDeviceDescriptionXml: Successfully parsed device description for ${locationUrl}`, { description });
@@ -205,14 +294,14 @@ async function populateServices(
   deviceDescription: DeviceDescription,
   signal?: AbortSignal
 ): Promise<void> {
-  if (!deviceDescription.serviceList || deviceDescription.serviceList.length === 0) {
+  if (!deviceDescription.serviceList || deviceDescription.serviceList.size === 0) {
     logger.debug(`populateServices: No services to populate for device ${deviceDescription.friendlyName} (${deviceDescription.UDN})`);
     return;
   }
 
-  logger.debug(`populateServices: Populating ${deviceDescription.serviceList.length} services for device ${deviceDescription.friendlyName} (${deviceDescription.UDN})`);
+  logger.debug(`populateServices: Populating ${deviceDescription.serviceList.size} services for device ${deviceDescription.friendlyName} (${deviceDescription.UDN})`);
 
-  const servicePromises = deviceDescription.serviceList.map(service => {
+  const servicePromises = Array.from(deviceDescription.serviceList.values()).map(service => {
     if (signal?.aborted) {
       logger.debug(`populateServices: Aborted before fetching SCPD for service ${service.serviceId} of device ${deviceDescription.UDN}`);
       return Promise.resolve(); // החזרת Promise שנפתר מיד
@@ -271,6 +360,13 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
       logger.warn(`fetchScpdAndUpdateService: Failed to fetch SCPD for service ${service.serviceId} from ${service.SCPDURL}. Status: ${response.status}`);
       return;
     }
+    
+    // בדיקת Content-Type
+    const contentType = response.headers['content-type'] || response.headers['Content-Type'];
+    if (contentType && typeof contentType === 'string' && !contentType.toLowerCase().includes('xml')) {
+      logger.warn(`fetchScpdAndUpdateService: Invalid Content-Type for SCPD from ${service.SCPDURL}. Expected XML, got ${contentType}.`);
+      return;
+    }
 
     xmlData = response.data;
     // logger.trace(`fetchScpdAndUpdateService: XML data received from ${service.SCPDURL}:`, xmlData);
@@ -291,44 +387,77 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
     // עיבוד רשימת הפעולות
     if (result.actionList && result.actionList.action) {
       const actionsArray = Array.isArray(result.actionList.action) ? result.actionList.action : [result.actionList.action];
-      service.actionList = actionsArray.map((actionNode: any): Action => {
+      actionsArray.forEach((actionNode: any) => {
+        const actionName = normalizeGenericKey(actionNode.name || '');
+        if (!actionName) {
+          logger.warn(`fetchScpdAndUpdateService: Action without name found in SCPD for service ${service.serviceId}. Skipping action.`, { actionNode });
+          return;
+        }
         const argsArray = actionNode.argumentList && actionNode.argumentList.argument ?
           (Array.isArray(actionNode.argumentList.argument) ? actionNode.argumentList.argument : [actionNode.argumentList.argument])
           : [];
-        return {
-          name: actionNode.name || '',
+        
+        const action: Action = {
+          name: actionName, // השם כבר מנורמל
           arguments: argsArray.map((argNode: any): ActionArgument => ({
-            name: argNode.name || '',
+            name: argNode.name || '', // שמות ארגומנטים לא מנורמלים כרגע, אלא אם יש צורך
             direction: argNode.direction || '',
             relatedStateVariable: argNode.relatedStateVariable || '',
           })).filter((arg: ActionArgument) => arg.name && arg.direction && arg.relatedStateVariable) // סנן ארגומנטים לא תקינים
         };
-      }).filter((action: Action) => action.name); // סנן פעולות ללא שם
+        service.actionList!.set(actionName, action);
+      });
     } else {
-      service.actionList = []; // אם אין actionList או אין פעולות, הגדר כמערך ריק
+      service.actionList = new Map<string, Action>(); // אם אין actionList או אין פעולות, הגדר כמפה ריקה
     }
 
     // עיבוד טבלת משתני המצב
     if (result.serviceStateTable && result.serviceStateTable.stateVariable) {
       const stateVarsArray = Array.isArray(result.serviceStateTable.stateVariable) ? result.serviceStateTable.stateVariable : [result.serviceStateTable.stateVariable];
-      service.stateVariableList = stateVarsArray.map((svNode: any): StateVariable => ({
-        name: svNode.name || '',
-        dataType: svNode.dataType || '',
-        sendEvents: svNode['@_sendEvents'] === 'no' ? 'no' : (svNode['@_sendEvents'] === 'yes' ? 'yes' : undefined),
-        allowedValueList: svNode.allowedValueList && svNode.allowedValueList.allowedValue ?
-          (Array.isArray(svNode.allowedValueList.allowedValue) ? svNode.allowedValueList.allowedValue : [svNode.allowedValueList.allowedValue])
-          : undefined,
-        // allowedValueRange הוסר מכיוון שאינו קיים בטיפוס StateVariable
-        // במקומו, ניתן להשתמש ב-min, max, step אם הם קיימים ב-svNode
-        ...(svNode.allowedValueRange && {
-          min: svNode.allowedValueRange.minimum,
-          max: svNode.allowedValueRange.maximum,
-          step: svNode.allowedValueRange.step
-        }),
-        defaultValue: svNode.defaultValue
-      })).filter((sv: StateVariable) => sv.name && sv.dataType); // סנן משתני מצב לא תקינים
+      stateVarsArray.forEach((svNode: any) => {
+        const varName = normalizeGenericKey(svNode.name || '');
+        const dataType = svNode.dataType || '';
+        if (!varName || !dataType) {
+          logger.warn(`fetchScpdAndUpdateService: State variable without name or dataType found in SCPD for service ${service.serviceId}. Skipping variable.`, { svNode });
+          return;
+        }
+
+        const stateVar: StateVariable = {
+          name: varName, // השם כבר מנורמל
+          dataType: dataType,
+          sendEvents: svNode['@_sendEvents'] === 'no' ? 'no' : (svNode['@_sendEvents'] === 'yes' ? 'yes' : undefined),
+          allowedValueList: svNode.allowedValueList && svNode.allowedValueList.allowedValue ?
+            (Array.isArray(svNode.allowedValueList.allowedValue) ? svNode.allowedValueList.allowedValue : [svNode.allowedValueList.allowedValue])
+            : undefined,
+          ...(svNode.allowedValueRange && {
+            min: svNode.allowedValueRange.minimum,
+            max: svNode.allowedValueRange.maximum,
+            step: svNode.allowedValueRange.step
+          }),
+          defaultValue: svNode.defaultValue
+        };
+        service.stateVariableList!.set(varName, stateVar);
+      });
     } else {
-      service.stateVariableList = []; // אם אין טבלת מצב או אין משתנים, הגדר כמערך ריק
+      service.stateVariableList = new Map<string, StateVariable>(); // אם אין טבלת מצב או אין משתנים, הגדר כמפה ריקה
+    }
+
+    // נסיון לאכלס actions ספציפיים
+    // פונקציות ה-factory מבצעות מוטציה על האובייקט service המועבר אליהן
+    // ומחזירות אותו אם הצליחו, או null אם לא.
+    // לכן, אנו בודקים את ערך ההחזרה כדי לדעת אם service.actions עודכן.
+    if (tryCreateContentDirectoryService(service as ServiceDescription)) {
+      // service.actions עודכן על ידי הפונקציה
+      logger.debug(`fetchScpdAndUpdateService: Successfully populated specific ContentDirectory actions for service ${service.serviceId}`);
+    } else if (tryCreateAVTransportService(service as ServiceDescription)) {
+      // service.actions עודכן על ידי הפונקציה
+      logger.debug(`fetchScpdAndUpdateService: Successfully populated specific AVTransport actions for service ${service.serviceId}`);
+    } else if (tryCreateRenderingControlService(service as ServiceDescription)) {
+      // service.actions עודכן על ידי הפונקציה
+      logger.debug(`fetchScpdAndUpdateService: Successfully populated specific RenderingControl actions for service ${service.serviceId}`);
+    } else {
+      logger.debug(`fetchScpdAndUpdateService: Service ${service.serviceId} (${service.serviceType}) did not match any known specific service types for actions population.`);
+      // במקרה זה, service.actions יישאר כפי שהיה (ככל הנראה undefined)
     }
 
     // logger.debug(`fetchScpdAndUpdateService: Successfully populated SCPD for service ${service.serviceId}`);
@@ -364,14 +493,14 @@ function populateActionsAndStateVariables(
     return;
   }
 
-  if (service.actionList) {
-    service.actionList.forEach(action => {
-      action.invoke = createInvokeFunctionForAction(action, controlURL, serviceType); // שינוי שם הקריאה
+  if (service.actionList && service.actionList.size > 0) {
+    service.actionList.forEach(action => { // האיטרציה על ערכי המפה תקינה כאן
+      action.invoke = createInvokeFunctionForAction(action, controlURL, serviceType);
     });
   }
-  if (service.stateVariableList) {
-    service.stateVariableList.forEach(stateVar => {
-      stateVar.query = createQueryFunctionForStateVar(stateVar, controlURL, serviceType); // שינוי שם הקריאה
+  if (service.stateVariableList && service.stateVariableList.size > 0) {
+    service.stateVariableList.forEach(stateVar => { // האיטרציה על ערכי המפה תקינה כאן
+      stateVar.query = createQueryFunctionForStateVar(stateVar, controlURL, serviceType);
     });
   }
 }
@@ -599,7 +728,7 @@ export async function processUpnpDeviceFromUrl(
   }
 
   if (deviceWithServices.serviceList) {
-    for (const service of deviceWithServices.serviceList) {
+    for (const service of deviceWithServices.serviceList.values()) {
       if (abortSignal?.aborted) {
         logger.debug(`processUpnpDeviceFromUrl: Operation aborted during populating actions/state variables for service ${service.serviceId} in ${locationUrl}.`);
         return null; // או שנמשיך וניתן להתקן להיות חלקי? התוכנית לא מציינת. נבחר להחזיר null.
