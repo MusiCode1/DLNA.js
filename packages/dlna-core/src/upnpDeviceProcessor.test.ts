@@ -56,7 +56,6 @@ describe('processUpnpDevice', () => {
         remoteAddress: '127.0.0.1',
         remotePort: 12345,
         timestamp: Date.now(), // הוספת שדה חובה
-        // ... שדות נוספים מ-BasicSsdpDevice אם יש ...
         messageType: 'RESPONSE', // או REQUEST לפי הצורך
         headers: {},
         cacheControlMaxAge: 1800,
@@ -89,6 +88,8 @@ describe('processUpnpDevice', () => {
 
     it('should return BasicSsdpDevice if detailLevel is "basic"', async () => {
         const result = await processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Basic, mockAbortSignal);
+        // כאשר detailLevel הוא Basic, הפונקציה אמורה להחזיר את basicDevice ללא שינוי.
+        // השדה detailLevelAchieved אינו מתווסף במקרה זה.
         expect(result).toEqual(mockBasicDevice);
     });
 
@@ -142,11 +143,15 @@ describe('processUpnpDevice', () => {
         expect(deviceDesc.friendlyName).toBe(friendlyName);
         expect(deviceDesc.manufacturer).toBe(manufacturer);
         expect(deviceDesc.deviceType).toBe(deviceType);
-        expect(deviceDesc.serviceList).toHaveLength(1);
-        expect(deviceDesc.serviceList?.[0].serviceId).toBe(serviceId);
+        expect(deviceDesc.serviceList).toBeInstanceOf(Map);
+        expect(deviceDesc.serviceList?.size).toBe(1);
+        const serviceFromMap = deviceDesc.serviceList!.values().next().value;
+        expect(serviceFromMap).toBeDefined(); 
+        if (!serviceFromMap) throw new Error("Service from map is undefined after check"); 
+        expect(serviceFromMap.serviceId).toBe(serviceId);
         const expectedFullScpdUrl = new URL(scpdUrl, mockBasicDevice.location).toString();
-        expect(deviceDesc.serviceList?.[0].SCPDURL).toBe(expectedFullScpdUrl);
-        expect(deviceDesc.baseURL).toBe('http://localhost:1234'); // נגזר מה-location
+        expect(serviceFromMap.SCPDURL).toBe(expectedFullScpdUrl);
+        expect(deviceDesc.baseURL).toBe('http://localhost:1234'); 
     });
 
     it('should fetch and parse service descriptions if detailLevel is "services"', async () => {
@@ -257,9 +262,9 @@ describe('processUpnpDevice', () => {
             .doc().toString({ prettyPrint: true });
 
         (axios.get as ReturnType<typeof mock>)
-            .mockResolvedValueOnce({ data: mockDeviceXml, status: 200, statusText: 'OK', headers: {}, config: {} as any }) // תיאור ההתקן
-            .mockResolvedValueOnce({ data: scpdXmlTestService, status: 200, statusText: 'OK', headers: {}, config: {} as any }) // SCPD של TestService
-            .mockResolvedValueOnce({ data: scpdXmlAnotherService, status: 200, statusText: 'OK', headers: {}, config: {} as any }); // SCPD של AnotherService
+            .mockResolvedValueOnce({ data: mockDeviceXml, status: 200, statusText: 'OK', headers: {}, config: {} as any }) 
+            .mockResolvedValueOnce({ data: scpdXmlTestService, status: 200, statusText: 'OK', headers: {}, config: {} as any }) 
+            .mockResolvedValueOnce({ data: scpdXmlAnotherService, status: 200, statusText: 'OK', headers: {}, config: {} as any }); 
 
         const result = await processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Services, mockAbortSignal);
         expect(result).toBeDefined();
@@ -267,23 +272,25 @@ describe('processUpnpDevice', () => {
 
         const deviceWithServices = result as DeviceWithServicesDescription;
         expect(deviceWithServices.friendlyName).toBe(friendlyNameDevice);
-        expect(deviceWithServices.serviceList).toHaveLength(2);
+        expect(deviceWithServices.serviceList).toBeInstanceOf(Map);
+        expect(deviceWithServices.serviceList?.size).toBe(2);
 
-        const service1Result = deviceWithServices.serviceList?.find(s => s.serviceId === serviceId1);
+        const servicesArray = Array.from(deviceWithServices.serviceList!.values());
+        const service1Result = servicesArray.find(s => s.serviceId === serviceId1);
         expect(service1Result).toBeDefined();
-        expect(service1Result?.actionList).toHaveLength(1);
-        expect(service1Result?.actionList?.[0].name).toBe(actionName1);
-        expect(service1Result?.actionList?.[0].arguments).toHaveLength(2);
-        expect(service1Result?.actionList?.[0].invoke).toBeUndefined();
-        expect(service1Result?.stateVariableList).toHaveLength(2);
-        expect(service1Result?.stateVariableList?.[0].name).toBe(stateVarName1);
-        expect(service1Result?.stateVariableList?.[0].query).toBeUndefined();
+        expect(service1Result?.actionList?.size).toBe(1); 
+        expect(Array.from(service1Result!.actionList!.values())[0].name).toBe(actionName1);
+        expect(Array.from(service1Result!.actionList!.values())[0].arguments).toHaveLength(2);
+        expect(Array.from(service1Result!.actionList!.values())[0].invoke).toBeUndefined(); 
+        expect(service1Result?.stateVariableList?.size).toBe(2); 
+        expect(Array.from(service1Result!.stateVariableList!.values())[0].name).toBe(stateVarName1);
+        expect(Array.from(service1Result!.stateVariableList!.values())[0].query).toBeUndefined(); 
 
-        const service2Result = deviceWithServices.serviceList?.find(s => s.serviceId === serviceId2);
+        const service2Result = servicesArray.find(s => s.serviceId === serviceId2);
         expect(service2Result).toBeDefined();
-        expect(service2Result?.actionList).toHaveLength(0);
-        expect(service2Result?.stateVariableList).toHaveLength(1);
-        expect(service2Result?.stateVariableList?.[0].name).toBe(simpleVarName2);
+        expect(service2Result?.actionList?.size).toBe(0);
+        expect(service2Result?.stateVariableList?.size).toBe(1);
+        expect(Array.from(service2Result!.stateVariableList!.values())[0].name).toBe(simpleVarName2);
 
         expect(axios.get).toHaveBeenCalledTimes(3);
         expect(axios.get).toHaveBeenNthCalledWith(1, mockBasicDevice.location, {
@@ -394,19 +401,22 @@ describe('processUpnpDevice', () => {
 
         const fullDevice = result as FullDeviceDescription;
         expect(fullDevice.friendlyName).toBe(friendlyNameFull);
-        expect(fullDevice.serviceList).toHaveLength(1);
+        expect(fullDevice.serviceList).toBeInstanceOf(Map); 
+        expect(fullDevice.serviceList?.size).toBe(1); 
 
-        const service = fullDevice.serviceList?.[0];
+        const serviceArrayFull = Array.from(fullDevice.serviceList!.values());
+        const service = serviceArrayFull[0];
         expect(service).toBeDefined();
         expect(service?.serviceId).toBe(serviceIdFull);
-        expect(service?.actionList).toHaveLength(1);
+        expect(service?.actionList?.size).toBe(1); 
 
-        const action = service?.actionList?.[0];
+        const action = service?.actionList!.values().next().value; 
+        expect(action).toBeDefined();
         expect(action?.name).toBe(actionNameFull);
         expect(action?.arguments).toHaveLength(2);
         expect(action?.invoke).toBeInstanceOf(Function);
 
-        const stateVar = service?.stateVariableList?.find(sv => sv.name === statusVarName);
+        const stateVar = service?.stateVariableList!.get(statusVarName); 
         expect(stateVar).toBeDefined();
         expect(stateVar?.query).toBeInstanceOf(Function);
 
@@ -452,12 +462,12 @@ describe('processUpnpDevice', () => {
 
     it('should return basic device with error if fetching device description XML fails', async () => {
         const networkError = new Error('Network Error');
-        (networkError as any).isAxiosError = true; // סימולציה של שגיאת axios
+        (networkError as any).isAxiosError = true; 
         (axios.get as ReturnType<typeof mock>).mockRejectedValueOnce(networkError);
 
         const result = await processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Description, mockAbortSignal);
         expect(result).toBeDefined();
-        expect(result.usn).toBe(mockBasicDevice.usn); // מאפיין של BasicSsdpDevice
+        expect(result!.usn).toBe(mockBasicDevice.usn); 
         expect((result as any).error).toBeDefined();
         expect((result as any).error).toContain('Failed to fetch/parse device description');
         expect(axios.get).toHaveBeenCalledWith(mockBasicDevice.location, {
@@ -470,17 +480,15 @@ describe('processUpnpDevice', () => {
     it('should return basic device with error if device description XML is invalid', async () => {
         const invalidXml = create({ version: '1.0' })
             .ele('root')
-            .ele('device') // חסרים שדות חובה כמו UDN, deviceType וכו'
+            .ele('device') 
             .up()
             .doc().toString();
         (axios.get as ReturnType<typeof mock>).mockResolvedValueOnce({ data: invalidXml, status: 200, statusText: 'OK', headers: {}, config: {} as any });
 
         const result = await processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Description, mockAbortSignal);
         expect(result).toBeDefined();
-        expect(result.usn).toBe(mockBasicDevice.usn);
+        expect(result!.usn).toBe(mockBasicDevice.usn);
         expect((result as any).error).toBeDefined();
-        // הנוסח המדויק של השגיאה תלוי בלוגיקת הטיפול ב-XML לא תקין ב-processUpnpDevice
-        // כרגע, הפונקציה מחזירה null אם ה-XML לא תקין, והקוד החיצוני מוסיף את הודעת השגיאה.
         expect((result as any).error).toContain('Failed to fetch/parse device description');
     });
 
@@ -508,23 +516,27 @@ describe('processUpnpDevice', () => {
             .up()
             .up()
             .doc().toString({ prettyPrint: true });
-
-        const scpdError = new Error('SCPD Network Error');
+        
+        const scpdError = new Error('Failed to fetch SCPD for test');
         (scpdError as any).isAxiosError = true;
 
         (axios.get as ReturnType<typeof mock>)
-            .mockResolvedValueOnce({ data: mockDeviceXml, status: 200, statusText: 'OK', headers: {}, config: {} as any }) // תיאור ההתקן
-            .mockRejectedValueOnce(scpdError); // שגיאה באחזור SCPD
+            .mockResolvedValueOnce({ data: mockDeviceXml, status: 200, statusText: 'OK', headers: {}, config: {} as any }) 
+            .mockRejectedValueOnce(scpdError); 
 
         const result = await processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Services, mockAbortSignal);
         expect(result).toBeDefined();
         const deviceWithServices = result as DeviceWithServicesDescription;
         expect(deviceWithServices.friendlyName).toBe(friendlyName);
-        expect(deviceWithServices.serviceList).toHaveLength(1);
-        const serviceResult = deviceWithServices.serviceList?.[0];
+        expect(deviceWithServices.serviceList?.size).toBe(1);
+        const serviceResult = deviceWithServices.serviceList!.values().next().value;
         expect(serviceResult).toBeDefined();
-        expect(serviceResult?.actionList).toEqual([]);
-        expect(serviceResult?.stateVariableList).toEqual([]);
+        if (!serviceResult) throw new Error("Service result is undefined in SCPD error test");
+        expect(serviceResult.serviceId).toBe(serviceId);
+        expect(serviceResult.scpdError).toBeDefined();
+        expect(serviceResult.scpdError).toContain('Failed to fetch/parse SCPD');
+        expect(serviceResult.actionList).toEqual(new Map());
+        expect(serviceResult.stateVariableList).toEqual(new Map());
     });
 
     it('should handle invalid SCPD XML gracefully', async () => {
@@ -554,8 +566,7 @@ describe('processUpnpDevice', () => {
 
         const invalidScpdXml = create({ version: '1.0' })
             .ele('scpd', { xmlns: 'urn:schemas-upnp-org:service-1-0' })
-            .ele('specVersion')
-            .ele('major').txt('1').up()
+            .ele('specVersion') 
             .up()
             .doc().toString();
         (axios.get as ReturnType<typeof mock>)
@@ -565,8 +576,15 @@ describe('processUpnpDevice', () => {
         const result = await processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Services, mockAbortSignal);
         expect(result).toBeDefined();
         const deviceWithServices = result as DeviceWithServicesDescription;
-        expect(deviceWithServices.serviceList?.[0]?.actionList).toEqual([]);
-        expect(deviceWithServices.serviceList?.[0]?.stateVariableList).toEqual([]);
+        expect(deviceWithServices.serviceList?.size).toBe(1);
+        const serviceResult = deviceWithServices.serviceList!.values().next().value;
+        expect(serviceResult).toBeDefined();
+        if (!serviceResult) throw new Error("Service result is undefined in invalid SCPD XML test");
+        expect(serviceResult.serviceId).toBe(serviceId); 
+        expect(serviceResult.scpdError).toBeDefined();
+        expect(serviceResult.scpdError).toContain('Failed to fetch/parse SCPD');
+        expect(serviceResult.actionList).toEqual(new Map());
+        expect(serviceResult.stateVariableList).toEqual(new Map());
     });
 
     it('should abort processing when AbortSignal is triggered during device description fetch', async () => {
@@ -576,10 +594,9 @@ describe('processUpnpDevice', () => {
                 controller.abort();
                 const error = new Error('Request aborted');
                 (error as any).isAxiosError = true;
-                (error as any).code = 'ECONNABORTED'; // קוד ש-axios משתמש בו לביטול
+                (error as any).code = 'ECONNABORTED'; 
                 throw error;
             }
-            // לא אמור להגיע לכאן בבדיקה זו
             return { data: 'unexpected data', status: 200, statusText: 'OK', headers: {}, config: {} as any };
         });
 
@@ -614,8 +631,8 @@ describe('processUpnpDevice', () => {
             .doc().toString();
 
         (axios.get as ReturnType<typeof mock>)
-            .mockResolvedValueOnce({ data: mockDeviceXmlForAbort, status: 200, statusText: 'OK', headers: {}, config: {} as any }) // תיאור התקן
-            .mockImplementation(async (url: string, config?: any) => { // SCPD
+            .mockResolvedValueOnce({ data: mockDeviceXmlForAbort, status: 200, statusText: 'OK', headers: {}, config: {} as any }) 
+            .mockImplementation(async (url: string, config?: any) => { 
                 if (url.endsWith(scpdAbortUrl)) {
                     controller.abort();
                     const error = new Error('Request aborted during SCPD fetch by test');
@@ -623,11 +640,9 @@ describe('processUpnpDevice', () => {
                     (error as any).code = 'ECONNABORTED';
                     throw error;
                 }
-                // לא אמור להגיע לכאן בבדיקה זו
                 return { data: 'unexpected scpd data', status: 200, statusText: 'OK', headers: {}, config: {} as any };
             });
-
-        // processUpnpDevice אמור לזרוק שגיאה אם הביטול קרה לפני החזרת השירותים
+        
         await expect(processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Services, controller.signal))
             .rejects
             .toThrow('Operation aborted before returning services.');

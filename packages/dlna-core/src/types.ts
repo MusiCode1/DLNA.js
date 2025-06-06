@@ -608,7 +608,7 @@ export interface ActiveDeviceManagerOptions {
      * @param msg - ההודעה הגולמית.
      * @param rinfo - מידע על השולח.
      */
-    onRawSsdpMessage?: (msg: Buffer, rinfo: RemoteInfo) => void;
+    onRawSsdpMessage?: RawSsdpMessageHandler;
     /**
      * @hebrew רשימת שמות של ממשקי רשת ספציפיים לשימוש (למשל, ['eth0', 'wlan0']).
      * אם לא יסופק, ישתמש בכל הממשקים הזמינים.

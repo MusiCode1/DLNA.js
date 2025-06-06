@@ -577,23 +577,23 @@ export async function processUpnpDevice( // שם שונה והוספת export
 ): Promise<ProcessedDevice> {
   logger.debug(`processUpnpDevice: Processing device ${basicDevice.usn} to detail level: ${detailLevel}`);
 
-  if (detailLevel === DiscoveryDetailLevel.Basic) {
-    if (abortSignal?.aborted) throw new Error("Operation aborted before processing (basic).");
+  if (detailLevel === DiscoveryDetailLevel.Basic) { // שחזור להשוואה המקורית עם enum
+    if (abortSignal?.aborted) throw new Error("Operation aborted before processing (basic)."); // שחזור בדיקת abortSignal
     return basicDevice;
   }
 
   if (!basicDevice.location) {
     logger.warn(`processUpnpDevice: Device ${basicDevice.usn} has no location URL. Cannot fetch description. Returning basic info.`);
-    if (abortSignal?.aborted) throw new Error("Operation aborted (no location).");
+    if (abortSignal?.aborted) throw new Error("Operation aborted (no location)."); // שחזור בדיקת abortSignal
     return { ...basicDevice, error: "Device has no location URL." };
   }
 
-  if (abortSignal?.aborted) throw new Error("Operation aborted before fetching description.");
-  const deviceDescription = await fetchAndParseDeviceDescriptionXml(basicDevice.location, abortSignal); // שינוי שם הקריאה
+  if (abortSignal?.aborted) throw new Error("Operation aborted before fetching description."); // שחזור בדיקת abortSignal
+  const deviceDescription = await fetchAndParseDeviceDescriptionXml(basicDevice.location, abortSignal);
 
   if (!deviceDescription) {
     logger.warn(`processUpnpDevice: Failed to get device description for ${basicDevice.usn} from ${basicDevice.location}. Returning basic info.`);
-    if (abortSignal?.aborted) throw new Error("Operation aborted (description fetch failed).");
+    if (abortSignal?.aborted) throw new Error("Operation aborted (description fetch failed)."); // שחזור בדיקת abortSignal
     return { ...basicDevice, error: "Failed to fetch/parse device description" };
   }
 

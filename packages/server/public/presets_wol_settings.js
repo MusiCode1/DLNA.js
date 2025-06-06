@@ -23,27 +23,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let existingPresets = {}; // לשמירת הפריסטים הקיימים (אובייקט עם שמות הפריסטים כמפתחות)
 
     // JSDoc type definitions
+    // הטיפוסים מיובאים כעת מקובץ ה-types של השרת
     /**
-     * @typedef {object} ServiceDescription
-     * @property {string} serviceType
-     * @property {string} serviceId
-     * @property {string} controlURL
-     * @property {string} eventSubURL
-     * @property {string} SCPDURL
+     * @typedef {import("../src/types").ApiDevice} ApiDevice
+     * @typedef {import("../src/types").PresetSettings} PresetSettings
+     * @typedef {import("../src/types").PresetEntry} PresetEntry
+     * @typedef {import("../src/types").RendererPreset} RendererPreset
+     * @typedef {import("../src/types").MediaServerPreset} MediaServerPreset
+     * @typedef {import("../src/types").FolderPreset} FolderPreset
      */
-
-    /**
-     * @typedef {object} ApiDevice
-     * @property {string} friendlyName
-     * @property {string} modelName
-     * @property {string} udn
-     * @property {string} [remoteAddress]
-     * @property {number} lastSeen
-     * @property {string} [iconUrl]
-     * @property {string} [baseURL]
-     * @property {ServiceDescription[]} [serviceList]
-     * @property {string[]} [supportedServices]
-     */
+    // ServiceDescription מיובא ומשמש בתוך ApiDevice מ-../src/types
 
     /**
      * @typedef {object} RendererPreset
@@ -101,22 +90,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentValue = selectElement.value;
         selectElement.innerHTML = `<option value="">בחר ${type === 'renderer' ? 'Renderer' : 'Media Server'}${type === 'mediaserver' ? ' (אופציונלי)' : ''}</option>`; // איפוס
         devices.forEach(device => {
-            // סינון לפי סוג אם נדרש (למשל, רק renderers או רק media servers)
             let isRelevant = false;
-            if (type === 'renderer') {
-                if (device.supportedServices && device.supportedServices.includes('urn:schemas-upnp-org:service:AVTransport:1')) {
-                    isRelevant = true;
-                }
-            } else if (type === 'mediaserver') {
-                if (device.supportedServices && device.supportedServices.includes('urn:schemas-upnp-org:service:ContentDirectory:1')) {
-                    isRelevant = true;
+            if (device.serviceList && typeof device.serviceList === 'object') {
+                if (type === 'renderer') {
+                    for (const serviceKey in device.serviceList) {
+                        const service = device.serviceList[serviceKey];
+                        if (service && service.serviceType === 'urn:schemas-upnp-org:service:AVTransport:1') {
+                            isRelevant = true;
+                            break;
+                        }
+                    }
+                } else if (type === 'mediaserver') {
+                    const cdService = device.serviceList['ContentDirectory'] || Object.values(device.serviceList).find(s => s.serviceType === 'urn:schemas-upnp-org:service:ContentDirectory:1');
+                    if (cdService && cdService.serviceType === 'urn:schemas-upnp-org:service:ContentDirectory:1') {
+                        isRelevant = true;
+                    }
                 }
             }
 
             if (isRelevant) {
                 const option = document.createElement('option');
-                option.value = device.udn;
-                option.textContent = `${device.friendlyName} (${device.modelName || 'N/A'}) - UDN: ${device.udn}`;
+                option.value = device.UDN; // שימוש ב-UDN (אותיות גדולות)
+                option.textContent = `${device.friendlyName} (${device.modelName || 'N/A'}) - UDN: ${device.UDN}`; // שימוש ב-UDN
                 // הוספת מידע נוסף אם קיים, כמו IP
                 if (device.remoteAddress) { // תוקן ל-remoteAddress בהתאם למשוב המשתמש והטיפוס ApiDevice
                      option.textContent += ` - IP: ${device.remoteAddress}`;

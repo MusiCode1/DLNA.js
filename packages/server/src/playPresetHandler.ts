@@ -20,7 +20,7 @@ import type {
 
 import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler';
-import { updateDeviceList } from './deviceManager'; // הוספת הייבוא החסר
+// import { updateDeviceList } from './deviceManager'; // הוסר - לא נחוץ יותר
 
 const logger = createModuleLogger('PlayPresetHandler');
 
@@ -98,8 +98,10 @@ export async function executePlayPresetLogic(
       }
 
       if ('friendlyName' in revivedDevice && 'modelName' in revivedDevice && 'UDN' in revivedDevice) {
-        logger.info(`Successfully revived renderer ${revivedDevice.UDN} for preset '${presetName}'. Updating active devices.`);
-        updateDeviceList(revivedDevice as DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription); // הקריאה הזו כבר נכונה, בהנחה שהייבוא תקין
+        logger.info(`Successfully revived renderer ${revivedDevice.UDN} for preset '${presetName}'. ActiveDeviceManager should pick it up.`);
+        // updateDeviceList(revivedDevice as DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription); // הוסר - ActiveDeviceManager מטפל בזה
+        // ייתכן שנצטרך להמתין מעט כאן כדי שהאירוע מ-ActiveDeviceManager יתעדכן
+        // אך ננסה קודם ללא המתנה.
         device = activeDevices.get(rendererPreset.udn);
         if (!device) {
           logger.error(`Renderer ${rendererPreset.udn} still not found in active devices after revival for preset '${presetName}'. This should not happen.`);
@@ -186,11 +188,11 @@ export async function executePlayPresetLogic(
   }
 
   // אם שתי המשימות הצליחו, נגן את הפריטים
-  logger.info(`Both tasks completed for preset '${presetName}'. Attempting to play ${processedItems.length} items on renderer ${finalRendererDevice.udn}.`);
+  logger.info(`Both tasks completed for preset '${presetName}'. Attempting to play ${processedItems.length} items on renderer ${finalRendererDevice.UDN}.`);
 
   try {
     const playbackResult = await playProcessedItemsOnRenderer(
-      finalRendererDevice.udn,
+      finalRendererDevice.UDN,
       processedItems,
       activeDevices,
       logger // שימוש בלוגר של PlayPresetHandler

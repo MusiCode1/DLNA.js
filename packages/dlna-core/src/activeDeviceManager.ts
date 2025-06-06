@@ -22,7 +22,7 @@ import { createModuleLogger } from './logger'; // הוספת ייבוא ללוג
 import { processUpnpDevice } from './upnpDeviceProcessor'; // הוספת ייבוא
 
 const logger = createModuleLogger('ActiveDeviceManager'); // אתחול לוגר מקומי
-
+type ReturnTypeOfCreateSocketManager = Awaited<ReturnType<typeof createSocketManager>>; // הטיפוס הנכון לאחר await createSocketManager
 /**
  * @internal
  * מחלקה לניהול גילוי רציף של התקני UPnP.
@@ -30,8 +30,7 @@ const logger = createModuleLogger('ActiveDeviceManager'); // אתחול לוגר
 export class ActiveDeviceManager extends EventEmitter {
   private options: Required<ActiveDeviceManagerOptions>;
   private activeDevices: Map<string, ApiDevice>;
-  // הטיפוס הנכון לאחר await createSocketManager
-  private socketManager: Awaited<ReturnType<typeof createSocketManager>> | null;
+  private socketManager: ReturnTypeOfCreateSocketManager | null;
   private mSearchIntervalId: NodeJS.Timeout | null;
   private cleanupIntervalId: NodeJS.Timeout | null;
   private isRunning: boolean;
@@ -109,8 +108,8 @@ export class ActiveDeviceManager extends EventEmitter {
       }
     }
 
-    if (!usn) {
-      logger.debug('_parseAndMapSsdpMessage: USN is missing in SSDP message headers.', { remoteAddress: rinfo.address, headers: normalizedHeaders });
+    if (!usn || usn.trim() === '') { // בדיקה מורחבת: USN חסר, ריק, או רק רווחים
+      logger.debug('_parseAndMapSsdpMessage: USN is missing, empty, or only whitespace in SSDP message headers. Ignoring message.', { usnValueReceived: usn, remoteAddress: rinfo.address, headers: normalizedHeaders });
       return null;
     }
 
@@ -146,11 +145,11 @@ export class ActiveDeviceManager extends EventEmitter {
       logger.debug(`_parseAndMapSsdpMessage: Received M-SEARCH request from ${rinfo.address}:${rinfo.port}. Ignoring for now.`, { usn: basicDevice.usn });
       // ממשיכים להחזיר את ההתקן המפוענח גם אם זה M-SEARCH
     }
-    
+
     // בדיקה נוספת: Location הוא שדה חובה עבור הודעות שאינן M-SEARCH ושיש להן משמעות לגילוי התקן
     if (basicDevice.httpMethod !== 'M-SEARCH' && messageType === 'RESPONSE' && !location) {
-        logger.debug('_parseAndMapSsdpMessage: Location is missing in SSDP response headers.', { remoteAddress: rinfo.address, usn: basicDevice.usn, headers: normalizedHeaders });
-        return null;
+      logger.debug('_parseAndMapSsdpMessage: Location is missing in SSDP response headers.', { remoteAddress: rinfo.address, usn: basicDevice.usn, headers: normalizedHeaders });
+      return null;
     }
 
 
@@ -245,7 +244,7 @@ export class ActiveDeviceManager extends EventEmitter {
             const currentUsn = existingDevice.usn; // שמירת ה-USN למקרה ש-processedData מגיע ללא (לא אמור לקרות)
             Object.assign(existingDevice, processedData);
             existingDevice.usn = currentUsn; // הבטחת ה-USN המקורי
-            
+
             // ודא ש-detailLevelAchieved מעודכן לרמה שהושגה בפועל
             existingDevice.detailLevelAchieved = processedData.detailLevelAchieved || this.options.detailLevel;
             // עדכון שדות נוספים מ-ApiDevice אם צריך, למרות ש-Object.assign אמור לכסות את רובם אם הם קיימים ב-processedData
@@ -281,9 +280,9 @@ export class ActiveDeviceManager extends EventEmitter {
           // processedData הוא ProcessedDevice. ApiDevice מרחיב את FullDeviceDescription.
           // נצטרך למפות את השדות בזהירות.
           const newApiDevice: ApiDevice = {
-            // שדות מ-BasicSsdpDevice (תמיד קיימים ב-processedData)
-            usn: processedData.usn,
-            location: processedData.location || '', // ודא ש-location הוא מחרוזת
+            // שדות מ-BasicSsdpDevice
+            usn: basicDevice.usn, // שימוש ישיר ב-basicDevice.usn כדי להיות בטוח
+            location: processedData.location || basicDevice.location || '', // ודא ש-location הוא מחרוזת
             server: processedData.server || '',
             st: processedData.st,
             remoteAddress: processedData.remoteAddress,
@@ -317,21 +316,22 @@ export class ActiveDeviceManager extends EventEmitter {
             baseURL: (processedData as DeviceDescription).baseURL,
             URLBase: (processedData as DeviceDescription).URLBase,
             UPC: (processedData as DeviceDescription).UPC,
-            
+
             // שדות מ-ApiDevice
             lastSeen: Date.now(),
             expiresAt,
             detailLevelAchieved: processedData.detailLevelAchieved || DiscoveryDetailLevel.Basic,
           };
-
+          logger.debug(`_handleSsdpMessage: Created newApiDevice for USN '${newApiDevice.usn}': friendlyName='${newApiDevice.friendlyName}', UDN='${newApiDevice.UDN}'`);
           this.activeDevices.set(newApiDevice.usn, newApiDevice);
           this.emit('devicefound', newApiDevice.usn, newApiDevice);
-          logger.info(`_handleSsdpMessage: New device found and processed: ${newApiDevice.usn} (${newApiDevice.friendlyName})`, { usn: newApiDevice.usn, detailLevel: newApiDevice.detailLevelAchieved });
+          // שינוי הלוג לפורמט זהה ללוג הדיבאג הקודם לו
+          logger.info(`_handleSsdpMessage: (INFO) Processed newApiDevice for USN '${newApiDevice.usn}': friendlyName='${newApiDevice.friendlyName}', UDN='${newApiDevice.UDN}', detailLevel='${newApiDevice.detailLevelAchieved}'`);
         } else {
           // אם לא הצלחנו לקבל תיאור מלא, ורמת הפירוט המבוקשת היא רק Basic,
           // אז basicDevice עצמו מספיק כדי ליצור ApiDevice בסיסי.
           if (this.options.detailLevel === DiscoveryDetailLevel.Basic) {
-             const basicApiDevice: ApiDevice = {
+            const basicApiDevice: ApiDevice = {
               ...basicDevice, // כל השדות מ-BasicSsdpDevice
               // שדות חובה מ-DeviceDescription שצריך לספק להם ערכי ברירת מחדל
               deviceType: basicDevice.st,
@@ -346,9 +346,11 @@ export class ActiveDeviceManager extends EventEmitter {
               expiresAt,
               detailLevelAchieved: DiscoveryDetailLevel.Basic,
             };
+            logger.debug(`_handleSsdpMessage: Created basicApiDevice for USN '${basicApiDevice.usn}': friendlyName='${basicApiDevice.friendlyName}', UDN='${basicApiDevice.UDN}'`);
             this.activeDevices.set(basicApiDevice.usn, basicApiDevice);
             this.emit('devicefound', basicApiDevice.usn, basicApiDevice);
-            logger.info(`_handleSsdpMessage: New device found (basic details only, as requested): ${basicApiDevice.usn}`, { usn: basicApiDevice.usn });
+            // שינוי הלוג לפורמט זהה ללוג הדיבאג הקודם לו
+            logger.info(`_handleSsdpMessage: (INFO) Processed basicApiDevice for USN '${basicApiDevice.usn}': friendlyName='${basicApiDevice.friendlyName}', UDN='${basicApiDevice.UDN}', detailLevel='${basicApiDevice.detailLevelAchieved}'`);
           } else {
             logger.warn(`_handleSsdpMessage: Failed to get sufficient description for new device: ${basicDevice.usn} at ${basicDevice.location} (requested level: ${this.options.detailLevel}). Device not added.`, { usn: basicDevice.usn });
           }
@@ -412,7 +414,7 @@ export class ActiveDeviceManager extends EventEmitter {
           // Case: NodeJS.Dict<os.NetworkInterfaceInfo[]> - use directly
           // We need to ensure it's not an empty array that was cast to object
           if (Object.keys(this.options.networkInterfaces).length > 0) {
-             networkInterfacesArg = this.options.networkInterfaces as NodeJS.Dict<os.NetworkInterfaceInfo[]>;
+            networkInterfacesArg = this.options.networkInterfaces as NodeJS.Dict<os.NetworkInterfaceInfo[]>;
           }
         }
       }
@@ -426,9 +428,10 @@ export class ActiveDeviceManager extends EventEmitter {
           // טיפול ב-onRawSsdpMessage אם סופק
           if (this.options.onRawSsdpMessage && typeof this.options.onRawSsdpMessage === 'function') {
             try {
-                this.options.onRawSsdpMessage(msg, rinfo);
+              // ודא שהקריאה תואמת לחתימה של RawSsdpMessageHandler
+              this.options.onRawSsdpMessage({ message: msg, remoteInfo: rinfo, socketType: socketType });
             } catch (rawCbError: any) {
-                logger.error('Error in user-provided onRawSsdpMessage callback:', rawCbError);
+              logger.error('Error in user-provided onRawSsdpMessage callback:', rawCbError);
             }
           }
           // קריאה ל-handler הפנימי
@@ -451,12 +454,12 @@ export class ActiveDeviceManager extends EventEmitter {
         logger.debug(`Sending initial M-SEARCH for target: ${this.options.searchTarget}`);
         // נשלח גם ל-IPv4 וגם ל-IPv6 אם רלוונטי
         this.socketManager.sendMSearch(this.options.searchTarget, 4).catch((err: Error) => {
-            logger.error('Error sending initial M-SEARCH IPv4:', err);
+          logger.error('Error sending initial M-SEARCH IPv4:', err);
         });
         if (this.options.includeIPv6) {
-            this.socketManager.sendMSearch(this.options.searchTarget, 6).catch((err: Error) => {
-                logger.error('Error sending initial M-SEARCH IPv6:', err);
-            });
+          this.socketManager.sendMSearch(this.options.searchTarget, 6).catch((err: Error) => {
+            logger.error('Error sending initial M-SEARCH IPv6:', err);
+          });
         }
       } else {
         logger.error('Socket manager not initialized, cannot send initial M-SEARCH.');
@@ -477,7 +480,7 @@ export class ActiveDeviceManager extends EventEmitter {
           });
           if (this.options.includeIPv6) {
             this.socketManager.sendMSearch(this.options.searchTarget, 6).catch((err: Error) => {
-                logger.error('Error sending periodic M-SEARCH IPv6:', err);
+              logger.error('Error sending periodic M-SEARCH IPv6:', err);
             });
           }
         }
@@ -528,10 +531,10 @@ export class ActiveDeviceManager extends EventEmitter {
     }
   }
 
-/**
-   * @hebrew מחזירה עותק של רשימת המכשירים הפעילים שזוהו.
-   * @returns Map&lt;string, ApiDevice&gt; - מפה של המכשירים הפעילים.
-   */
+  /**
+     * @hebrew מחזירה עותק של רשימת המכשירים הפעילים שזוהו.
+     * @returns Map&lt;string, ApiDevice&gt; - מפה של המכשירים הפעילים.
+     */
   public getActiveDevices(): Map<string, ApiDevice> {
     // החזרת עותק של המפה כדי למנוע שינויים חיצוניים ישירים
     return new Map(this.activeDevices);
@@ -585,6 +588,6 @@ export class ActiveDeviceManager extends EventEmitter {
     logger.info('ActiveDeviceManager stopped successfully.');
     return Promise.resolve();
   }
-  
+
   // כאן יתווספו מתודות נוספות בהמשך
 }

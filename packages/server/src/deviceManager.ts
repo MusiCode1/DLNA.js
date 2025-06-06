@@ -1,8 +1,7 @@
-import { createModuleLogger, type DeviceDescription, type DeviceWithServicesDescription, type FullDeviceDescription, type ProcessedDevice, type RawSsdpMessagePayload } from 'dlna.js';
+import { createModuleLogger, ActiveDeviceManager, type ActiveDeviceManagerOptions, type ApiDevice as CoreApiDevice, type RawSsdpMessagePayload } from 'dlna.js';
 import type { RemoteInfo } from 'node:dgram';
-import { ContinuousDeviceExplorer } from './continuousDeviceExplorer';
-import type { ApiDevice } from './types';
-import { DEFAULT_DISCOVERY_OPTIONS, MAX_RAW_MESSAGES, DEVICE_CLEANUP_INTERVAL_MS, MAX_DEVICE_INACTIVITY_MS } from './config';
+// import type { ApiDevice } from './types'; // ApiDevice יגיע מ-dlna-core
+import { DEFAULT_DISCOVERY_OPTIONS, MAX_RAW_MESSAGES } from './config';
 
 const logger = createModuleLogger('DeviceManager');
 
@@ -15,103 +14,115 @@ interface RawMessagesBufferEntry {
 const rawMessagesBuffer: RawMessagesBufferEntry[] = [];
 
 // מפה לאחסון המכשירים הפעילים שנתגלו
-const activeDevices: Map<string, ApiDevice> = new Map();
+// הטיפוס ApiDevice מיובא כעת מ-dlna-core
+const activeDevices: Map<string, CoreApiDevice> = new Map();
 
-const deviceExplorer = new ContinuousDeviceExplorer(DEFAULT_DISCOVERY_OPTIONS);
+// הגדרת האופציות עבור ActiveDeviceManager
+// יש לוודא שהאופציות ב-DEFAULT_DISCOVERY_OPTIONS תואמות ל-ActiveDeviceManagerOptions
+// או לבצע המרה/התאמה. בשלב זה נניח שהן תואמות ברובן.
+const { networkInterfaces, ...restOfDefaultOptions } = DEFAULT_DISCOVERY_OPTIONS;
 
-/**
- * @hebrew מעדכן את רשימת המכשירים הפעילים עם המידע שהתקבל.
- * @param deviceData - המידע על המכשיר שנתגלה או עודכן.
- */
-export function updateDeviceList(deviceData: DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription): void {
-  if (deviceData.friendlyName && deviceData.modelName && deviceData.UDN) {
-    let iconUrl: string | undefined = undefined;
-    if (deviceData.iconList && deviceData.iconList.length > 0 && deviceData.baseURL) {
-      const firstIcon = deviceData.iconList[0];
-      if (firstIcon && firstIcon.url) {
-        try {
-          iconUrl = new URL(firstIcon.url, deviceData.baseURL).href;
-        } catch (e) {
-          logger.warn(`Could not construct icon URL for device ${deviceData.UDN}: ${firstIcon.url}, base: ${deviceData.baseURL}`, e);
-        }
-      }
+const activeDeviceManagerOptions: ActiveDeviceManagerOptions = {
+  ...restOfDefaultOptions,
+  // אם יש צורך להעביר את הקולבק להודעות גולמיות, נוסיף אותו כאן
+  onRawSsdpMessage: (payload: RawSsdpMessagePayload) => { // תוקן ל-RawSsdpMessagePayload
+    const messageString = payload.message.toString('utf-8');
+    rawMessagesBuffer.push({
+      message: messageString,
+      remoteInfo: payload.remoteInfo, // תוקן ל-remoteInfo
+      socketType: payload.socketType,
+    });
+    if (rawMessagesBuffer.length > MAX_RAW_MESSAGES) {
+      rawMessagesBuffer.shift(); // הסרת ההודעה הישנה ביותר
     }
+  },
+  // networkInterfaces הוסר מכאן כדי למנוע שגיאת טיפוסים.
+  // ActiveDeviceManager ישתמש בממשקים הזמינים כברירת מחדל.
+};
 
-    const supportedServices: string[] = deviceData.serviceList
-      ? deviceData.serviceList.map(service => service.serviceType).filter(st => !!st) as string[]
-      : [];
+let coreDeviceManager: ActiveDeviceManager | null = null;
 
-    const apiDevice: ApiDevice = {
-      friendlyName: deviceData.friendlyName,
-      modelName: deviceData.modelName,
-      udn: deviceData.UDN,
-      remoteAddress: deviceData.remoteAddress,
-      lastSeen: Date.now(),
-      iconUrl: iconUrl,
-      baseURL: deviceData.baseURL,
-      serviceList: deviceData.serviceList,
-      supportedServices: supportedServices,
-      presentationURL: deviceData.presentationURL,
-      rootDoc: deviceData.location // 'location' הוא השדה המקורי מה-XML שמתאר את מיקום ה-root description
-    };
-    activeDevices.set(apiDevice.udn, apiDevice);
-    logger.info(`Device updated/added: ${apiDevice.friendlyName} (UDN: ${apiDevice.udn})${apiDevice.iconUrl ? ` Icon: ${apiDevice.iconUrl}` : ''}, BaseURL: ${apiDevice.baseURL}, PresentationURL: ${apiDevice.presentationURL || 'N/A'}, Services: ${supportedServices.length > 0 ? supportedServices.join(', ') : 'N/A'}`);
-  } else {
-    logger.warn('Received device data without all required fields (friendlyName, modelName, UDN)', { udn: deviceData.UDN });
+function getCoreDeviceManager(): ActiveDeviceManager {
+  if (!coreDeviceManager) {
+    logger.info('Creating ActiveDeviceManager instance');
+    coreDeviceManager = new ActiveDeviceManager(activeDeviceManagerOptions);
+    initializeDeviceManagerEvents(coreDeviceManager);
   }
+  return coreDeviceManager;
 }
+
+function initializeDeviceManagerEvents(manager: ActiveDeviceManager): void {
+  manager.on('devicefound', (usn: string, device: CoreApiDevice) => {
+    activeDevices.set(usn, device);
+    logger.info(`Device found: ${device.friendlyName} (USN: ${usn}, UDN: ${device.UDN})`);
+  });
+
+  manager.on('deviceupdated', (usn: string, device: CoreApiDevice) => {
+    activeDevices.set(usn, device);
+    logger.info(`Device updated: ${device.friendlyName} (USN: ${usn}, UDN: ${device.UDN})`);
+  });
+
+  manager.on('devicelost', (usn: string, device: CoreApiDevice) => { // device כאן הוא האובייקט שנמחק
+    activeDevices.delete(usn);
+    logger.info(`Device lost: ${device.friendlyName} (USN: ${usn}, UDN: ${device.UDN})`);
+  });
+
+  manager.on('error', (err: Error) => {
+    logger.error('ActiveDeviceManager error:', err);
+  });
+
+  manager.on('started', () => {
+    logger.info('ActiveDeviceManager started successfully.');
+  });
+
+  manager.on('stopped', () => {
+    logger.info('ActiveDeviceManager stopped.');
+  });
+
+  // אין צורך להאזין ל-'rawmessage' כאן אם onRawSsdpMessage מטופל באופציות
+}
+
 
 /**
  * @hebrew מתחיל את תהליך גילוי המכשירים הרציף.
  */
-export function startDiscovery(): void {
-  logger.info('Initializing continuous UPnP device discovery process...');
-
-  deviceExplorer.on('device', (device: ProcessedDevice) => {
-    if ('UDN' in device) {
-      updateDeviceList(device as DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription);
-    } else {
-      logger.debug('Received basic device without full details, UDN from USN (if available):', device.usn);
-    }
-  });
-
-  deviceExplorer.on('rawResponse', (payload: RawSsdpMessagePayload) => {
-    const messageString = payload.message.toString('utf-8');
-    rawMessagesBuffer.push({
-      message: messageString,
-      remoteInfo: payload.remoteInfo,
-      socketType: payload.socketType,
-    });
-    if (rawMessagesBuffer.length > MAX_RAW_MESSAGES) {
-      rawMessagesBuffer.shift();
-    }
-  });
-
-  deviceExplorer.on('error', (err: Error) => {
-    logger.error('Error during continuous device discovery:', err);
-  });
-
-  deviceExplorer.on('stopped', () => {
-    logger.info('Continuous device discovery process has stopped.');
-  });
-
-  deviceExplorer.startDiscovery();
+export async function startDiscovery(): Promise<void> {
+  logger.info('Initializing UPnP device discovery process using ActiveDeviceManager...');
+  const manager = getCoreDeviceManager();
+  try {
+    // אין צורך לבדוק isRunning, המתודה start אמורה לטפל בזה
+    await manager.start();
+  } catch (error) {
+    logger.error('Failed to start ActiveDeviceManager:', error);
+    // שקול אם לזרוק את השגיאה הלאה או לטפל בה כאן
+  }
 }
 
 /**
  * @hebrew מפסיק את תהליך גילוי המכשירים הרציף.
  */
-export function stopDiscovery(): void {
+export async function stopDiscovery(): Promise<void> {
   logger.info('Stopping UPnP device discovery...');
-  deviceExplorer.stopDiscovery();
+  const manager = getCoreDeviceManager();
+  try {
+    // אין צורך לבדוק isRunning, המתודה stop אמורה לטפל בזה
+    await manager.stop();
+  } catch (error) {
+    logger.error('Failed to stop ActiveDeviceManager:', error);
+  }
 }
 
 /**
  * @hebrew מחזיר את רשימת המכשירים הפעילים הנוכחית.
- * @returns {Map<string, ApiDevice>} מפה של המכשירים הפעילים.
+ * @returns {Map<string, CoreApiDevice>} מפה של המכשירים הפעילים.
  */
-export function getActiveDevices(): Map<string, ApiDevice> {
+export function getActiveDevices(): Map<string, CoreApiDevice> {
+  // ActiveDeviceManager מחזיק את רשימת המכשירים העדכנית בעצמו
+  // והאירועים שלו מעדכנים את המפה המקומית activeDevices
   return activeDevices;
+  // לחלופין, אם רוצים תמיד את המידע הישיר מהמנהל:
+  // const manager = getCoreDeviceManager();
+  // return manager.getActiveDevices(); // ודא שהטיפוס המוחזר תואם
 }
 
 /**
@@ -122,18 +133,4 @@ export function getRawMessagesBuffer(): RawMessagesBufferEntry[] {
   return rawMessagesBuffer;
 }
 
-// ניקוי תקופתי של מכשירים שלא נראו לאחרונה
-setInterval(() => {
-  const now = Date.now();
-  let cleanedCount = 0;
-  for (const [udn, device] of activeDevices.entries()) {
-    if (now - device.lastSeen > MAX_DEVICE_INACTIVITY_MS) {
-      activeDevices.delete(udn);
-      cleanedCount++;
-      logger.info(`Removed inactive device: ${device.friendlyName} (UDN: ${udn})`);
-    }
-  }
-  if (cleanedCount > 0) {
-    logger.info(`Cleaned up ${cleanedCount} inactive devices.`);
-  }
-}, DEVICE_CLEANUP_INTERVAL_MS);
+// לוגיקת הניקוי התקופתי מוסרת מכיוון ש-ActiveDeviceManager מטפל בכך.

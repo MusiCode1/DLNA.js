@@ -7,18 +7,34 @@ import type {
 /**
  * @hebrew מייצג את המידע על התקן כפי שהוא נשמר ומוצג ב-API של השרת.
  */
+// הגדרת טיפוס עבור אובייקט אייקון, כפי שנשלח ללקוח
+export interface ApiDeviceIcon {
+    mimetype: string;
+    width: number;
+    height: number;
+    depth: number;
+    url: string;
+}
+
 export interface ApiDevice {
     friendlyName: string;
-    modelName: string;
-    udn: string;
+    modelName?: string; // הפך לאופציונלי כי לא תמיד קיים
+    UDN: string;
+    location?: string; // הוסף
+    server?: string;   // הוסף
+    st?: string;       // הוסף
     remoteAddress?: string;
-    lastSeen: number; // חותמת זמן מתי המכשיר נראה לאחרונה
-    iconUrl?: string; // הוספת שדה עבור URL הלוגו
-    baseURL?: string; // חיוני להרכבת URL-ים אבסולוטיים לשירותים
-    serviceList?: ServiceDescription[]; // רשימת השירותים המלאה
-    supportedServices?: string[]; // שירותים נתמכים (יכול להיות נגזר מ-serviceList)
-    presentationURL?: string; // הוספת שדה עבור כתובת ה-URL של דף ההצגה של ההתקן
-    rootDoc: string;
+    remotePort?: number; // הוסף
+    baseURL?: string;
+    manufacturer?: string; // הוסף
+    deviceType?: string; // הוסף
+    presentationURL?: string;
+    iconList?: ApiDeviceIcon[]; // שונה מ-iconUrl למערך אובייקטי אייקונים
+    serviceList?: Record<string, ServiceDescription>; // שונה מ-Map לאובייקט רגיל, המפתח הוא שם ידידותי
+    lastSeen: number;
+    expiresAt?: number; // הוסף
+    detailLevelAchieved?: string; // הוסף
+    // supportedServices הוסר כי הוא לא נשלח עוד
 }
 
 export interface ContinueDiscoveryOptions extends DiscoveryOptions {

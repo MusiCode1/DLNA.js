@@ -16,7 +16,6 @@ export * from './types';
 
 // From upnpDeviceExplorer.ts
 export {
-    discoverSsdpDevices,
     discoverSsdpDevicesIterable,
 
 } from './upnpDeviceExplorer';
@@ -34,3 +33,7 @@ export {
     processUpnpDeviceFromUrl
 } from './upnpDeviceProcessor';
 
+// From activeDeviceManager.ts
+export { ActiveDeviceManager } from './activeDeviceManager';
+// RawSsdpPayload should be exported from types.ts if it's defined there and types.ts is already fully exported.
+// ActiveDeviceManagerOptions should also be exported from types.ts

@@ -40,7 +40,8 @@ export const handleBrowseRequest = async (req: Request, res: Response, next: Nex
     return; // Exit after sending response
   }
 
-  const cdServiceDescriptionOriginal = device.serviceList.find(
+  const servicesArray = Array.from(device.serviceList.values());
+  const cdServiceDescriptionOriginal = servicesArray.find(
     (service: ServiceDescription) => service.serviceType?.startsWith('urn:schemas-upnp-org:service:ContentDirectory:')
   );
 

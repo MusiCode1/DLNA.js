@@ -83,7 +83,9 @@ export class ContentDirectoryService {
         // actionList מובטח להיות קיים מהקונסטרקטור
         // חיפוש case-insensitive לשם הפעולה
         const lowerCaseActionName = actionName.toLowerCase();
-        return this.serviceDescription.actionList!.find((a: Action) => a.name.toLowerCase() === lowerCaseActionName);
+        // המרה של ערכי המפה למערך כדי להשתמש ב-find
+        const actionsArray = Array.from(this.serviceDescription.actionList!.values());
+        return actionsArray.find((a: Action) => a.name.toLowerCase() === lowerCaseActionName);
     }
 
     /**

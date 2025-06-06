@@ -115,9 +115,10 @@
                         deviceInfoContainer.className = 'device-info-container';
 
                         // יצירת אלמנט תמונה אם קיים URL ללוגו
-                        if (device.iconUrl) {
+                        // שונה להתאים ל-iconList מהשרת
+                        if (device.iconList && device.iconList.length > 0 && device.iconList[0].url) {
                             const img = document.createElement('img');
-                            img.src = device.iconUrl;
+                            img.src = device.iconList[0].url; // שימוש באייקון הראשון מהרשימה
                             img.alt = device.friendlyName + ' logo';
                             deviceInfoContainer.appendChild(img);
                         }
@@ -127,9 +128,10 @@
                         deviceInfoContainer.appendChild(textNode);
 
                         // הצגת קישור למסמך הראשי של ההתקן
-                        if (device.rootDoc) {
+                        // שונה להתאים ל-presentationURL מהשרת
+                        if (device.presentationURL) {
                             const presentationLink = document.createElement('a');
-                            presentationLink.href = device.rootDoc;
+                            presentationLink.href = device.presentationURL; // שימוש ב-presentationURL
                             presentationLink.textContent = 'Open Device Page';
                             presentationLink.target = '_blank'; // פתיחה בלשונית חדשה
                             presentationLink.style.marginLeft = '10px'; // מרווח קטן משמאל
@@ -137,29 +139,38 @@
                             deviceInfoContainer.appendChild(presentationLink);
                         }
 
-                        // Check if the device supports ContentDirectory and add browse button
-                        if (device.supportedServices && device.supportedServices.includes('urn:schemas-upnp-org:service:ContentDirectory:1')) {
+                        // הצגת כפתור Browse רק אם שירות ContentDirectory קיים
+                        // serviceList הוא עכשיו אובייקט
+                        if (device.serviceList && device.serviceList['ContentDirectory'] && device.serviceList['ContentDirectory'].serviceType === 'urn:schemas-upnp-org:service:ContentDirectory:1') {
                             const browseButton = document.createElement('a');
-                            browseButton.href = 'browser.html?udn=' + device.udn;
+                            browseButton.href = 'browser.html?udn=' + device.UDN; // שימוש ב-UDN (אותיות גדולות)
                             browseButton.textContent = 'Browse';
                             browseButton.className = 'browse-button'; // Apply CSS class
-                            // browseButton.style.marginLeft = '10px'; // Margin is now handled by class or general layout
                             deviceInfoContainer.appendChild(browseButton);
                         }
+                        
                         listItem.appendChild(deviceInfoContainer);
 
-
-                        // Display supported services in a separate container
-                        if (device.supportedServices && device.supportedServices.length > 0) {
+                        // הצגת רשימת השירותים מתוך serviceList (שהוא אובייקט)
+                        if (device.serviceList && Object.keys(device.serviceList).length > 0) {
                             const servicesContainer = document.createElement('div');
                             servicesContainer.className = 'services-container';
-                            const servicesList = document.createElement('ul');
-                            device.supportedServices.forEach(service => {
+                            const servicesTitle = document.createElement('h4'); // הוספת כותרת לרשימת השירותים
+                            servicesTitle.textContent = 'Services:';
+                            servicesTitle.style.marginTop = '10px';
+                            servicesTitle.style.marginBottom = '5px';
+                            servicesContainer.appendChild(servicesTitle);
+                            
+                            const servicesListElement = document.createElement('ul');
+                            Object.keys(device.serviceList).forEach(serviceId => {
                                 const serviceItem = document.createElement('li');
-                                serviceItem.textContent = service;
-                                servicesList.appendChild(serviceItem);
+                                serviceItem.textContent = serviceId; // מציג את מזהה השירות
+                                // אם רוצים להציג פרטים נוספים מהאובייקט של השירות:
+                                // const serviceDetails = device.serviceList[serviceId];
+                                // serviceItem.textContent = `${serviceId} (Control URL: ${serviceDetails.controlURL})`;
+                                servicesListElement.appendChild(serviceItem);
                             });
-                            servicesContainer.appendChild(servicesList)
+                            servicesContainer.appendChild(servicesListElement);
                             listItem.appendChild(servicesContainer);
                         }
                         

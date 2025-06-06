@@ -361,20 +361,19 @@
                     }
                     const devices = await response.json();
                     availableRenderers = devices.filter(device => {
-                        const services = device.serviceList || (device.device && device.device.serviceList); // תמיכה בשני המבנים
-                        if (services && Array.isArray(services.service)) {
-                            return services.service.some(service => service.serviceId === 'urn:schemas-upnp-org:service:AVTransport:1');
-                        } else if (services && services.service && typeof services.service === 'object') { // מקרה של שירות יחיד
-                             return services.service.serviceId === 'urn:schemas-upnp-org:service:AVTransport:1';
+                        // המבנה החדש: device.serviceList הוא אובייקט של שירותים
+                        if (device.serviceList && typeof device.serviceList === 'object') {
+                            for (const serviceKey in device.serviceList) {
+                                const service = device.serviceList[serviceKey];
+                                if (service && service.serviceType === 'urn:schemas-upnp-org:service:AVTransport:1') {
+                                    return true; // מצאנו שירות AVTransport
+                                }
+                            }
                         }
-                        // תמיכה במבנה של supportedServices (אם קיים)
-                        if(device.supportedServices && Array.isArray(device.supportedServices)){
-                            return device.supportedServices.includes('urn:schemas-upnp-org:service:AVTransport:1');
-                        }
-                        return false;
+                        return false; // לא נמצא שירות AVTransport
                     }).map(device => ({
-                        udn: device.udn,
-                        friendlyName: device.friendlyName || (device.device && device.device.friendlyName) || 'Unknown Renderer'
+                        udn: device.UDN, // שימוש ב-UDN כפי שמוחזר מהשרת
+                        friendlyName: device.friendlyName || 'Unknown Renderer'
                     }));
 
                     renderersLoaded = true;

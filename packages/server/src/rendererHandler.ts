@@ -176,9 +176,9 @@ export async function playProcessedItemsOnRenderer(
   try {
     const firstItem = processedItems[0];
     
-    await stopPlayback(avTransportService, renderer.udn);
-    await setAvTransportUri(avTransportService, renderer.udn, firstItem.uri, firstItem.didlXml);
-    await startPlayback(avTransportService, renderer.udn);
+    await stopPlayback(avTransportService, renderer.UDN);
+    await setAvTransportUri(avTransportService, renderer.UDN, firstItem.uri, firstItem.didlXml);
+    await startPlayback(avTransportService, renderer.UDN);
 
     parentLogger.info(`Playback started for first item: ${firstItem.title} on renderer ${renderer.friendlyName}`);
 
@@ -186,7 +186,7 @@ export async function playProcessedItemsOnRenderer(
       for (let i = 1; i < processedItems.length; i++) {
         const nextItem = processedItems[i];
         try {
-          await setNextAvTransportUri(avTransportService, renderer.udn, nextItem.uri, nextItem.didlXml);
+          await setNextAvTransportUri(avTransportService, renderer.UDN, nextItem.uri, nextItem.didlXml);
           parentLogger.info(`Added to playlist: ${nextItem.title}`);
         } catch (playlistError: any) {
           parentLogger.warn(`Error adding item '${nextItem.title}' to playlist: ${playlistError.message}`);
@@ -263,26 +263,28 @@ function getValidatedService(
   serviceFriendlyName: 'ContentDirectory' | 'AVTransport',
   res: Response
 ): ServiceDescription | null {
-  const service = device.serviceList!.find( // Added non-null assertion
+  const servicesArray = Array.from(device.serviceList!.values()); // Added non-null assertion
+  const service = servicesArray.find(
     (s: ServiceDescription) => s.serviceType?.includes(`urn:schemas-upnp-org:service:${serviceTypeIdentifier}`) || s.serviceId?.includes(`urn:upnp-org:serviceId:${serviceTypeIdentifier}`)
   );
 
   if (!service || !service.controlURL || !service.serviceType) {
-    logger.warn(`Request failed: ${serviceFriendlyName} service, controlURL, or serviceType not found for device ${device.udn}.`);
-    res.status(404).send({ error: `${serviceFriendlyName} service, controlURL, or serviceType not found for device ${device.udn}` });
+    logger.warn(`Request failed: ${serviceFriendlyName} service, controlURL, or serviceType not found for device ${device.UDN}.`);
+    res.status(404).send({ error: `${serviceFriendlyName} service, controlURL, or serviceType not found for device ${device.UDN}` });
     return null;
   }
-  logger.debug(`Found ${serviceFriendlyName} service for device ${device.udn}: ${service.serviceId}`);
+  logger.debug(`Found ${serviceFriendlyName} service for device ${device.UDN}: ${service.serviceId}`);
   return service;
 }
 
 // Helper function to stop playback
 async function stopPlayback(avTransportService: ServiceDescription, rendererUdn: string): Promise<void> {
-  if (!avTransportService.actionList || !Array.isArray(avTransportService.actionList)) {
-    logger.warn(`Stop command skipped: AVTransport service for renderer ${rendererUdn} does not have a valid actionList.`);
+  // actionList הוא Map, לא מערך. יש להשתמש ב-values()
+  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
+    logger.warn(`Stop command skipped: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
     return;
   }
-  const stopAction = avTransportService.actionList.find(a => a.name === 'Stop');
+  const stopAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'Stop');
   if (stopAction?.invoke) {
     logger.debug(`Attempting to stop playback on renderer ${rendererUdn}...`);
     try {
@@ -304,10 +306,11 @@ async function setAvTransportUri(
   itemUrl: string,
   itemMetadataXml: string
 ): Promise<void> {
-  if (!avTransportService.actionList || !Array.isArray(avTransportService.actionList)) {
-    throw new Error(`SetAVTransportURI failed: AVTransport service for renderer ${rendererUdn} does not have a valid actionList.`);
+  // actionList הוא Map
+  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
+    throw new Error(`SetAVTransportURI failed: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
   }
-  const setUriAction = avTransportService.actionList.find(a => a.name === 'SetAVTransportURI');
+  const setUriAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'SetAVTransportURI');
   if (!setUriAction?.invoke) {
     throw new Error(`SetAVTransportURI action not found or not invokable on renderer ${rendererUdn}`);
   }
@@ -322,10 +325,11 @@ async function setAvTransportUri(
 
 // Helper function to start Play
 async function startPlayback(avTransportService: ServiceDescription, rendererUdn: string): Promise<void> {
-  if (!avTransportService.actionList || !Array.isArray(avTransportService.actionList)) {
-    throw new Error(`Play command failed: AVTransport service for renderer ${rendererUdn} does not have a valid actionList.`);
+  // actionList הוא Map
+  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
+    throw new Error(`Play command failed: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
   }
-  const playAction = avTransportService.actionList.find(a => a.name === 'Play');
+  const playAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'Play');
   if (!playAction?.invoke) {
     throw new Error(`Play action not found or not invokable on renderer ${rendererUdn}`);
   }
@@ -344,12 +348,13 @@ async function setNextAvTransportUri(
   itemUrl: string,
   itemMetadataXml: string
 ): Promise<void> {
-  if (!avTransportService.actionList || !Array.isArray(avTransportService.actionList)) {
+  // actionList הוא Map
+  if (!avTransportService.actionList || !(avTransportService.actionList instanceof Map)) {
     // Log a warning but don't throw, as the primary playback might have started.
-    logger.warn(`SetNextAVTransportURI skipped: AVTransport service for renderer ${rendererUdn} does not have a valid actionList.`);
+    logger.warn(`SetNextAVTransportURI skipped: AVTransport service for renderer ${rendererUdn} does not have a valid actionList Map.`);
     return;
   }
-  const setNextUriAction = avTransportService.actionList.find(a => a.name === 'SetNextAVTransportURI');
+  const setNextUriAction = Array.from(avTransportService.actionList.values()).find(a => a.name === 'SetNextAVTransportURI');
   if (!setNextUriAction?.invoke) {
     logger.warn(`SetNextAVTransportURI action not found or not invokable on renderer ${rendererUdn}. Cannot add to playlist.`);
     return;
@@ -375,18 +380,18 @@ async function executePlaybackCommands(
   itemNameForLog: string
 ): Promise<void> {
   if (!renderer.baseURL) {
-    logger.error(`executePlaybackCommands: Renderer ${renderer.udn} is missing baseURL.`);
-    res.status(500).send({ error: `Renderer ${renderer.udn} is missing essential information (baseURL).` });
+    logger.error(`executePlaybackCommands: Renderer ${renderer.UDN} is missing baseURL.`);
+    res.status(500).send({ error: `Renderer ${renderer.UDN} is missing essential information (baseURL).` });
     return;
   }
 
   try {
-    await stopPlayback(avTransportService, renderer.udn); // Good practice to stop first
-    await setAvTransportUri(avTransportService, renderer.udn, itemUrl, itemMetadataXml);
-    await startPlayback(avTransportService, renderer.udn);
+    await stopPlayback(avTransportService, renderer.UDN); // Good practice to stop first
+    await setAvTransportUri(avTransportService, renderer.UDN, itemUrl, itemMetadataXml);
+    await startPlayback(avTransportService, renderer.UDN);
     res.status(200).send({ success: true, message: `Playback started on ${renderer.friendlyName} for item ${itemNameForLog}` });
   } catch (error: any) {
-    logger.error(`SOAP command failed for renderer ${renderer.udn} during single item playback:`, {
+    logger.error(`SOAP command failed for renderer ${renderer.UDN} during single item playback:`, {
       message: error.message,
       stack: error.stack,
       details: error.soapFault || error.details
