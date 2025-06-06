@@ -1,4 +1,4 @@
-import { createModuleLogger, ActiveDeviceManager, type ActiveDeviceManagerOptions, type ApiDevice as CoreApiDevice, type RawSsdpMessagePayload } from 'dlna.js';
+import { createModuleLogger, ActiveDeviceManager, type ActiveDeviceManagerOptions, type ApiDevice, type RawSsdpMessagePayload } from 'dlna.js';
 import type { RemoteInfo } from 'node:dgram';
 // import type { ApiDevice } from './types'; // ApiDevice יגיע מ-dlna-core
 import { DEFAULT_DISCOVERY_OPTIONS, MAX_RAW_MESSAGES } from './config';
@@ -15,7 +15,7 @@ const rawMessagesBuffer: RawMessagesBufferEntry[] = [];
 
 // מפה לאחסון המכשירים הפעילים שנתגלו
 // הטיפוס ApiDevice מיובא כעת מ-dlna-core
-const activeDevices: Map<string, CoreApiDevice> = new Map();
+const activeDevices: Map<string, ApiDevice> = new Map();
 
 // הגדרת האופציות עבור ActiveDeviceManager
 // יש לוודא שהאופציות ב-DEFAULT_DISCOVERY_OPTIONS תואמות ל-ActiveDeviceManagerOptions
@@ -52,17 +52,17 @@ function getCoreDeviceManager(): ActiveDeviceManager {
 }
 
 function initializeDeviceManagerEvents(manager: ActiveDeviceManager): void {
-  manager.on('devicefound', (usn: string, device: CoreApiDevice) => {
+  manager.on('devicefound', (usn: string, device: ApiDevice) => {
     activeDevices.set(usn, device);
     logger.info(`Device found: ${device.friendlyName} (USN: ${usn}, UDN: ${device.UDN})`);
   });
 
-  manager.on('deviceupdated', (usn: string, device: CoreApiDevice) => {
+  manager.on('deviceupdated', (usn: string, device: ApiDevice) => {
     activeDevices.set(usn, device);
     logger.info(`Device updated: ${device.friendlyName} (USN: ${usn}, UDN: ${device.UDN})`);
   });
 
-  manager.on('devicelost', (usn: string, device: CoreApiDevice) => { // device כאן הוא האובייקט שנמחק
+  manager.on('devicelost', (usn: string, device: ApiDevice) => { // device כאן הוא האובייקט שנמחק
     activeDevices.delete(usn);
     logger.info(`Device lost: ${device.friendlyName} (USN: ${usn}, UDN: ${device.UDN})`);
   });
@@ -114,9 +114,9 @@ export async function stopDiscovery(): Promise<void> {
 
 /**
  * @hebrew מחזיר את רשימת המכשירים הפעילים הנוכחית.
- * @returns {Map<string, CoreApiDevice>} מפה של המכשירים הפעילים.
+ * @returns {Map<string, ApiDevice>} מפה של המכשירים הפעילים.
  */
-export function getActiveDevices(): Map<string, CoreApiDevice> {
+export function getActiveDevices(): Map<string, ApiDevice> {
   // ActiveDeviceManager מחזיק את רשימת המכשירים העדכנית בעצמו
   // והאירועים שלו מעדכנים את המפה המקומית activeDevices
   return activeDevices;

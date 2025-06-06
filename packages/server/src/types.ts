@@ -9,11 +9,11 @@ import type {
  */
 // הגדרת טיפוס עבור אובייקט אייקון, כפי שנשלח ללקוח
 export interface ApiDeviceIcon {
-    mimetype: string;
+    mimetype?: string; // הפך לאופציונלי
     width: number;
     height: number;
     depth: number;
-    url: string;
+    url?: string; // הפך לאופציונלי
 }
 
 export interface ApiDevice {
