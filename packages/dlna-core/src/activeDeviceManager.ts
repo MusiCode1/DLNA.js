@@ -67,8 +67,6 @@ export class ActiveDeviceManager extends EventEmitter {
     let parserType: typeof HTTP_REQUEST_TYPE | typeof HTTP_RESPONSE_TYPE;
 
     // קביעת סוג הפרסר על סמך תוכן ההודעה
-    // SSDP NOTIFY ו-M-SEARCH הן בקשות HTTP
-    // תגובות SSDP מתחילות ב-HTTP/
     if (msgString.startsWith('NOTIFY') || msgString.startsWith('M-SEARCH')) {
       parserType = HTTP_REQUEST_TYPE;
     } else if (msgString.startsWith('HTTP/')) {
@@ -86,7 +84,7 @@ export class ActiveDeviceManager extends EventEmitter {
     }
 
     const { headers, method, statusCode, statusMessage, versionMajor, versionMinor } = parsedPacket;
-    const normalizedHeaders = headers; // headers כבר מנורמלים ב-parseHttpPacket
+    const normalizedHeaders = headers;
 
     const httpVersionString = (versionMajor !== undefined && versionMinor !== undefined)
       ? `${versionMajor}.${versionMinor}`
@@ -108,10 +106,31 @@ export class ActiveDeviceManager extends EventEmitter {
       }
     }
 
-    if (!usn || usn.trim() === '') { // בדיקה מורחבת: USN חסר, ריק, או רק רווחים
+    if (!usn || usn.trim() === '') {
       logger.debug('_parseAndMapSsdpMessage: USN is missing, empty, or only whitespace in SSDP message headers. Ignoring message.', { usnValueReceived: usn, remoteAddress: rinfo.address, headers: normalizedHeaders });
       return null;
     }
+
+    // חילוץ UDN מה-USN
+    // ה-UDN הוא בדרך כלל החלק שלפני '::'
+    // אם אין '::', ה-USN כולו יכול להיחשב כ-UDN (למשל, עבור שירותים מסוימים או התקנים שאינם root)
+    // עם זאת, עבור root device, ה-UDN הוא תמיד החלק הראשון.
+    let UDN: string;
+    const doubleColonIndex = usn.indexOf('::');
+    if (doubleColonIndex !== -1) {
+      UDN = usn.substring(0, doubleColonIndex);
+    } else {
+      // במקרה שאין '::', ייתכן שזה USN של שירות שאינו root, או USN של root device שאינו מכיל '::' (פחות נפוץ)
+      // במקרה זה, נשתמש ב-USN כולו כ-UDN, אך נצטרך להיות זהירים יותר בהמשך.
+      // ההנחה היא ש-UDN אמור להיות ייחודי להתקן הפיזי.
+      UDN = usn;
+      logger.debug(`_parseAndMapSsdpMessage: USN "${usn}" does not contain "::". Using full USN as UDN. This might be a non-root device USN or an unusual root device USN.`);
+    }
+     // בדיקה נוספת: אם ה-UDN שחולץ עדיין מכיל uuid:, נסיר אותו.
+    if (UDN.startsWith('uuid:')) {
+        UDN = UDN.substring(5);
+    }
+
 
     const finalSt = stHeader || ntHeader;
     if (!finalSt) {
@@ -119,13 +138,13 @@ export class ActiveDeviceManager extends EventEmitter {
       return null;
     }
 
-    // קביעת messageType על סמך parserType
     const messageType = parserType === HTTP_REQUEST_TYPE ? 'REQUEST' : 'RESPONSE';
 
     const basicDevice: BasicSsdpDevice = {
-      usn,
-      location: location || '', // Location יכול להיות חסר, למשל בהודעות M-SEARCH
-      server: server || '', // Server יכול להיות חסר
+      usn, // USN המלא של ההודעה
+      UDN, // UDN שחולץ
+      location: location || '',
+      server: server || '',
       st: finalSt,
       remoteAddress: rinfo.address,
       remotePort: rinfo.port,
@@ -138,20 +157,17 @@ export class ActiveDeviceManager extends EventEmitter {
       cacheControlMaxAge,
       nts: ntsHeader,
       httpVersion: httpVersionString,
-      detailLevelAchieved: DiscoveryDetailLevel.Basic, // הוספת שדה חובה
+      detailLevelAchieved: DiscoveryDetailLevel.Basic,
     };
 
     if (basicDevice.httpMethod === 'M-SEARCH') {
-      logger.debug(`_parseAndMapSsdpMessage: Received M-SEARCH request from ${rinfo.address}:${rinfo.port}. Ignoring for now.`, { usn: basicDevice.usn });
-      // ממשיכים להחזיר את ההתקן המפוענח גם אם זה M-SEARCH
+      logger.debug(`_parseAndMapSsdpMessage: Received M-SEARCH request from ${rinfo.address}:${rinfo.port}.`, { usn: basicDevice.usn, UDN: basicDevice.UDN });
     }
 
-    // בדיקה נוספת: Location הוא שדה חובה עבור הודעות שאינן M-SEARCH ושיש להן משמעות לגילוי התקן
     if (basicDevice.httpMethod !== 'M-SEARCH' && messageType === 'RESPONSE' && !location) {
-      logger.debug('_parseAndMapSsdpMessage: Location is missing in SSDP response headers.', { remoteAddress: rinfo.address, usn: basicDevice.usn, headers: normalizedHeaders });
+      logger.debug('_parseAndMapSsdpMessage: Location is missing in SSDP response headers.', { remoteAddress: rinfo.address, usn: basicDevice.usn, UDN: basicDevice.UDN, headers: normalizedHeaders });
       return null;
     }
-
 
     return basicDevice;
   }
@@ -171,32 +187,43 @@ export class ActiveDeviceManager extends EventEmitter {
       return;
     }
 
-    if (!basicDevice.usn) {
-      logger.error('_handleSsdpMessage: Received SSDP message without USN. Ignoring.', { remoteAddress: rinfo.address, headers: basicDevice.headers });
+    if (!basicDevice.usn || !basicDevice.UDN) {
+      logger.error('_handleSsdpMessage: Received SSDP message without USN or UDN. Ignoring.', { remoteAddress: rinfo.address, headers: basicDevice.headers, usn: basicDevice.usn, UDN: basicDevice.UDN });
       return;
     }
 
     // הודעת byebye לא חייבת להכיל location
     if (basicDevice.nts !== 'ssdp:byebye' && !basicDevice.location) {
-      logger.error('_handleSsdpMessage: Received SSDP message (not byebye) without Location. Ignoring.', { usn: basicDevice.usn, remoteAddress: rinfo.address, headers: basicDevice.headers });
+      logger.error('_handleSsdpMessage: Received SSDP message (not byebye) without Location. Ignoring.', { usn: basicDevice.usn, UDN: basicDevice.UDN, remoteAddress: rinfo.address, headers: basicDevice.headers });
       return;
     }
 
     // טיפול בהודעת ssdp:byebye
     if (basicDevice.nts === 'ssdp:byebye') {
-      if (this.activeDevices.has(basicDevice.usn)) {
-        const lostDevice = this.activeDevices.get(basicDevice.usn);
-        this.activeDevices.delete(basicDevice.usn);
-        // ניצור אובייקט דומה ל-ApiDevice עבור האירוע, אך עם המידע מ-basicDevice
-        // מאחר ו-lostDevice עשוי להיות מורכב יותר, ו-basicDevice הוא המידע העדכני מההודעה
-        const eventDeviceData: Partial<ApiDevice> = {
-          ...basicDevice, // כולל usn, location, server, st, remoteAddress, remotePort, headers, detailLevelAchieved
-          lastSeen: Date.now(), // למרות שזה byebye, נציין מתי נראה לאחרונה
-        };
-        this.emit('devicelost', basicDevice.usn, eventDeviceData as ApiDevice); // המרה ל-ApiDevice לצורך האירוע
-        logger.info(`_handleSsdpMessage: Device lost (ssdp:byebye): ${basicDevice.usn}`, { usn: basicDevice.usn, remoteAddress: basicDevice.remoteAddress });
+      // ה-UDN מההודעה הוא המפתח לחיפוש במאגר
+      const deviceUdn = basicDevice.UDN;
+      const existingDevice = this.activeDevices.get(deviceUdn);
+
+      if (existingDevice) {
+        // בדיקה אם ההודעה מתייחסת ל-rootdevice
+        // ה-USN של ההודעה צריך להתחיל ב-UDN של המכשיר ולהסתיים ב-"::upnp:rootdevice" או שה-NT הוא "upnp:rootdevice"
+        // או שה-USN של ההודעה זהה ל-UDN (במקרה של USN שהוא רק UDN)
+        const isRootDeviceByeBye = basicDevice.st === 'upnp:rootdevice' ||
+                                   basicDevice.usn === deviceUdn || // מכסה מקרה ש-USN הוא רק UDN
+                                   (basicDevice.usn.startsWith(deviceUdn) && basicDevice.usn.includes('::upnp:rootdevice'));
+
+
+        if (isRootDeviceByeBye) {
+          this.activeDevices.delete(deviceUdn);
+          this.emit('devicelost', deviceUdn, existingDevice); // שולחים את ה-ApiDevice שהיה קיים
+          logger.info(`_handleSsdpMessage: Device lost (ssdp:byebye for root device): UDN=${deviceUdn}, USN=${basicDevice.usn}`, { UDN: deviceUdn, usn: basicDevice.usn, remoteAddress: basicDevice.remoteAddress });
+        } else {
+          // אם זה byebye של שירות ספציפי, כרגע לא נסיר את כל המכשיר, רק נרשום לוג.
+          // בעתיד, אפשר לשקול עדכון של רשימת השירותים של המכשיר.
+          logger.debug(`_handleSsdpMessage: Received ssdp:byebye for a specific service of device UDN=${deviceUdn}, USN=${basicDevice.usn}. Device not removed.`, { UDN: deviceUdn, usn: basicDevice.usn, serviceSt: basicDevice.st });
+        }
       } else {
-        logger.debug(`_handleSsdpMessage: Received ssdp:byebye for an unknown device: ${basicDevice.usn}`, { usn: basicDevice.usn, remoteAddress: basicDevice.remoteAddress });
+        logger.debug(`_handleSsdpMessage: Received ssdp:byebye for an unknown device UDN: ${deviceUdn}, USN: ${basicDevice.usn}`, { UDN: deviceUdn, usn: basicDevice.usn, remoteAddress: basicDevice.remoteAddress });
       }
       return;
     }
@@ -206,83 +233,90 @@ export class ActiveDeviceManager extends EventEmitter {
     if (basicDevice.cacheControlMaxAge && basicDevice.cacheControlMaxAge > 0) {
       expiresAt = Date.now() + (basicDevice.cacheControlMaxAge * 1000);
     } else {
-      // ברירת מחדל אם max-age לא קיים או לא תקין
-      expiresAt = Date.now() + (this.options.mSearchIntervalMs * 3); // לדוגמה, פי 3 ממרווח החיפוש
-      logger.debug(`_handleSsdpMessage: No valid max-age in CACHE-CONTROL for USN: ${basicDevice.usn}. Using default expiration.`, { usn: basicDevice.usn, headers: basicDevice.headers, defaultExpiresIn: this.options.mSearchIntervalMs * 3 });
+      expiresAt = Date.now() + (this.options.mSearchIntervalMs * 3);
+      logger.debug(`_handleSsdpMessage: No valid max-age in CACHE-CONTROL for UDN: ${basicDevice.UDN}, USN: ${basicDevice.usn}. Using default expiration.`, { UDN: basicDevice.UDN, usn: basicDevice.usn, headers: basicDevice.headers, defaultExpiresIn: this.options.mSearchIntervalMs * 3 });
     }
 
-    const existingDevice = this.activeDevices.get(basicDevice.usn);
+    const deviceUdn = basicDevice.UDN;
+    const existingDevice = this.activeDevices.get(deviceUdn);
 
     if (existingDevice) {
       // מכשיר קיים
       existingDevice.lastSeen = Date.now();
       existingDevice.expiresAt = expiresAt;
       // עדכון פרטים בסיסיים מההודעה הנוכחית אם השתנו (למשל, location, server)
-      existingDevice.location = basicDevice.location || existingDevice.location;
+      // חשוב: אם ה-location השתנה, זה יכול להצביע על שינוי משמעותי
+      const locationChanged = existingDevice.location !== basicDevice.location && basicDevice.location;
+      if (locationChanged) {
+        logger.info(`_handleSsdpMessage: Location changed for existing device UDN=${deviceUdn}. Old: ${existingDevice.location}, New: ${basicDevice.location}`);
+        existingDevice.location = basicDevice.location!;
+      }
       existingDevice.server = basicDevice.server || existingDevice.server;
-      existingDevice.remoteAddress = basicDevice.remoteAddress; // כתובת IP יכולה להשתנות
+      existingDevice.remoteAddress = basicDevice.remoteAddress;
       existingDevice.remotePort = basicDevice.remotePort;
+      // עדכון ה-USN של ה-root device אם ההודעה הנוכחית היא מה-root device
+      if (basicDevice.usn.startsWith(deviceUdn) && (basicDevice.st === 'upnp:rootdevice' || basicDevice.usn.includes('::upnp:rootdevice') || basicDevice.usn === deviceUdn)) {
+        existingDevice.usn = basicDevice.usn;
+      }
+
 
       let detailLevelUpdated = false;
 
-      // ודא ש-location קיים לפני קריאה ל-processUpnpDevice אם הוא נדרש שם (למרות שכאן אנו מעבירים את basicDevice כולו)
-      if (existingDevice.detailLevelAchieved < this.options.detailLevel && basicDevice.location) {
-        logger.debug(`_handleSsdpMessage: Attempting to update details for existing device: ${existingDevice.usn}`, { currentDetailLevel: existingDevice.detailLevelAchieved, requestedDetailLevel: this.options.detailLevel });
+      if ((locationChanged || existingDevice.detailLevelAchieved < this.options.detailLevel) && basicDevice.location) {
+        logger.debug(`_handleSsdpMessage: Attempting to update details for existing device: UDN=${deviceUdn}`, { currentDetailLevel: existingDevice.detailLevelAchieved, requestedDetailLevel: this.options.detailLevel, locationChanged });
         try {
-          // processUpnpDevice אינו מקבל existingDevice כפרמטר למזג אליו.
-          // הוא מעבד את basicDevice ומחזיר ProcessedDevice חדש.
-          // אין לנו AbortSignal כאן, אז הפרמטר השלישי יהיה undefined (ברירת מחדל).
-          const processedData = await processUpnpDevice(basicDevice, this.options.detailLevel /*, undefined - AbortSignal */);
+          const processedData = await processUpnpDevice(basicDevice, this.options.detailLevel);
           if (processedData) {
-            // נמזג את התוצאה מ-processedData לתוך existingDevice.
-            // יש לוודא ששדות מ-basicDevice שאינם בהכרח ב-processedData (אם processedData הוא ברמה גבוהה יותר)
-            // לא נדרסים אם הם עדכניים יותר ב-basicDevice (למשל, remoteAddress, remotePort).
-            // עם זאת, processUpnpDevice אמור להחזיר את כל המידע הרלוונטי מ-basicDevice כבסיס.
-
-            // מיזוג זהיר: שדות מ-processedData גוברים, אך שדות חיוניים כמו usn נשמרים.
+            // מיזוג זהיר: שדות מ-processedData גוברים, אך שדות חיוניים כמו UDN נשמרים.
             // lastSeen ו-expiresAt כבר עודכנו למעלה.
-            const currentUsn = existingDevice.usn; // שמירת ה-USN למקרה ש-processedData מגיע ללא (לא אמור לקרות)
-            Object.assign(existingDevice, processedData);
-            existingDevice.usn = currentUsn; // הבטחת ה-USN המקורי
+            const currentUdn = existingDevice.UDN; // שמירת ה-UDN
+            const currentRootUsn = existingDevice.usn; // שמירת ה-USN של ה-root
 
-            // ודא ש-detailLevelAchieved מעודכן לרמה שהושגה בפועל
+            Object.assign(existingDevice, processedData);
+
+            existingDevice.UDN = currentUdn; // הבטחת ה-UDN המקורי
+            // אם ה-USN ב-processedData הוא של שירות, נשמור את ה-USN של ה-root
+            if (processedData.usn && !processedData.usn.startsWith(currentUdn) || (processedData.usn.includes('::') && !processedData.usn.includes('::upnp:rootdevice'))) {
+                existingDevice.usn = currentRootUsn;
+            } else if (processedData.usn) {
+                existingDevice.usn = processedData.usn; // אם זה USN של root, נעדכן
+            }
+
+
             existingDevice.detailLevelAchieved = processedData.detailLevelAchieved || this.options.detailLevel;
-            // עדכון שדות נוספים מ-ApiDevice אם צריך, למרות ש-Object.assign אמור לכסות את רובם אם הם קיימים ב-processedData
-            existingDevice.lastSeen = Date.now(); // נרענן שוב למקרה שהעיבוד לקח זמן
-            existingDevice.expiresAt = expiresAt; // expiresAt חושב לפני כן
+            existingDevice.lastSeen = Date.now();
+            existingDevice.expiresAt = expiresAt;
 
             detailLevelUpdated = true;
-            logger.info(`_handleSsdpMessage: Successfully updated details for device: ${existingDevice.usn} to level ${existingDevice.detailLevelAchieved}`, { usn: existingDevice.usn });
+            logger.info(`_handleSsdpMessage: Successfully updated details for device: UDN=${existingDevice.UDN} to level ${existingDevice.detailLevelAchieved}`, { UDN: existingDevice.UDN, usn: existingDevice.usn });
           } else {
-            logger.warn(`_handleSsdpMessage: Failed to get updated description for existing device: ${existingDevice.usn} from location ${basicDevice.location}`, { usn: existingDevice.usn });
+            logger.warn(`_handleSsdpMessage: Failed to get updated description for existing device: UDN=${deviceUdn} from location ${basicDevice.location}`, { UDN: deviceUdn, usn: basicDevice.usn });
           }
         } catch (error) {
-          logger.error(`_handleSsdpMessage: Error processing device description update for existing device ${existingDevice.usn}: ${error instanceof Error ? error.message : String(error)}`, { usn: existingDevice.usn, location: basicDevice.location, error });
+          logger.error(`_handleSsdpMessage: Error processing device description update for existing device UDN=${deviceUdn}: ${error instanceof Error ? error.message : String(error)}`, { UDN: deviceUdn, usn: basicDevice.usn, location: basicDevice.location, error });
         }
       }
 
-      this.activeDevices.set(existingDevice.usn, existingDevice);
-      this.emit('deviceupdated', existingDevice.usn, existingDevice);
-      logger.debug(`_handleSsdpMessage: Device updated: ${existingDevice.usn}`, { usn: existingDevice.usn, detailLevelUpdated });
+      this.activeDevices.set(existingDevice.UDN, existingDevice); // המפתח הוא UDN
+      this.emit('deviceupdated', existingDevice.UDN, existingDevice); // שולחים UDN
+      logger.debug(`_handleSsdpMessage: Device updated: UDN=${existingDevice.UDN}`, { UDN: existingDevice.UDN, usn: existingDevice.usn, detailLevelUpdated });
 
     } else {
       // מכשיר חדש
       if (!basicDevice.location) {
-        // זה לא אמור לקרות כי בדקנו location למעלה עבור הודעות שאינן byebye
-        logger.error('_handleSsdpMessage: Trying to process new device without location. This should not happen.', { usn: basicDevice.usn });
+        logger.error('_handleSsdpMessage: Trying to process new device without location. This should not happen.', { UDN: basicDevice.UDN, usn: basicDevice.usn });
         return;
       }
 
-      logger.debug(`_handleSsdpMessage: Attempting to process new device: ${basicDevice.usn} at ${basicDevice.location}`, { requestedDetailLevel: this.options.detailLevel });
+      logger.debug(`_handleSsdpMessage: Attempting to process new device: UDN=${basicDevice.UDN}, USN=${basicDevice.usn} at ${basicDevice.location}`, { requestedDetailLevel: this.options.detailLevel });
       try {
         const processedData = await processUpnpDevice(basicDevice, this.options.detailLevel);
         if (processedData) {
-          // processedData הוא ProcessedDevice. ApiDevice מרחיב את FullDeviceDescription.
-          // נצטרך למפות את השדות בזהירות.
           const newApiDevice: ApiDevice = {
-            // שדות מ-BasicSsdpDevice
-            usn: basicDevice.usn, // שימוש ישיר ב-basicDevice.usn כדי להיות בטוח
-            location: processedData.location || basicDevice.location || '', // ודא ש-location הוא מחרוזת
+            // שדות מ-BasicSsdpDevice (דרך processedData)
+            usn: processedData.usn, // ה-USN מההודעה שגרמה לגילוי/עיבוד
+            UDN: basicDevice.UDN, // ה-UDN שחולץ מההודעה המקורית
+            location: processedData.location || basicDevice.location || '',
             server: processedData.server || '',
             st: processedData.st,
             remoteAddress: processedData.remoteAddress,
@@ -297,10 +331,9 @@ export class ActiveDeviceManager extends EventEmitter {
             nts: processedData.nts,
             httpVersion: processedData.httpVersion,
 
-            // שדות מ-DeviceDescription (קיימים אם detailLevelAchieved >= Description)
-            // יש לספק ערכי ברירת מחדל אם processedData הוא רק BasicSsdpDevice
+            // שדות מ-DeviceDescription
             deviceType: (processedData as DeviceDescription).deviceType || basicDevice.st,
-            friendlyName: (processedData as DeviceDescription).friendlyName || basicDevice.usn,
+            friendlyName: (processedData as DeviceDescription).friendlyName || basicDevice.UDN, // שימוש ב-UDN אם אין שם ידידותי
             manufacturer: (processedData as DeviceDescription).manufacturer || '',
             manufacturerURL: (processedData as DeviceDescription).manufacturerURL,
             modelDescription: (processedData as DeviceDescription).modelDescription,
@@ -308,11 +341,11 @@ export class ActiveDeviceManager extends EventEmitter {
             modelNumber: (processedData as DeviceDescription).modelNumber,
             modelURL: (processedData as DeviceDescription).modelURL,
             serialNumber: (processedData as DeviceDescription).serialNumber,
-            UDN: (processedData as DeviceDescription).UDN || basicDevice.usn.split('::')[0],
+            // UDN כבר הוגדר למעלה מ-basicDevice.UDN
             presentationURL: (processedData as DeviceDescription).presentationURL,
             iconList: (processedData as DeviceDescription).iconList || [],
             serviceList: (processedData as DeviceDescription).serviceList || new Map(),
-            deviceList: (processedData as DeviceDescription).deviceList, // יכול להיות undefined
+            deviceList: (processedData as DeviceDescription).deviceList,
             baseURL: (processedData as DeviceDescription).baseURL,
             URLBase: (processedData as DeviceDescription).URLBase,
             UPC: (processedData as DeviceDescription).UPC,
@@ -322,41 +355,50 @@ export class ActiveDeviceManager extends EventEmitter {
             expiresAt,
             detailLevelAchieved: processedData.detailLevelAchieved || DiscoveryDetailLevel.Basic,
           };
-          logger.debug(`_handleSsdpMessage: Created newApiDevice for USN '${newApiDevice.usn}': friendlyName='${newApiDevice.friendlyName}', UDN='${newApiDevice.UDN}'`);
-          this.activeDevices.set(newApiDevice.usn, newApiDevice);
-          this.emit('devicefound', newApiDevice.usn, newApiDevice);
-          // שינוי הלוג לפורמט זהה ללוג הדיבאג הקודם לו
-          logger.info(`_handleSsdpMessage: (INFO) Processed newApiDevice for USN '${newApiDevice.usn}': friendlyName='${newApiDevice.friendlyName}', UDN='${newApiDevice.UDN}', detailLevel='${newApiDevice.detailLevelAchieved}'`);
+          // ודא שה-UDN ב-newApiDevice הוא אכן ה-UDN שחולץ מההודעה
+          newApiDevice.UDN = basicDevice.UDN;
+          // ודא שה-USN ב-newApiDevice הוא ה-USN של ה-root device אם אפשר
+          if (newApiDevice.usn && newApiDevice.usn.startsWith(basicDevice.UDN) && (newApiDevice.st === 'upnp:rootdevice' || newApiDevice.usn.includes('::upnp:rootdevice') || newApiDevice.usn === basicDevice.UDN)) {
+            // ה-USN הנוכחי הוא כנראה של ה-root, אז זה בסדר
+          } else {
+            // אם ה-USN הנוכחי הוא של שירות, ננסה לשים את ה-USN מההודעה המקורית אם הוא של ה-root
+            if (basicDevice.usn.startsWith(basicDevice.UDN) && (basicDevice.st === 'upnp:rootdevice' || basicDevice.usn.includes('::upnp:rootdevice') || basicDevice.usn === basicDevice.UDN)) {
+              newApiDevice.usn = basicDevice.usn;
+            }
+            // אחרת, ה-USN יישאר כפי שהוא מ-processedData, וזה יכול להיות USN של שירות
+          }
+
+
+          logger.debug(`_handleSsdpMessage: Created newApiDevice for UDN '${newApiDevice.UDN}', USN '${newApiDevice.usn}': friendlyName='${newApiDevice.friendlyName}'`);
+          this.activeDevices.set(newApiDevice.UDN, newApiDevice); // מפתח הוא UDN
+          this.emit('devicefound', newApiDevice.UDN, newApiDevice); // שולחים UDN
+          logger.info(`_handleSsdpMessage: (INFO) Processed newApiDevice for UDN '${newApiDevice.UDN}', USN '${newApiDevice.usn}': friendlyName='${newApiDevice.friendlyName}', detailLevel='${newApiDevice.detailLevelAchieved}'`);
+
         } else {
-          // אם לא הצלחנו לקבל תיאור מלא, ורמת הפירוט המבוקשת היא רק Basic,
-          // אז basicDevice עצמו מספיק כדי ליצור ApiDevice בסיסי.
           if (this.options.detailLevel === DiscoveryDetailLevel.Basic) {
             const basicApiDevice: ApiDevice = {
-              ...basicDevice, // כל השדות מ-BasicSsdpDevice
-              // שדות חובה מ-DeviceDescription שצריך לספק להם ערכי ברירת מחדל
+              ...basicDevice, // כל השדות מ-BasicSsdpDevice, כולל UDN
               deviceType: basicDevice.st,
-              friendlyName: basicDevice.usn,
-              manufacturer: '', // ערך ברירת מחדל
-              modelName: '', // ערך ברירת מחדל
-              UDN: basicDevice.usn.split('::')[0], // ברירת מחדל
+              friendlyName: basicDevice.UDN, // שימוש ב-UDN אם אין שם ידידותי
+              manufacturer: '',
+              modelName: '',
+              // UDN כבר כלול ב-basicDevice
               iconList: [],
               serviceList: new Map(),
-              // שדות מ-ApiDevice
               lastSeen: Date.now(),
               expiresAt,
               detailLevelAchieved: DiscoveryDetailLevel.Basic,
             };
-            logger.debug(`_handleSsdpMessage: Created basicApiDevice for USN '${basicApiDevice.usn}': friendlyName='${basicApiDevice.friendlyName}', UDN='${basicApiDevice.UDN}'`);
-            this.activeDevices.set(basicApiDevice.usn, basicApiDevice);
-            this.emit('devicefound', basicApiDevice.usn, basicApiDevice);
-            // שינוי הלוג לפורמט זהה ללוג הדיבאג הקודם לו
-            logger.info(`_handleSsdpMessage: (INFO) Processed basicApiDevice for USN '${basicApiDevice.usn}': friendlyName='${basicApiDevice.friendlyName}', UDN='${basicApiDevice.UDN}', detailLevel='${basicApiDevice.detailLevelAchieved}'`);
+            logger.debug(`_handleSsdpMessage: Created basicApiDevice for UDN '${basicApiDevice.UDN}', USN '${basicApiDevice.usn}': friendlyName='${basicApiDevice.friendlyName}'`);
+            this.activeDevices.set(basicApiDevice.UDN, basicApiDevice); // מפתח הוא UDN
+            this.emit('devicefound', basicApiDevice.UDN, basicApiDevice); // שולחים UDN
+            logger.info(`_handleSsdpMessage: (INFO) Processed basicApiDevice for UDN '${basicApiDevice.UDN}', USN '${basicApiDevice.usn}': friendlyName='${basicApiDevice.friendlyName}', detailLevel='${basicApiDevice.detailLevelAchieved}'`);
           } else {
-            logger.warn(`_handleSsdpMessage: Failed to get sufficient description for new device: ${basicDevice.usn} at ${basicDevice.location} (requested level: ${this.options.detailLevel}). Device not added.`, { usn: basicDevice.usn });
+            logger.warn(`_handleSsdpMessage: Failed to get sufficient description for new device: UDN=${basicDevice.UDN}, USN=${basicDevice.usn} at ${basicDevice.location} (requested level: ${this.options.detailLevel}). Device not added.`, { UDN: basicDevice.UDN, usn: basicDevice.usn });
           }
         }
       } catch (error) {
-        logger.error(`_handleSsdpMessage: Error processing device description for new device ${basicDevice.usn}: ${error instanceof Error ? error.message : String(error)}`, { usn: basicDevice.usn, location: basicDevice.location, error });
+        logger.error(`_handleSsdpMessage: Error processing device description for new device UDN=${basicDevice.UDN}, USN=${basicDevice.usn}: ${error instanceof Error ? error.message : String(error)}`, { UDN: basicDevice.UDN, usn: basicDevice.usn, location: basicDevice.location, error });
       }
     }
   }
@@ -369,12 +411,12 @@ export class ActiveDeviceManager extends EventEmitter {
     const now = Date.now();
     logger.debug(`_cleanupDevices: Starting cleanup. Current active devices: ${this.activeDevices.size}`);
 
-    for (const [usn, device] of this.activeDevices.entries()) {
+    for (const [udn, device] of this.activeDevices.entries()) {
       if (device.expiresAt < now) {
-        this.activeDevices.delete(usn);
-        // חשוב: האירוע 'devicelost' מצפה לקבל את ה-USN ואת אובייקט ה-ApiDevice
-        this.emit('devicelost', usn, device);
-        logger.info(`_cleanupDevices: Removed expired device: ${usn} (FriendlyName: ${device.friendlyName}, ExpiresAt: ${new Date(device.expiresAt).toISOString()})`, { usn, friendlyName: device.friendlyName });
+        this.activeDevices.delete(udn);
+        // האירוע 'devicelost' מצפה לקבל את ה-UDN ואת אובייקט ה-ApiDevice
+        this.emit('devicelost', udn, device);
+        logger.info(`_cleanupDevices: Removed expired device: UDN=${udn} (FriendlyName: ${device.friendlyName}, USN: ${device.usn}, ExpiresAt: ${new Date(device.expiresAt).toISOString()})`, { udn, friendlyName: device.friendlyName, usn: device.usn });
       }
     }
     logger.debug(`_cleanupDevices: Finished cleanup. Active devices after cleanup: ${this.activeDevices.size}`);

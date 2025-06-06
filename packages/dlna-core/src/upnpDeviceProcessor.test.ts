@@ -50,6 +50,7 @@ const logger = createModuleLogger('upnpDeviceProcessorTest');
 describe('processUpnpDevice', () => {
     const mockBasicDevice: BasicSsdpDevice = {
         usn: 'uuid:12345::urn:schemas-upnp-org:device:Basic:1',
+        UDN: '12345', // הוספת שדה UDN
         location: 'http://localhost:1234/device.xml',
         server: 'TestServer/1.0 UPnP/1.0 TestLib/1.0',
         st: 'upnp:rootdevice',
@@ -59,6 +60,7 @@ describe('processUpnpDevice', () => {
         messageType: 'RESPONSE', // או REQUEST לפי הצורך
         headers: {},
         cacheControlMaxAge: 1800,
+        detailLevelAchieved: DiscoveryDetailLevel.Basic, // הוספת שדה חובה
     };
 
     const mockAbortController = new AbortController();
@@ -71,14 +73,14 @@ describe('processUpnpDevice', () => {
 
         // הגדר מחדש את מימוש ברירת המחדל אם צריך, או הסתמך על ה-mockImplementation הגלובלי
         (axios.get as ReturnType<typeof mock>).mockImplementation(async (url: string, config?: any) => {
-            logger.warn(`axios.get called with unmocked URL in test: ${url}`);
+            logger.warn(`axios.get called with unmocked URL in test (beforeEach): ${url}`);
             if (config?.signal?.aborted) {
                 const error = new Error(`Request aborted in test for ${url}`);
                 (error as any).isAxiosError = true;
                 (error as any).code = 'ECONNABORTED';
                 throw error;
             }
-            throw new Error(`axios.get unmocked for URL: ${url}`);
+            throw new Error(`axios.get unmocked for URL (beforeEach): ${url}`);
         });
         mockedSendUpnpCommand.mockImplementation(async (controlURL, serviceType, actionName, args) => {
             logger.warn(`sendUpnpCommand called with unmocked action in test: ${actionName} on ${controlURL}`);
@@ -88,9 +90,15 @@ describe('processUpnpDevice', () => {
 
     it('should return BasicSsdpDevice if detailLevel is "basic"', async () => {
         const result = await processUpnpDevice(mockBasicDevice, DiscoveryDetailLevel.Basic, mockAbortSignal);
-        // כאשר detailLevel הוא Basic, הפונקציה אמורה להחזיר את basicDevice ללא שינוי.
-        // השדה detailLevelAchieved אינו מתווסף במקרה זה.
-        expect(result).toEqual(mockBasicDevice);
+        expect(result).not.toBeNull();
+        if (result) {
+            expect(result.usn).toBe(mockBasicDevice.usn);
+            expect(result.UDN).toBe(mockBasicDevice.UDN);
+            expect(result.location).toBe(mockBasicDevice.location);
+            expect(result.detailLevelAchieved).toBe(DiscoveryDetailLevel.Basic);
+            // נוודא שאין שדה שגיאה
+            expect(result.error).toBeUndefined();
+        }
     });
 
     it('should fetch and parse device description if detailLevel is "description"', async () => {

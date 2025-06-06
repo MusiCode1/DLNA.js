@@ -58,28 +58,31 @@ const createSsdpMessage = (type: 'NOTIFY' | 'M-SEARCH_RESPONSE' | 'M-SEARCH_REQU
 
 const mockRinfoGlobal: RemoteInfo = { address: '192.168.1.100', port: 1900, family: 'IPv4', size: 0 };
 
-const deviceData = (usn: string, location: string, detailLevel: DiscoveryDetailLevel = DiscoveryDetailLevel.Basic, maxAgeSeconds = 1800): ApiDevice => ({
-    usn,
-    location,
-    server: 'TestServer/1.0 UPnP/1.1 TestProduct/1.0',
-    st: 'upnp:rootdevice',
-    remoteAddress: mockRinfoGlobal.address,
-    remotePort: mockRinfoGlobal.port,
-    headers: { LOCATION: location, USN: usn, ST: 'upnp:rootdevice', 'CACHE-CONTROL': `max-age=${maxAgeSeconds}` },
-    timestamp: Date.now(),
-    messageType: 'RESPONSE', // Or 'REQUEST' for NOTIFY
-    detailLevelAchieved: detailLevel,
-    deviceType: 'urn:schemas-upnp-org:device:MediaRenderer:1',
-    friendlyName: `Test Device ${usn}`,
-    manufacturer: 'Test Manufacturer',
-    modelName: 'Test Model',
-    UDN: usn.split('::')[0],
-    serviceList: new Map(),
-    iconList: [],
-    lastSeen: Date.now(),
-    expiresAt: Date.now() + maxAgeSeconds * 1000,
-    cacheControlMaxAge: maxAgeSeconds,
-});
+const deviceData = (usn: string, location: string, detailLevel: DiscoveryDetailLevel = DiscoveryDetailLevel.Basic, maxAgeSeconds = 1800): ApiDevice => {
+    const UDN = usn.split('::')[0].startsWith('uuid:') ? usn.split('::')[0].substring(5) : usn.split('::')[0];
+    return {
+        usn, // USN המלא
+        UDN, // UDN שחולץ
+        location,
+        server: 'TestServer/1.0 UPnP/1.1 TestProduct/1.0',
+        st: 'upnp:rootdevice',
+        remoteAddress: mockRinfoGlobal.address,
+        remotePort: mockRinfoGlobal.port,
+        headers: { LOCATION: location, USN: usn, ST: 'upnp:rootdevice', 'CACHE-CONTROL': `max-age=${maxAgeSeconds}` },
+        timestamp: Date.now(),
+        messageType: 'RESPONSE', // Or 'REQUEST' for NOTIFY
+        detailLevelAchieved: detailLevel,
+        deviceType: 'urn:schemas-upnp-org:device:MediaRenderer:1',
+        friendlyName: `Test Device ${UDN}`, // שם ידידותי מבוסס UDN
+        manufacturer: 'Test Manufacturer',
+        modelName: 'Test Model',
+        serviceList: new Map(),
+        iconList: [],
+        lastSeen: Date.now(),
+        expiresAt: Date.now() + maxAgeSeconds * 1000,
+        cacheControlMaxAge: maxAgeSeconds,
+    };
+};
 
 const createNotifyMessage = (usn: string, location: string, ntsType: 'ssdp:alive' | 'ssdp:byebye' = 'ssdp:alive', maxAge: number = 1800): Buffer => {
     const headers: Record<string, string> = {
@@ -266,9 +269,9 @@ describe('ActiveDeviceManager', () => {
 
   describe('SSDP Message Handling', () => { // describe מיובא מ-bun:test
     // const mockRinfo: RemoteInfo = { address: '192.168.1.100', port: 1900, family: 'IPv4', size: 0 }; // הוסר, להשתמש ב-mockRinfoGlobal
-    const usn = 'uuid:device-123::upnp:rootdevice';
+    const rootUsn = 'uuid:device-123::upnp:rootdevice';
+    const deviceUdn = 'device-123';
     const location = 'http://192.168.1.100:8080/desc.xml';
-    // mockRinfoGlobal כבר מוגדר למעלה.
 
     beforeEach(async () => { // beforeEach מיובא מ-bun:test
       activeDeviceManager = new ActiveDeviceManager(defaultOptions);
@@ -276,8 +279,8 @@ describe('ActiveDeviceManager', () => {
     });
 
     test('should process a new device NOTIFY message and emit "devicefound"', async () => { // test (it) מיובא מ-bun:test
-      const notifyMessage = createNotifyMessage(usn, location, 'ssdp:alive', 1800);
-      const expectedProcessedDevice = deviceData(usn, location, defaultOptions.detailLevel, 1800);
+      const notifyMessage = createNotifyMessage(rootUsn, location, 'ssdp:alive', 1800);
+      const expectedProcessedDevice = deviceData(rootUsn, location, defaultOptions.detailLevel, 1800);
       mockProcessUpnpDevice.mockResolvedValueOnce(expectedProcessedDevice);
 
       const deviceFoundSpy = jest.fn(); // jest.fn מיובא מ-bun:test
@@ -286,25 +289,26 @@ describe('ActiveDeviceManager', () => {
       await mockSsdpMessageHandler(notifyMessage, mockRinfoGlobal, 'ipv4');
 
       expect(mockProcessUpnpDevice).toHaveBeenCalledWith( // expect מיובא מ-bun:test
-        expect.objectContaining({ usn, location, nts: 'ssdp:alive' }),
+        expect.objectContaining({ usn: rootUsn, UDN: deviceUdn, location, nts: 'ssdp:alive' }),
         defaultOptions.detailLevel
       );
-      expect(deviceFoundSpy).toHaveBeenCalledWith(usn, expect.objectContaining({ usn, friendlyName: expectedProcessedDevice.friendlyName }));
-      expect(activeDeviceManager.getActiveDevices().get(usn)).toBeDefined();
-      expect(activeDeviceManager.getActiveDevices().get(usn)?.friendlyName).toBe(expectedProcessedDevice.friendlyName);
+      // האירוע צריך להיפלט עם UDN כמזהה
+      expect(deviceFoundSpy).toHaveBeenCalledWith(deviceUdn, expect.objectContaining({ UDN: deviceUdn, usn: rootUsn, friendlyName: expectedProcessedDevice.friendlyName }));
+      expect(activeDeviceManager.getActiveDevices().get(deviceUdn)).toBeDefined();
+      expect(activeDeviceManager.getActiveDevices().get(deviceUdn)?.friendlyName).toBe(expectedProcessedDevice.friendlyName);
     });
 
     test('should process an M-SEARCH response for a new device and emit "devicefound"', async () => { // test (it) מיובא מ-bun:test
         const responseHeaders = {
             ST: 'upnp:rootdevice',
-            USN: usn,
+            USN: rootUsn,
             LOCATION: location,
             'CACHE-CONTROL': 'max-age=1800',
             SERVER: 'TestServer/1.0',
             DATE: new Date().toUTCString(),
         };
         const responseMessage = createSsdpMessage('M-SEARCH_RESPONSE', responseHeaders);
-        const expectedProcessedDevice = deviceData(usn, location, defaultOptions.detailLevel, 1800);
+        const expectedProcessedDevice = deviceData(rootUsn, location, defaultOptions.detailLevel, 1800);
         mockProcessUpnpDevice.mockResolvedValueOnce(expectedProcessedDevice);
 
         const deviceFoundSpy = jest.fn(); // jest.fn מיובא מ-bun:test
@@ -313,11 +317,11 @@ describe('ActiveDeviceManager', () => {
         await mockSsdpMessageHandler(responseMessage, mockRinfoGlobal, 'ipv4');
 
         expect(mockProcessUpnpDevice).toHaveBeenCalledWith( // expect מיובא מ-bun:test
-            expect.objectContaining({ usn, location, st: 'upnp:rootdevice' }),
+            expect.objectContaining({ usn: rootUsn, UDN: deviceUdn, location, st: 'upnp:rootdevice' }),
             defaultOptions.detailLevel
         );
-        expect(deviceFoundSpy).toHaveBeenCalledWith(usn, expect.objectContaining({ usn, friendlyName: expectedProcessedDevice.friendlyName }));
-        expect(activeDeviceManager.getActiveDevices().get(usn)).toBeDefined();
+        expect(deviceFoundSpy).toHaveBeenCalledWith(deviceUdn, expect.objectContaining({ UDN: deviceUdn, usn: rootUsn, friendlyName: expectedProcessedDevice.friendlyName }));
+        expect(activeDeviceManager.getActiveDevices().get(deviceUdn)).toBeDefined();
     });
 
     test('should update an existing device and emit "deviceupdated"', async () => { // test (it) מיובא מ-bun:test
@@ -332,18 +336,19 @@ describe('ActiveDeviceManager', () => {
       await activeDeviceManager.start(); // הפעלה עם האופציות החדשות
 
       // First, add the device
-      const initialNotifyMessage = createNotifyMessage(usn, location, 'ssdp:alive', 1800);
+      const initialNotifyMessage = createNotifyMessage(rootUsn, location, 'ssdp:alive', 1800);
       // ההתקן הראשוני שמוחזר מהעיבוד הוא ברמה בסיסית
-      const initialDeviceProcessed = deviceData(usn, location, DiscoveryDetailLevel.Basic, 1800);
+      const initialDeviceProcessed = deviceData(rootUsn, location, DiscoveryDetailLevel.Basic, 1800);
       mockProcessUpnpDevice.mockResolvedValueOnce(initialDeviceProcessed);
       await mockSsdpMessageHandler(initialNotifyMessage, mockRinfoGlobal, 'ipv4');
 
       // Now, send an update
       const updatedLocation = 'http://192.168.1.100:9090/newdesc.xml';
-      const updatedNotifyMessage = createNotifyMessage(usn, updatedLocation, 'ssdp:alive', 1800); // Server might change in headers
+      // ניצור הודעת NOTIFY עם אותו USN (ו-UDN משתמע) אך עם location שונה
+      const updatedNotifyMessage = createNotifyMessage(rootUsn, updatedLocation, 'ssdp:alive', 1800);
 
       // הנתונים המעודכנים שיוחזרו מהמעבד יהיו ברמה המבוקשת (Description) ויכילו את השינויים
-      const updatedDeviceDataFromProcessor = deviceData(usn, updatedLocation, DiscoveryDetailLevel.Description, 1800);
+      const updatedDeviceDataFromProcessor = deviceData(rootUsn, updatedLocation, DiscoveryDetailLevel.Description, 1800);
       updatedDeviceDataFromProcessor.server = 'TestServer/2.0'; // Simulate server update from processor
       mockProcessUpnpDevice.mockResolvedValueOnce(updatedDeviceDataFromProcessor);
 
@@ -352,13 +357,15 @@ describe('ActiveDeviceManager', () => {
 
       await mockSsdpMessageHandler(updatedNotifyMessage, mockRinfoGlobal, 'ipv4');
 
-      expect(deviceUpdatedSpy).toHaveBeenCalledWith(usn, expect.objectContaining({
-        usn,
+      // האירוע צריך להיפלט עם UDN כמזהה
+      expect(deviceUpdatedSpy).toHaveBeenCalledWith(deviceUdn, expect.objectContaining({
+        UDN: deviceUdn,
+        usn: rootUsn, // ה-USN של ה-root device
         location: updatedLocation,
         server: 'TestServer/2.0',
-        detailLevelAchieved: DiscoveryDetailLevel.Description // ודא שגם רמת הפירוט התעדכנה
-      })); // expect מיובא מ-bun:test
-      const device = activeDeviceManager.getActiveDevices().get(usn);
+        detailLevelAchieved: DiscoveryDetailLevel.Description
+      }));
+      const device = activeDeviceManager.getActiveDevices().get(deviceUdn);
       expect(device).toBeDefined();
       expect(device?.location).toBe(updatedLocation);
       expect(device?.server).toBe('TestServer/2.0');
@@ -367,22 +374,26 @@ describe('ActiveDeviceManager', () => {
 
     test('should process ssdp:byebye and emit "devicelost"', async () => { // test (it) מיובא מ-bun:test
       // Add device first
-      const notifyMessage = createNotifyMessage(usn, location, 'ssdp:alive', 1800);
-      const initialDevice = deviceData(usn, location, defaultOptions.detailLevel, 1800);
+      const notifyMessage = createNotifyMessage(rootUsn, location, 'ssdp:alive', 1800);
+      const initialDevice = deviceData(rootUsn, location, defaultOptions.detailLevel, 1800);
       mockProcessUpnpDevice.mockResolvedValueOnce(initialDevice);
       await mockSsdpMessageHandler(notifyMessage, mockRinfoGlobal, 'ipv4');
-      expect(activeDeviceManager.getActiveDevices().has(usn)).toBe(true); // expect מיובא מ-bun:test
+      expect(activeDeviceManager.getActiveDevices().has(deviceUdn)).toBe(true);
 
-      // Send byebye
-      const byebyeMessage = createNotifyMessage(usn, location, 'ssdp:byebye');
+      // Send byebye for the root device
+      // ה-USN בהודעת ה-byebye צריך להיות זהה ל-USN של ה-root device
+      const byebyeMessage = createNotifyMessage(rootUsn, location, 'ssdp:byebye');
+      // ה-NT בהודעת byebye יכול להיות גם ה-ST של ה-root device
+      // (createNotifyMessage כבר מגדיר NT כ-upnp:rootdevice)
 
-      const deviceLostSpy = jest.fn(); // jest.fn מיובא מ-bun:test
+      const deviceLostSpy = jest.fn();
       activeDeviceManager.on('devicelost', deviceLostSpy);
 
       await mockSsdpMessageHandler(byebyeMessage, mockRinfoGlobal, 'ipv4');
 
-      expect(deviceLostSpy).toHaveBeenCalledWith(usn, expect.objectContaining({ usn })); // expect מיובא מ-bun:test
-      expect(activeDeviceManager.getActiveDevices().has(usn)).toBe(false);
+      // האירוע צריך להיפלט עם UDN כמזהה
+      expect(deviceLostSpy).toHaveBeenCalledWith(deviceUdn, expect.objectContaining({ UDN: deviceUdn, usn: rootUsn }));
+      expect(activeDeviceManager.getActiveDevices().has(deviceUdn)).toBe(false);
     });
 
     test('should ignore M-SEARCH requests it receives', async () => { // test (it) מיובא מ-bun:test
@@ -416,9 +427,9 @@ describe('ActiveDeviceManager', () => {
         activeDeviceManager = new ActiveDeviceManager(optsWithRawCallback);
         await activeDeviceManager.start();
 
-        const notifyHeaders = { NT: 'upnp:rootdevice', NTS: 'ssdp:alive', USN: usn, LOCATION: location };
+        const notifyHeaders = { NT: 'upnp:rootdevice', NTS: 'ssdp:alive', USN: rootUsn, LOCATION: location };
         const notifyMessage = createSsdpMessage('NOTIFY', notifyHeaders);
-        
+
         await mockSsdpMessageHandler(notifyMessage, mockRinfoGlobal, 'ipv4');
 
         expect(rawMessageSpy).toHaveBeenCalledWith({ // expect מיובא מ-bun:test
@@ -441,12 +452,12 @@ describe('ActiveDeviceManager', () => {
     //   jest.useRealTimers();
     // });
 
-    // const mockRinfo: RemoteInfo = { address: '192.168.1.100', port: 1900, family: 'IPv4', size: 0 }; // הוסר
-    const usn1 = 'uuid:device-1::upnp:rootdevice';
+    const usn1_root = 'uuid:device-1::upnp:rootdevice';
+    const udn1 = 'device-1';
     const location1 = 'http://192.168.1.101/desc.xml';
-    const usn2 = 'uuid:device-2::upnp:rootdevice';
+    const usn2_root = 'uuid:device-2::upnp:rootdevice';
+    const udn2 = 'device-2';
     const location2 = 'http://192.168.1.102/desc.xml';
-    // const mockRinfo: RemoteInfo = { address: '192.168.1.100', port: 1900, family: 'IPv4', size: 0 }; // הוסר
 
 
     beforeEach(async () => { // beforeEach מיובא מ-bun:test
@@ -463,25 +474,25 @@ describe('ActiveDeviceManager', () => {
       activeDeviceManager.on('devicelost', deviceLostSpy);
 
       // Add device 1 (expires in 1s)
-      const msg1 = createNotifyMessage(usn1, location1, 'ssdp:alive', 1); // max-age = 1 second
-      mockProcessUpnpDevice.mockResolvedValueOnce(deviceData(usn1, location1, defaultOptions.detailLevel, 1));
+      const msg1 = createNotifyMessage(usn1_root, location1, 'ssdp:alive', 1); // max-age = 1 second
+      mockProcessUpnpDevice.mockResolvedValueOnce(deviceData(usn1_root, location1, defaultOptions.detailLevel, 1));
       await mockSsdpMessageHandler(msg1, mockRinfoGlobal, 'ipv4');
-      expect(activeDeviceManager.getActiveDevices().has(usn1)).toBe(true); // expect מיובא מ-bun:test
+      expect(activeDeviceManager.getActiveDevices().has(udn1)).toBe(true);
 
       // Add device 2 (expires in 1s)
-      const msg2 = createNotifyMessage(usn2, location2, 'ssdp:alive', 1); // max-age = 1 second
-      mockProcessUpnpDevice.mockResolvedValueOnce(deviceData(usn2, location2, defaultOptions.detailLevel, 1));
+      const msg2 = createNotifyMessage(usn2_root, location2, 'ssdp:alive', 1); // max-age = 1 second
+      mockProcessUpnpDevice.mockResolvedValueOnce(deviceData(usn2_root, location2, defaultOptions.detailLevel, 1));
       await mockSsdpMessageHandler(msg2, mockRinfoGlobal, 'ipv4');
-      expect(activeDeviceManager.getActiveDevices().has(usn2)).toBe(true);
+      expect(activeDeviceManager.getActiveDevices().has(udn2)).toBe(true);
 
       expect(activeDeviceManager.getActiveDevices().size).toBe(2);
 
       // Advance time past expiration (1s) and cleanup interval (0.5s), so at least one cleanup runs
-      // jest.advanceTimersByTime(1500); // מוחלף ב-setTimeout
       await new Promise(resolve => setTimeout(resolve, 1500)); // המתנה אמיתית
 
-      expect(deviceLostSpy).toHaveBeenCalledWith(usn1, expect.objectContaining({ usn: usn1 }));
-      expect(deviceLostSpy).toHaveBeenCalledWith(usn2, expect.objectContaining({ usn: usn2 }));
+      // האירוע צריך להיפלט עם UDN כמזהה
+      expect(deviceLostSpy).toHaveBeenCalledWith(udn1, expect.objectContaining({ UDN: udn1, usn: usn1_root }));
+      expect(deviceLostSpy).toHaveBeenCalledWith(udn2, expect.objectContaining({ UDN: udn2, usn: usn2_root }));
       expect(activeDeviceManager.getActiveDevices().size).toBe(0);
     });
 
@@ -490,22 +501,22 @@ describe('ActiveDeviceManager', () => {
       activeDeviceManager.on('devicelost', deviceLostSpy);
 
       // Add device 1 (expires in 60s)
-      const msg1 = createNotifyMessage(usn1, location1, 'ssdp:alive', 60);
-      mockProcessUpnpDevice.mockResolvedValueOnce(deviceData(usn1, location1, defaultOptions.detailLevel, 60));
+      const msg1 = createNotifyMessage(usn1_root, location1, 'ssdp:alive', 60);
+      mockProcessUpnpDevice.mockResolvedValueOnce(deviceData(usn1_root, location1, defaultOptions.detailLevel, 60));
       await mockSsdpMessageHandler(msg1, mockRinfoGlobal, 'ipv4');
 
-      expect(activeDeviceManager.getActiveDevices().has(usn1)).toBe(true); // expect מיובא מ-bun:test
+      expect(activeDeviceManager.getActiveDevices().has(udn1)).toBe(true);
 
       // Advance time, but not enough to expire or for multiple cleanups
       // jest.advanceTimersByTime(1000); // מוחלף ב-setTimeout
       await new Promise(resolve => setTimeout(resolve, 1000)); // המתנה אמיתית
 
       expect(deviceLostSpy).not.toHaveBeenCalled();
-      expect(activeDeviceManager.getActiveDevices().has(usn1)).toBe(true);
+      expect(activeDeviceManager.getActiveDevices().has(udn1)).toBe(true);
       expect(activeDeviceManager.getActiveDevices().size).toBe(1);
 
       expect(deviceLostSpy).not.toHaveBeenCalled();
-      expect(activeDeviceManager.getActiveDevices().has(usn1)).toBe(true);
+      expect(activeDeviceManager.getActiveDevices().has(udn1)).toBe(true);
       expect(activeDeviceManager.getActiveDevices().size).toBe(1);
     });
   });
@@ -547,9 +558,9 @@ describe('ActiveDeviceManager', () => {
 
     test('should handle errors from processUpnpDevice when updating an existing device', async () => { // test (it) מיובא מ-bun:test
         await activeDeviceManager.start();
-        const usn = 'uuid:update-error-device';
+        const usn = 'uuid:update-error-device::urn:schemas-upnp-org:device:Root:1'; // USN מלא
+        const udn = 'update-error-device'; // UDN המתאים
         const location = 'http://update.error.loc';
-        // mockRinfoGlobal is already defined
 
         // Add device first
         const initialDevice = deviceData(usn, location, DiscoveryDetailLevel.Basic, 60);
@@ -571,12 +582,12 @@ describe('ActiveDeviceManager', () => {
 
         await mockSsdpMessageHandler(updateNotify, mockRinfoGlobal, 'ipv4');
 
-        const device = activeDeviceManager.getActiveDevices().get(usn);
+        const device = activeDeviceManager.getActiveDevices().get(udn); // שימוש ב-UDN
         expect(device).toBeDefined();
         // Detail level should remain basic as update failed
         expect(device?.detailLevelAchieved).toBe(DiscoveryDetailLevel.Basic);
         // deviceupdated should still be called because lastSeen etc. are updated
-        expect(deviceUpdatedSpy).toHaveBeenCalledWith(usn, expect.objectContaining({ usn, detailLevelAchieved: DiscoveryDetailLevel.Basic }));
+        expect(deviceUpdatedSpy).toHaveBeenCalledWith(udn, expect.objectContaining({ UDN: udn, detailLevelAchieved: DiscoveryDetailLevel.Basic }));
     });
   });
 describe('Configuration Options', () => {
@@ -621,7 +632,8 @@ describe('Configuration Options', () => {
     });
 
     test('should request specified detailLevel when processing devices', async () => {
-        const usn = 'uuid:detail-level-test';
+        const usn = 'uuid:detail-level-test::urn:schemas-upnp-org:device:Root:1'; // USN מלא
+        const udn = 'detail-level-test'; // UDN המתאים
         const location = 'http://detail.level.test/desc.xml';
         activeDeviceManager = new ActiveDeviceManager({ ...defaultOptions, detailLevel: DiscoveryDetailLevel.Full });
         await activeDeviceManager.start();
@@ -632,10 +644,10 @@ describe('Configuration Options', () => {
 
         await mockSsdpMessageHandler(notifyMessage, mockRinfoGlobal, 'ipv4');
         expect(mockProcessUpnpDevice).toHaveBeenCalledWith(
-            expect.objectContaining({ usn }),
+            expect.objectContaining({ usn, UDN: udn }), // ודא שגם UDN נבדק אם רלוונטי ב-mock
             DiscoveryDetailLevel.Full // ודא שרמת הפירוט הנכונה מועברת
         );
-        const device = activeDeviceManager.getActiveDevices().get(usn);
+        const device = activeDeviceManager.getActiveDevices().get(udn); // שימוש ב-UDN
         expect(device?.detailLevelAchieved).toBe(DiscoveryDetailLevel.Full);
     });
   });

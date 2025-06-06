@@ -114,6 +114,10 @@ export interface BasicSsdpDevice {
      */
     usn: string;
     /**
+     * @hebrew UDN (Unique Device Name) של ההתקן, כפי שחולץ מה-USN.
+     */
+    UDN: string;
+    /**
      * @hebrew כתובת ה-URL של קובץ התיאור של ההתקן.
      */
     location: string;
