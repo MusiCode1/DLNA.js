@@ -3,7 +3,7 @@ import { select, input as inquirerInput, confirm as inquirerConfirm, Separator }
 import inquirer from 'inquirer'; // נשאיר לייבוא של Separator הישן אם עדיין בשימוש במקומות אחרים, או שנמחק אם לא צריך
 
 import {
-  // discoverSsdpDevices, // הוסר, יש להשתמש ב-ActiveDeviceManager או discoverSsdpDevicesIterable
+  discoverSsdpDevicesIterable, // <-- הוספנו את הפונקציה הנכונה
   DiscoveryDetailLevel,
   type FullDeviceDescription,
   type ServiceDescription,
@@ -47,41 +47,47 @@ async function main() {
   logger.info('Starting DLNA Device Explorer CLI...');
   logger.debug('Entered main function');
   try {
-    // logger.debug('Calling discoverSsdpDevices...');
-    // const devices = await discoverSsdpDevices({
-    //   timeoutMs: 5000, // שונה ל-timeoutMs
-    //   detailLevel: DiscoveryDetailLevel.Full, // בקש את כל הפרטים
-    //   // logger: createLogger('Discovery'), // הוסר - הלוגר הפנימי ישמש
-    // });
-    // logger.debug(`discoverSsdpDevices returned ${devices?.length} devices.`);
+    logger.debug('Calling discoverSsdpDevicesIterable...');
+    const devicesIterable = discoverSsdpDevicesIterable({
+      timeoutMs: 5000,
+      detailLevel: DiscoveryDetailLevel.Full,
+    });
+    logger.debug('discoverSsdpDevicesIterable returned an iterable.');
 
-    // if (!devices || devices.length === 0) {
-    //   logger.warn('No devices found on the network.');
-    //   logger.debug('Exiting main function - no devices found.');
-    //   return;
-    // }
+    const devices: FullDeviceDescription[] = [];
+    for await (const device of devicesIterable) {
+      if (device) {
+        devices.push(device as FullDeviceDescription);
+      }
+    }
+    logger.debug(`Collected ${devices.length} devices from iterable.`);
 
-    // logger.info(`Found ${devices.length} raw device entries.`);
+    if (!devices || devices.length === 0) {
+      logger.warn('No devices found on the network.');
+      logger.debug('Exiting main function - no devices found.');
+      return;
+    }
 
-    // // סינון התקנים כפולים לפי UDN
-    // const uniqueDevicesMap = new Map<string, FullDeviceDescription>();
-    // for (const device of devices as FullDeviceDescription[]) {
-    //   if (device.UDN && !uniqueDevicesMap.has(device.UDN)) {
-    //     uniqueDevicesMap.set(device.UDN, device);
-    //   } else if (!device.UDN) {
-    //     // במקרה שאין UDN (לא אמור לקרות עם FullDetailLevel, אבל ליתר ביטחון)
-    //     // נשתמש ב-USN או ב-location כמפתח גיבוי, פחות אידיאלי
-    //     const backupKey = device.usn || device.location;
-    //     if (backupKey && !uniqueDevicesMap.has(backupKey)) {
-    //         logger.warn(`Device ${device.friendlyName || device.usn} missing UDN, using ${backupKey} as unique key.`);
-    //         uniqueDevicesMap.set(backupKey, device);
-    //     }
-    //   }
-    // }
+    logger.info(`Found ${devices.length} raw device entries.`);
 
-    // const filteredDevices = Array.from(uniqueDevicesMap.values());
-    const filteredDevices: FullDeviceDescription[] = []; // מערך ריק זמני עד למימוש discoverSsdpDevicesIterable
-    logger.warn('Device discovery is currently commented out. Using an empty list of devices.');
+    // סינון התקנים כפולים לפי UDN
+    const uniqueDevicesMap = new Map<string, FullDeviceDescription>();
+    for (const device of devices as FullDeviceDescription[]) { // devices כבר אמור להיות FullDeviceDescription[]
+      if (device.UDN && !uniqueDevicesMap.has(device.UDN)) {
+        uniqueDevicesMap.set(device.UDN, device);
+      } else if (!device.UDN) {
+        // במקרה שאין UDN (לא אמור לקרות עם FullDetailLevel, אבל ליתר ביטחון)
+        // נשתמש ב-USN או ב-location כמפתח גיבוי, פחות אידיאלי
+        const backupKey = device.usn || device.location;
+        if (backupKey && !uniqueDevicesMap.has(backupKey)) {
+            logger.warn(`Device ${device.friendlyName || device.usn} missing UDN, using ${backupKey} as unique key.`);
+            uniqueDevicesMap.set(backupKey, device);
+        }
+      }
+    }
+
+    const filteredDevices = Array.from(uniqueDevicesMap.values());
+    // logger.warn('Device discovery is currently commented out. Using an empty list of devices.'); // הסרנו אזהרה זו
 
 
     if (filteredDevices.length === 0) {
