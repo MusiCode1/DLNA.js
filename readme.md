@@ -551,7 +551,8 @@ performSomeOperation({ value: 'another test without id' });
 *   `LOG_TO_CONSOLE`: `true` או `false`. ברירת מחדל: `true` (אם לא מוגדר).
 *   `LOG_TO_FILE`: `true` או `false`. ברירת מחדל: `false`.
 *   `LOG_FILE_PATH`: נתיב לקובץ הלוג אם `LOG_TO_FILE` הוא `true`. ברירת מחדל: `logs/app.log`.
-*   `LOG_MODULES`: רשימה מופרדת בפסיקים של שמות מודולים שרק עבורם יודפסו הודעות לוג (למשל, `MyApplicationLogic,upnpDeviceExplorer`). אם לא מוגדר, ריק, או `*`, יודפסו הודעות מכל המודולים.
+*   `LOG_MODULES`: רשימה מופרדת בפסיקים של שמות מודולים שרק עבורם יודפסו הודעות לוג (למשל, `MyApplicationLogic,upnpDeviceExplorer`). אם לא מוגדר, ריק, או `*`, יודפסו הודעות מכל המודולים (אלא אם מודול ספציפי מוסתר על ידי `LOG_HIDE_MODULES`).
+*   `LOG_HIDE_MODULES`: רשימה מופרדת בפסיקים של שמות מודולים שיש להסתיר מהלוגים. לדוגמה, `InternalDebug,VerboseModule`. אם מודול מופיע כאן, הוא לא יודפס גם אם הוא כלול ב-`LOG_MODULES` או אם `LOG_MODULES` הוא `*`.
 
 ניתן לעיין בקובץ [`src/logger.ts`](../src/logger.ts) לפרטים נוספים על משתני הסביבה הנתמכים והתנהגות ברירת המחדל.
 

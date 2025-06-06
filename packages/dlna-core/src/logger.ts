@@ -40,11 +40,28 @@ winston.addColors(logColors);
 
 // --- פורמטים ---
 
-// פורמט סינון לפי שם מודול
+// פורמט סינון להסתרת מודולים
+const hideByModuleNameFormat = winston.format((info) => {
+  const logHideModulesEnv = process.env.LOG_HIDE_MODULES;
+
+  // אם LOG_HIDE_MODULES מוגדר
+  if (logHideModulesEnv && logHideModulesEnv.trim() !== '') {
+    if (info.label) {
+      const hiddenModules = logHideModulesEnv.split(',').map(m => m.trim()).filter(m => m);
+      // אם רשימת המודולים המוסתרים אינה ריקה והמודול הנוכחי כלול בה, סנן (הסתר)
+      if (hiddenModules.length > 0 && hiddenModules.includes(info.label as string)) {
+        return false;
+      }
+    }
+  }
+  return info; // אם המודול אינו מוסתר או שאין info.label, העבר את ההודעה
+});
+
+// פורמט סינון לפי שם מודול (להצגה סלקטיבית)
 const filterByModuleNameFormat = winston.format((info) => {
   const logModulesEnv = process.env.LOG_MODULES;
 
-  // אם LOG_MODULES לא מוגדר, ריק, או שווה ל-"*", אל תסנן כלום
+  // אם LOG_MODULES לא מוגדר, ריק, או שווה ל-"*", אל תסנן כלום (אלא אם הוסתר קודם)
   if (!logModulesEnv || logModulesEnv.trim() === '' || logModulesEnv.trim() === '*') {
     return info;
   }
@@ -64,7 +81,8 @@ const filterByModuleNameFormat = winston.format((info) => {
 const createTextFormat = (moduleLabel?: string) => winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   ...(moduleLabel ? [winston.format.label({ label: moduleLabel })] : []), // הוסף label רק אם סופק
-  filterByModuleNameFormat(), // הפעלת הסינון לפי מודול
+  hideByModuleNameFormat(),   // הפעלת סינון הסתרה תחילה
+  filterByModuleNameFormat(), // הפעלת הסינון לפי מודול (הצגה)
   winston.format.printf((info) => {
     const originalLevel = info[Symbol.for('level')];
     let levelString = 'UNKNOWN_LEVEL';
@@ -137,7 +155,8 @@ export const consoleFormat = (moduleLabel?: string) => winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.padLevels(),
   ...(moduleLabel ? [winston.format.label({ label: moduleLabel })] : []),
-  filterByModuleNameFormat(), // הפעלת הסינון לפי מודול
+  hideByModuleNameFormat(),   // הפעלת סינון הסתרה תחילה
+  filterByModuleNameFormat(), // הפעלת הסינון לפי מודול (הצגה)
   // ההערות לגבי colorize נשארו כפי שהיו, נטפל בעיצוב הצבעים בנפרד אם צריך
   //winston.format.colorize({ colors: logColors }),
   winston.format.printf((info) => {
