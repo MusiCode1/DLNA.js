@@ -1,41 +1,18 @@
 // server/types.ts
 import type {
     ServiceDescription,
-    DiscoveryOptions
-} from 'dlna.js'; // ApiDevice תלוי ב-ServiceDescription
+    DiscoveryOptions,
+    ApiDevice as CoreApiDevice,    // הוספנו ייבוא זה עם alias
+    DeviceIcon as CoreDeviceIcon  // הוספנו ייבוא זה עם alias
+} from 'dlna.js';
 
 /**
  * @hebrew מייצג את המידע על התקן כפי שהוא נשמר ומוצג ב-API של השרת.
  */
 // הגדרת טיפוס עבור אובייקט אייקון, כפי שנשלח ללקוח
-export interface ApiDeviceIcon {
-    mimetype?: string; // הפך לאופציונלי
-    width: number;
-    height: number;
-    depth: number;
-    url?: string; // הפך לאופציונלי
-}
+export type ApiDeviceIcon = CoreDeviceIcon;
 
-export interface ApiDevice {
-    friendlyName: string;
-    modelName?: string; // הפך לאופציונלי כי לא תמיד קיים
-    UDN: string;
-    location?: string; // הוסף
-    server?: string;   // הוסף
-    st?: string;       // הוסף
-    remoteAddress?: string;
-    remotePort?: number; // הוסף
-    baseURL?: string;
-    manufacturer?: string; // הוסף
-    deviceType?: string; // הוסף
-    presentationURL?: string;
-    iconList?: ApiDeviceIcon[]; // שונה מ-iconUrl למערך אובייקטי אייקונים
-    serviceList?: Map<string, ServiceDescription>; // עודכן ל-Map כדי להתאים לטיפוס מהליבה
-    lastSeen: number;
-    expiresAt?: number; // הוסף
-    detailLevelAchieved?: string; // הוסף
-    // supportedServices הוסר כי הוא לא נשלח עוד
-}
+export type ApiDevice = CoreApiDevice;
 
 export interface ContinueDiscoveryOptions extends DiscoveryOptions {
     continuousIntervalMs: number

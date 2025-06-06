@@ -20,7 +20,7 @@ import type {
 
 import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler';
-// import { updateDeviceList } from './deviceManager'; // הוסר - לא נחוץ יותר
+import { getActiveDevices } from './deviceManager'; 
 
 const logger = createModuleLogger('PlayPresetHandler');
 
@@ -36,6 +36,115 @@ export class PlaybackError extends Error {
     // שחזור הפרוטוטייפ כדי ש-instanceof יעבוד כראוי עם מחלקות מובנות
     Object.setPrototypeOf(this, PlaybackError.prototype);
   }
+}
+
+// Helper functions for handleRendererTask
+async function wakeAndVerifyRenderer(
+  rendererPreset: NonNullable<PresetSettings['renderer']>, // RendererPreset is now non-nullable
+  presetName: string
+): Promise<void> {
+  logger.info(`Attempting WOL for renderer ${rendererPreset.ipAddress} (MAC: ${rendererPreset.macAddress}) for preset '${presetName}'.`);
+  try {
+    await wakeDeviceAndVerify(
+      rendererPreset.macAddress,
+      rendererPreset.ipAddress,
+      rendererPreset.broadcastAddress,
+      undefined, // wolPort - default
+      18, 2, 2 // timeouts
+    );
+    logger.info(`Device ${rendererPreset.ipAddress} (Renderer) for preset '${presetName}' responded after wakeDeviceAndVerify.`);
+  } catch (wakeError: any) {
+    logger.error(`wakeDeviceAndVerify failed for renderer ${rendererPreset.ipAddress} (MAC: ${rendererPreset.macAddress}) for preset '${presetName}': ${wakeError.message}`);
+    throw new PlaybackError(`Renderer for preset '${presetName}' did not respond or WOL failed: ${wakeError.message}`, 503);
+  }
+}
+
+async function reviveRendererDetails(
+  rendererPreset: NonNullable<PresetSettings['renderer']>,
+  presetName: string
+): Promise<DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription | import('dlna.js').BasicSsdpDevice> { // Added import('dlna.js').BasicSsdpDevice for clarity
+  logger.info(`Attempting to revive renderer ${rendererPreset.udn} from URL: ${rendererPreset.baseURL} after successful wake-up for preset '${presetName}'.`);
+  const revivedDevice = await processUpnpDeviceFromUrl(rendererPreset.baseURL, DiscoveryDetailLevel.Services);
+  if (!revivedDevice) {
+    logger.error(`Failed to retrieve renderer details for ${rendererPreset.udn} (URL: ${rendererPreset.baseURL}) after WOL and ping for preset '${presetName}'.`);
+    throw new PlaybackError(`Failed to retrieve renderer details for preset '${presetName}' after successful Wake on LAN.`, 500);
+  }
+  // Check for essential properties to ensure the device object is usable
+  if (!('UDN' in revivedDevice && revivedDevice.UDN)) { // Ensure UDN is present and not empty
+    logger.error(`Revived renderer for preset '${presetName}' is missing UDN. URL: ${rendererPreset.baseURL}`);
+    throw new PlaybackError(`Revived renderer for preset '${presetName}' is incomplete (missing UDN).`, 500);
+  }
+  return revivedDevice;
+}
+
+const INITIAL_POLLING_INTERVAL_MS = 250; // מרווח התחלתי
+const MAX_POLLING_INTERVAL_MS = 1500;    // מרווח מקסימלי בין בדיקות
+const POLLING_TIMEOUT_MS = 7000;         // זמן פולינג כולל (למשל 7 שניות)
+const POLLING_INTERVAL_INCREMENT_FACTOR = 1.5; // פקטור הגדלת המרווח
+
+async function pollForRendererInActiveDevices(
+  rendererUDN: string,
+  presetName: string
+): Promise<ApiDevice> {
+  logger.info(`Polling for renderer UDN: ${rendererUDN} in active devices for preset '${presetName}' (total timeout: ${POLLING_TIMEOUT_MS}ms).`);
+  
+  // פונקציית עזר פנימית לבדיקת ההתקן ברשימה הנוכחית
+  function findDeviceInCurrentList(udnToFind: string): ApiDevice | undefined {
+    const currentActiveDevices = getActiveDevices();
+    return currentActiveDevices.get(udnToFind);
+  }
+
+  let foundDevice: ApiDevice | undefined = undefined;
+  const startTime = Date.now();
+  let currentInterval = INITIAL_POLLING_INTERVAL_MS;
+  let attempts = 0;
+
+  while (Date.now() - startTime < POLLING_TIMEOUT_MS) {
+    attempts++;
+    foundDevice = findDeviceInCurrentList(rendererUDN);
+    if (foundDevice) {
+      logger.info(`Renderer ${rendererUDN} found in active devices after ${Date.now() - startTime}ms (${attempts} attempts) for preset '${presetName}'.`);
+      break; // יציאה מהלולאה הראשית
+    }
+
+    // בדוק אם ההמתנה הבאה תחרוג מהזמן הכולל
+    const timeElapsed = Date.now() - startTime;
+    if (timeElapsed + currentInterval >= POLLING_TIMEOUT_MS) {
+      // אם כן, בצע בדיקה אחרונה מיד לפני היציאה (אם נשאר זמן קטן מהאינטרוול הבא)
+      const remainingTime = POLLING_TIMEOUT_MS - timeElapsed;
+      if (remainingTime > 0) { // רק אם נשאר זמן כלשהו
+         logger.debug(`Approaching timeout for ${rendererUDN}. Performing one last check within ${remainingTime}ms.`);
+         // המתן את הזמן הנותר (או חלק ממנו אם הוא קטן מאוד) לפני הבדיקה האחרונה
+         await new Promise(resolve => setTimeout(resolve, Math.max(0, remainingTime - 10))); // המתן כמעט את כל הזמן הנותר
+         foundDevice = findDeviceInCurrentList(rendererUDN);
+         if (foundDevice) {
+            logger.info(`Renderer ${rendererUDN} found in active devices in final check before timeout (attempt ${attempts+1}) for preset '${presetName}'.`);
+         }
+      }
+      break; // צא מהלולאה, כי ההמתנה הבאה תחרוג או שהזמן נגמר
+    }
+
+    logger.debug(`Renderer ${rendererUDN} not found yet for preset '${presetName}' (attempt ${attempts}). Waiting ${currentInterval}ms... Time elapsed: ${timeElapsed}ms.`);
+    await new Promise(resolve => setTimeout(resolve, currentInterval));
+
+    // הגדלת המרווח לניסיון הבא
+    currentInterval = Math.min(MAX_POLLING_INTERVAL_MS, Math.floor(currentInterval * POLLING_INTERVAL_INCREMENT_FACTOR));
+  }
+  
+  // אם יצאנו מהלולאה ולא מצאנו, נבצע בדיקה אחרונה למקרה שההתקן הופיע ממש ברגע האחרון
+  // (זה מכסה גם את המקרה שהלולאה לא רצה כלל כי הזמן הראשוני כבר עבר את ה-timeout, או שההתקן הופיע בזמן ההמתנה האחרונה)
+  if (!foundDevice) {
+    foundDevice = findDeviceInCurrentList(rendererUDN);
+    if (foundDevice) {
+        logger.info(`Renderer ${rendererUDN} found in active devices in post-loop final check for preset '${presetName}'.`);
+    }
+  }
+
+  if (!foundDevice) {
+    logger.error(`Renderer ${rendererUDN} still not found in active devices after polling for approx ${POLLING_TIMEOUT_MS}ms for preset '${presetName}'. Total attempts: ${attempts}.`);
+    throw new PlaybackError(`Renderer for preset '${presetName}' (UDN: ${rendererUDN}) could not be confirmed in active devices after polling timeout.`, 500);
+  }
+  return foundDevice;
 }
 
 // הפונקציה executePlayPresetLogic תתווסף כאן בשלב הבא
@@ -71,51 +180,32 @@ export async function executePlayPresetLogic(
   logger.info(`Found preset '${presetName}'. Renderer: ${rendererPreset.udn}, IP: ${rendererPreset.ipAddress}, MAC: ${rendererPreset.macAddress}, Media Server: ${mediaServerPreset.udn}, Folder ID: ${folderObjectId}`);
 
   // משימה 1: טיפול ב-Renderer (הערה והחייאה במידת הצורך)
-  const handleRendererTask = async (): Promise<ApiDevice> => { // שונה להחזיר ApiDevice ולא ApiDevice | null
-    let device = activeDevices.get(rendererPreset.udn);
-    if (!device) {
-      logger.info(`Renderer ${rendererPreset.udn} for preset '${presetName}' is not in active devices. Attempting WOL and revival.`);
-
-      try {
-        await wakeDeviceAndVerify(
-          rendererPreset.macAddress,
-          rendererPreset.ipAddress,
-          rendererPreset.broadcastAddress,
-          undefined, // wolPort - ישאר ברירת מחדל
-          18, 2, 2 // timeouts
-        );
-        logger.info(`Device ${rendererPreset.ipAddress} (Renderer) for preset '${presetName}' responded after wakeDeviceAndVerify.`);
-      } catch (wakeError: any) {
-        logger.error(`wakeDeviceAndVerify failed for renderer ${rendererPreset.ipAddress} (MAC: ${rendererPreset.macAddress}) for preset '${presetName}': ${wakeError.message}`);
-        throw new PlaybackError(`Renderer for preset '${presetName}' did not respond or WOL failed: ${wakeError.message}`, 503); // 503 Service Unavailable
-      }
-
-      logger.info(`Attempting to revive renderer ${rendererPreset.udn} from URL: ${rendererPreset.baseURL} after successful wake-up.`);
-      const revivedDevice = await processUpnpDeviceFromUrl(rendererPreset.baseURL, DiscoveryDetailLevel.Services);
-      if (!revivedDevice) {
-        logger.error(`Failed to retrieve renderer details for ${rendererPreset.udn} (URL: ${rendererPreset.baseURL}) after WOL and ping for preset '${presetName}'.`);
-        throw new PlaybackError(`Failed to retrieve renderer details for preset '${presetName}' after successful Wake on LAN.`, 500);
-      }
-
-      if ('friendlyName' in revivedDevice && 'modelName' in revivedDevice && 'UDN' in revivedDevice) {
-        logger.info(`Successfully revived renderer ${revivedDevice.UDN} for preset '${presetName}'. ActiveDeviceManager should pick it up.`);
-        // updateDeviceList(revivedDevice as DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription); // הוסר - ActiveDeviceManager מטפל בזה
-        // ייתכן שנצטרך להמתין מעט כאן כדי שהאירוע מ-ActiveDeviceManager יתעדכן
-        // אך ננסה קודם ללא המתנה.
-        device = activeDevices.get(rendererPreset.udn);
-        if (!device) {
-          logger.error(`Renderer ${rendererPreset.udn} still not found in active devices after revival for preset '${presetName}'. This should not happen.`);
-          throw new PlaybackError(`Internal error: Renderer for preset '${presetName}' could not be fully processed after revival.`, 500);
-        }
-        return device;
-      } else {
-        logger.warn(`Revived renderer for preset '${presetName}' (UDN from USN if available: ${revivedDevice.usn}) does not have full details. Playback might fail.`);
-        throw new PlaybackError(`Revived renderer for preset '${presetName}' is incomplete.`, 500);
-      }
-    } else {
-      logger.info(`Renderer ${rendererPreset.udn} for preset '${presetName}' is already active.`);
+  const handleRendererTask = async (): Promise<ApiDevice> => {
+    let device = activeDevices.get(rendererPreset.udn); // Check initial active devices map passed to executePlayPresetLogic
+    if (device) {
+      logger.info(`Renderer ${rendererPreset.udn} for preset '${presetName}' is already in the initial active devices list.`);
       return device;
     }
+
+    logger.info(`Renderer ${rendererPreset.udn} for preset '${presetName}' is not in initial active devices. Attempting WOL, revival, and polling.`);
+
+    // שלב 1: הערה ואימות
+    await wakeAndVerifyRenderer(rendererPreset, presetName);
+
+    // שלב 2: החייאת פרטי ההתקן
+    const revivedDevice = await reviveRendererDetails(rendererPreset, presetName);
+
+    // revivedDevice מובטח להיות תקין ולהכיל UDN אם הפונקציה reviveRendererDetails לא זרקה שגיאה.
+    // הבדיקה על friendlyName ו-modelName הוסרה מכאן כי היא פחות קריטית להמשך התהליך אם UDN קיים.
+    // אם יש צורך לוודא את קיומם, יש להוסיף את הבדיקה בתוך reviveRendererDetails או כאן.
+    logger.info(`Successfully processed renderer UDN: ${revivedDevice.UDN} for preset '${presetName}'. Now polling active device list.`);
+
+    // שלב 3: פולינג לאיתור ברשימה המרכזית
+    // אנחנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנחנו בטוחים בו מההגדרות.
+    // revivedDevice.UDN אמור להיות זהה, אבל עדיף להשתמש במקור הבטוח.
+    const foundDeviceInGlobalList = await pollForRendererInActiveDevices(rendererPreset.udn, presetName);
+    
+    return foundDeviceInGlobalList;
   };
 
   // משימה 2: טיפול ב-Media Server (קבלת פריטים)
