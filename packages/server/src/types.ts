@@ -30,7 +30,7 @@ export interface ApiDevice {
     deviceType?: string; // הוסף
     presentationURL?: string;
     iconList?: ApiDeviceIcon[]; // שונה מ-iconUrl למערך אובייקטי אייקונים
-    serviceList?: Record<string, ServiceDescription>; // שונה מ-Map לאובייקט רגיל, המפתח הוא שם ידידותי
+    serviceList?: Map<string, ServiceDescription>; // עודכן ל-Map כדי להתאים לטיפוס מהליבה
     lastSeen: number;
     expiresAt?: number; // הוסף
     detailLevelAchieved?: string; // הוסף

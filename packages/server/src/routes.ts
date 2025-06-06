@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getActiveDevices, getRawMessagesBuffer } from './deviceManager'; // updateDeviceList הוסר
 import { handleBrowseRequest } from './browseHandler';
 import { createRendererHandler } from './rendererHandler';
+import { customJsonReplacer } from './customSerializer'; // ייבוא הפונקציה החדשה
 import {
   handleGetPresets,
   handlePostPreset,
@@ -15,40 +16,14 @@ const router = Router();
 
 // Device routes
 router.get('/api/devices', (req: Request, res: Response) => {
+
   const activeDevicesMap = getActiveDevices();
+
   const devicesArray = Array.from(activeDevicesMap.values());
 
-  // לוג לבדיקה
-  console.log(`[/api/devices] Found ${activeDevicesMap.size} active devices in map.`);
-  devicesArray.forEach((device, index) => {
-    console.log(`[/api/devices] Device ${index} from array: USN='${device.usn}', UDN='${device.UDN}', FriendlyName='${device.friendlyName}'`);
-  });
+  const jsonString = JSON.stringify(devicesArray, customJsonReplacer);
 
-  // יצירת מערך חדש עם אובייקטים "שטוחים" עבור ה-JSON
-  const plainDevicesArray = devicesArray.map(device => ({
-    usn: device.usn, // השדה הבעייתי
-    UDN: device.UDN,
-    friendlyName: device.friendlyName,
-    location: device.location,
-    server: device.server,
-    st: device.st,
-    remoteAddress: device.remoteAddress,
-    remotePort: device.remotePort,
-    baseURL: device.baseURL,
-    manufacturer: device.manufacturer,
-    modelName: device.modelName,
-    deviceType: device.deviceType,
-    presentationURL: device.presentationURL,
-    iconList: device.iconList,
-    // הוספת serviceList כאובייקט רגיל
-    serviceList: device.serviceList ? Object.fromEntries(device.serviceList) : {},
-    lastSeen: device.lastSeen,
-    expiresAt: device.expiresAt,
-    detailLevelAchieved: device.detailLevelAchieved,
-  }));
-  
-  console.log('[/api/devices] plainDevicesArray for JSON:', JSON.stringify(plainDevicesArray, null, 2));
-  res.json(plainDevicesArray);
+  res.type('application/json').send(jsonString);
 });
 
 router.post('/api/devices/:udn/browse', (req: Request, res: Response, next: NextFunction) => {
