@@ -69,6 +69,23 @@
          #device-list li { /* Override for li to allow block layout inside */
             display: block; /* Change from flex to block to stack children */
         }
+
+        /* עיצוב חדש לרשימת שירותים בשורה אחת */
+        .services-list-inline {
+            display: flex;
+            flex-wrap: wrap; /* מאפשר גלישה אם אין מספיק מקום */
+            /* list-style-type: none; כבר מוגדר ב .services-container ul */
+            padding-left: 0; /* איפוס ריפוד שמאלי שהיה ב .services-container ul */
+            margin-top: 5px; /* התאמת מרווח עליון */
+            margin-bottom: 0; /* איפוס מרווח תחתון שהיה ב .services-container ul */
+        }
+        .services-list-inline li {
+            margin-right: 5px; /* מרווח קטן מימין לפריט */
+            /* אין צורך ב-list-style-type: none; כאן כי ה-ul כבר מטפל בזה */
+        }
+        .services-list-inline li:not(:last-child)::after {
+            content: ", "; /* הוספת פסיק אחרי כל פריט חוץ מהאחרון */
+        }
     </style>
 </head>
 <body>
@@ -162,6 +179,7 @@
                             servicesContainer.appendChild(servicesTitle);
                             
                             const servicesListElement = document.createElement('ul');
+                            servicesListElement.className = 'services-list-inline'; // הוספת הקלאס החדש
                             Object.keys(device.serviceList).forEach(serviceId => {
                                 const serviceItem = document.createElement('li');
                                 serviceItem.textContent = serviceId; // מציג את מזהה השירות
