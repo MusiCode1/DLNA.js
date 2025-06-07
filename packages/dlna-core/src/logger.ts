@@ -19,10 +19,14 @@ const logLevels = {
   error: 0,
   warn: 1,
   info: 2,
-  http: 3, // רמה נוספת שיכולה להיות שימושית לבקשות HTTP
-  verbose: 4,
-  debug: 5,
-  silly: 6
+  debug: 3,
+  trace: 4 // מחליף את http, verbose, ו-silly
+};
+
+// הרחבת הטיפוס של winston.Logger כדי לכלול את המתודות של הרמות המותאמות אישית
+// זה מאפשר ל-TypeScript לזהות את המתודות trace(), debug() וכו' על אובייקט הלוגר.
+type CustomLogger = winston.Logger & {
+  [level in keyof typeof logLevels]: winston.LeveledLogMethod;
 };
 
 // הגדרת צבעים לרמות השונות (לקונסולה)
@@ -30,10 +34,8 @@ const logColors = {
   error: 'red',
   warn: 'yellow',
   info: 'green',
-  http: 'magenta',
-  verbose: 'cyan',
   debug: 'blue',
-  silly: 'grey'
+  trace: 'magenta' // צבע חדש עבור רמת trace
 };
 
 winston.addColors(logColors);
@@ -242,7 +244,7 @@ export const fileTransport = (filePath?: string, moduleLabel?: string) => new wi
 
 
 // --- פונקציה ליצירת לוגר ---
-const createModuleLogger = (moduleName: string): winston.Logger => {
+const createModuleLogger = (moduleName: string): CustomLogger => {
   const activeTransports = [];
 
   // טרנספורט לקונסולה
@@ -285,7 +287,7 @@ const createModuleLogger = (moduleName: string): winston.Logger => {
       })
     ],
     exitOnError: false, // חשוב - לא לצאת מהתהליך במקרה של שגיאה בלוגר עצמו או ב-exception handler
-  });
+  }) as CustomLogger; // המרת טיפוס מפורשת ל-CustomLogger
 };
 
 export default createModuleLogger;

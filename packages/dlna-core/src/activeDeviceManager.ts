@@ -161,7 +161,7 @@ export class ActiveDeviceManager extends EventEmitter {
     };
 
     if (basicDevice.httpMethod === 'M-SEARCH') {
-      logger.debug(`_parseAndMapSsdpMessage: Received M-SEARCH request from ${rinfo.address}:${rinfo.port}.`, { usn: basicDevice.usn, UDN: basicDevice.UDN });
+      logger.trace(`_parseAndMapSsdpMessage: Received M-SEARCH request from ${rinfo.address}:${rinfo.port}.`, { usn: basicDevice.usn, UDN: basicDevice.UDN });
     }
 
     if (basicDevice.httpMethod !== 'M-SEARCH' && messageType === 'RESPONSE' && !location) {
@@ -182,19 +182,35 @@ export class ActiveDeviceManager extends EventEmitter {
   private async _handleSsdpMessage(msg: Buffer, rinfo: RemoteInfo, socketType: string): Promise<void> {
     const basicDevice = this._parseAndMapSsdpMessage(msg, rinfo);
 
+    if (basicDevice) {
+      let messageOriginType = 'Unknown';
+      if (basicDevice.messageType === 'RESPONSE') {
+        messageOriginType = 'Response (likely to M-SEARCH)';
+      } else if (basicDevice.httpMethod === 'NOTIFY') {
+        messageOriginType = 'Multicast (NOTIFY)';
+      }
+      logger.trace(`Received SSDP message from ${rinfo.address}:${rinfo.port} via ${socketType}. Type: ${messageOriginType}`, {
+        usn: basicDevice.usn,
+        st: basicDevice.st,
+        nts: basicDevice.nts,
+        location: basicDevice.location,
+        server: basicDevice.server,
+      });
+    }
+
     if (!basicDevice) {
       // הלוג נרשם כבר ב-_parseAndMapSsdpMessage
       return;
     }
 
     if (!basicDevice.usn || !basicDevice.UDN) {
-      logger.error('_handleSsdpMessage: Received SSDP message without USN or UDN. Ignoring.', { remoteAddress: rinfo.address, headers: basicDevice.headers, usn: basicDevice.usn, UDN: basicDevice.UDN });
+      logger.warn('_handleSsdpMessage: Received SSDP message without USN or UDN. Ignoring.', { remoteAddress: rinfo.address, headers: basicDevice.headers, usn: basicDevice.usn, UDN: basicDevice.UDN });
       return;
     }
 
     // הודעת byebye לא חייבת להכיל location
     if (basicDevice.nts !== 'ssdp:byebye' && !basicDevice.location) {
-      logger.error('_handleSsdpMessage: Received SSDP message (not byebye) without Location. Ignoring.', { usn: basicDevice.usn, UDN: basicDevice.UDN, remoteAddress: rinfo.address, headers: basicDevice.headers });
+      logger.warn('_handleSsdpMessage: Received SSDP message (not byebye) without Location. Ignoring.', { usn: basicDevice.usn, UDN: basicDevice.UDN, remoteAddress: rinfo.address, headers: basicDevice.headers });
       return;
     }
 
@@ -288,7 +304,7 @@ export class ActiveDeviceManager extends EventEmitter {
             existingDevice.expiresAt = expiresAt;
 
             detailLevelUpdated = true;
-            logger.info(`_handleSsdpMessage: Successfully updated details for device: UDN=${existingDevice.UDN} to level ${existingDevice.detailLevelAchieved}`, { UDN: existingDevice.UDN, usn: existingDevice.usn });
+            // logger.info(`_handleSsdpMessage: Successfully updated details for device: UDN=${existingDevice.UDN} to level ${existingDevice.detailLevelAchieved}`, { UDN: existingDevice.UDN, usn: existingDevice.usn });
           } else {
             logger.warn(`_handleSsdpMessage: Failed to get updated description for existing device: UDN=${deviceUdn} from location ${basicDevice.location}`, { UDN: deviceUdn, usn: basicDevice.usn });
           }
@@ -296,10 +312,16 @@ export class ActiveDeviceManager extends EventEmitter {
           logger.error(`_handleSsdpMessage: Error processing device description update for existing device UDN=${deviceUdn}: ${error instanceof Error ? error.message : String(error)}`, { UDN: deviceUdn, usn: basicDevice.usn, location: basicDevice.location, error });
         }
       }
+      // הודעת לוג מותאמת לאחר עדכון מכשיר קיים
+      if (detailLevelUpdated || locationChanged) {
+        logger.info(`Device details significantly updated: UDN=${existingDevice.UDN}, NewLevel=${existingDevice.detailLevelAchieved}, LocationChanged=${locationChanged}, USN=${existingDevice.usn}`);
+      } else {
+        logger.debug(`Device refreshed (heartbeat): UDN=${existingDevice.UDN}, USN=${existingDevice.usn}`);
+      }
 
       this.activeDevices.set(existingDevice.UDN, existingDevice); // המפתח הוא UDN
       this.emit('deviceupdated', existingDevice.UDN, existingDevice); // שולחים UDN
-      logger.debug(`_handleSsdpMessage: Device updated: UDN=${existingDevice.UDN}`, { UDN: existingDevice.UDN, usn: existingDevice.usn, detailLevelUpdated });
+      // logger.debug(`_handleSsdpMessage: Device updated: UDN=${existingDevice.UDN}`, { UDN: existingDevice.UDN, usn: existingDevice.usn, detailLevelUpdated }); // כבר טופל למעלה
 
     } else {
       // מכשיר חדש
@@ -409,7 +431,7 @@ export class ActiveDeviceManager extends EventEmitter {
    */
   private _cleanupDevices(): void {
     const now = Date.now();
-    logger.debug(`_cleanupDevices: Starting cleanup. Current active devices: ${this.activeDevices.size}`);
+    logger.trace(`_cleanupDevices: Starting cleanup. Current active devices: ${this.activeDevices.size}`);
 
     for (const [udn, device] of this.activeDevices.entries()) {
       if (device.expiresAt < now) {
@@ -419,7 +441,7 @@ export class ActiveDeviceManager extends EventEmitter {
         logger.info(`_cleanupDevices: Removed expired device: UDN=${udn} (FriendlyName: ${device.friendlyName}, USN: ${device.usn}, ExpiresAt: ${new Date(device.expiresAt).toISOString()})`, { udn, friendlyName: device.friendlyName, usn: device.usn });
       }
     }
-    logger.debug(`_cleanupDevices: Finished cleanup. Active devices after cleanup: ${this.activeDevices.size}`);
+    logger.trace(`_cleanupDevices: Finished cleanup. Active devices after cleanup: ${this.activeDevices.size}`);
   }
 
   /**
@@ -493,7 +515,7 @@ export class ActiveDeviceManager extends EventEmitter {
 
       // שליחת M-SEARCH ראשוני
       if (this.socketManager) {
-        logger.debug(`Sending initial M-SEARCH for target: ${this.options.searchTarget}`);
+        logger.trace(`Sending initial M-SEARCH for target: ${this.options.searchTarget}`);
         // נשלח גם ל-IPv4 וגם ל-IPv6 אם רלוונטי
         this.socketManager.sendMSearch(this.options.searchTarget, 4).catch((err: Error) => {
           logger.error('Error sending initial M-SEARCH IPv4:', err);
