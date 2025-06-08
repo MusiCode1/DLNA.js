@@ -2,6 +2,11 @@ import { env } from './envLoader';
 import { DiscoveryDetailLevel } from 'dlna.js';
 import type { ActiveDeviceManagerOptions } from 'dlna.js';
 
+/**
+ * אובייקט התצורה המרכזי של האפליקציה.
+ * הוא מאחד את כל ההגדרות, ומאפשר דריסה של ערכי ברירת מחדל
+ * באמצעות משתני סביבה.
+ */
 
 const defaultConfig = {
   server: {
