@@ -21,7 +21,7 @@ import type {
 import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler';
 import { getActiveDevices } from './deviceManager';
-import { PING_POLLING_OPTIONS } from './config';
+import { config } from './config';
  
 const logger = createModuleLogger('PlayPresetHandler');
  
@@ -118,13 +118,13 @@ async function pollForRendererInActiveDevices(
   presetName: string
 ): Promise<ApiDevice> {
   const {
-    INITIAL_POLLING_INTERVAL_MS,
-    MAX_POLLING_INTERVAL_MS,
-    POLLING_TIMEOUT_MS,
-    POLLING_INTERVAL_INCREMENT_FACTOR
-  } = PING_POLLING_OPTIONS;
+    initialIntervalMs,
+    maxIntervalMs,
+    timeoutMs,
+    intervalIncrementFactor
+  } = config.pingPolling;
 
-  logger.info(`Polling for renderer UDN: ${rendererUDN} in active devices for preset '${presetName}' (total timeout: ${POLLING_TIMEOUT_MS}ms).`);
+  logger.info(`Polling for renderer UDN: ${rendererUDN} in active devices for preset '${presetName}' (total timeout: ${timeoutMs}ms).`);
 
   // פונקציית עזר פנימית לבדיקת ההתקן ברשימה הנוכחית
   function findDeviceInCurrentList(udnToFind: string): ApiDevice | undefined {
@@ -134,10 +134,10 @@ async function pollForRendererInActiveDevices(
 
   let foundDevice: ApiDevice | undefined = undefined;
   const startTime = Date.now();
-  let currentInterval = INITIAL_POLLING_INTERVAL_MS;
+  let currentInterval = Number(initialIntervalMs);
   let attempts = 0;
 
-  while (Date.now() - startTime < POLLING_TIMEOUT_MS) {
+  while (Date.now() - startTime < Number(timeoutMs)) {
     attempts++;
     foundDevice = findDeviceInCurrentList(rendererUDN);
     if (foundDevice) {
@@ -154,9 +154,9 @@ async function pollForRendererInActiveDevices(
 
     // בדוק אם ההמתנה הבאה תחרוג מהזמן הכולל
     const timeElapsed = Date.now() - startTime;
-    if (timeElapsed + currentInterval >= POLLING_TIMEOUT_MS) {
+    if (timeElapsed + currentInterval >= Number(timeoutMs)) {
       // אם כן, בצע בדיקה אחרונה מיד לפני היציאה (אם נשאר זמן קטן מהאינטרוול הבא)
-      const remainingTime = POLLING_TIMEOUT_MS - timeElapsed;
+      const remainingTime = Number(timeoutMs) - timeElapsed;
       if (remainingTime > 0) { // רק אם נשאר זמן כלשהו
         logger.debug(`Approaching timeout for ${rendererUDN}. Performing one last check within ${remainingTime}ms.`);
         // המתן את הזמן הנותר (או חלק ממנו אם הוא קטן מאוד) לפני הבדיקה האחרונה
@@ -180,7 +180,7 @@ async function pollForRendererInActiveDevices(
     await new Promise(resolve => setTimeout(resolve, currentInterval));
 
     // הגדלת המרווח לניסיון הבא
-    currentInterval = Math.min(MAX_POLLING_INTERVAL_MS, Math.floor(currentInterval * POLLING_INTERVAL_INCREMENT_FACTOR));
+    currentInterval = Math.min(Number(maxIntervalMs), Math.floor(currentInterval * Number(intervalIncrementFactor)));
   }
 
   // אם יצאנו מהלולאה ולא מצאנו, נבצע בדיקה אחרונה למקרה שההתקן הופיע ממש ברגע האחרון
@@ -200,7 +200,7 @@ async function pollForRendererInActiveDevices(
   }
 
   if (!foundDevice) {
-    logger.error(`Renderer ${rendererUDN} still not found in active devices after polling for approx ${POLLING_TIMEOUT_MS}ms for preset '${presetName}'. Total attempts: ${attempts}.`);
+    logger.error(`Renderer ${rendererUDN} still not found in active devices after polling for approx ${timeoutMs}ms for preset '${presetName}'. Total attempts: ${attempts}.`);
     throw new PlaybackError(`Renderer for preset '${presetName}' (UDN: ${rendererUDN}) could not be confirmed in active devices after polling timeout.`, 500);
   }
   return foundDevice;

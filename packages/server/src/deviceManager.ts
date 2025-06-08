@@ -1,7 +1,7 @@
 import { createModuleLogger, ActiveDeviceManager, type ActiveDeviceManagerOptions, type ApiDevice, type RawSsdpMessagePayload } from 'dlna.js';
 import type { RemoteInfo } from 'node:dgram';
 // import type { ApiDevice } from './types'; // ApiDevice יגיע מ-dlna-core
-import { DEFAULT_DISCOVERY_OPTIONS, MAX_RAW_MESSAGES } from './config';
+import { config } from './config';
 
 const logger = createModuleLogger('DeviceManager');
 
@@ -25,7 +25,7 @@ function getCoreDeviceManager(): ActiveDeviceManager {
 
 // הגדרת האופציות עבור ActiveDeviceManager
 const activeDeviceManagerOptions: ActiveDeviceManagerOptions = {
-  ...DEFAULT_DISCOVERY_OPTIONS, // נשתמש בהגדרות ברירת המחדל
+  ...config.discovery.options, // נשתמש בהגדרות ברירת המחדל
   // אם יש צורך להעביר את הקולבק להודעות גולמיות, נוסיף אותו כאן
   onRawSsdpMessage: (payload: RawSsdpMessagePayload) => { // תוקן ל-RawSsdpMessagePayload
     const messageString = payload.message.toString('utf-8');
@@ -34,7 +34,7 @@ const activeDeviceManagerOptions: ActiveDeviceManagerOptions = {
       remoteInfo: payload.remoteInfo, // תוקן ל-remoteInfo
       socketType: payload.socketType,
     });
-    if (rawMessagesBuffer.length > MAX_RAW_MESSAGES) {
+    if (rawMessagesBuffer.length > Number(config.rawMessages.maxSize)) {
       rawMessagesBuffer.shift(); // הסרת ההודעה הישנה ביותר
     }
   },

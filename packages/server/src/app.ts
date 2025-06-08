@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { createModuleLogger } from 'dlna.js';
-import { PORT } from './config';
+import { config } from './config';
 import apiRouter from './routes'; // ייבוא ה-router הראשי
 import { startDiscovery as startDeviceDiscovery } from './deviceManager'; // שינוי שם הייבוא למניעת התנגשות פוטנציאלית
 
@@ -43,9 +43,9 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 });
 
 export function startServer(): void {
-  app.listen(PORT, () => {
-    logger.info(`Server listening on port ${PORT}`);
-    logger.info(`Access the UI at: http://localhost:${PORT}/`); // שינוי קל בהודעה
+  app.listen(Number(config.server.port), () => {
+    logger.info(`Server listening on port ${config.server.port}`);
+    logger.info(`Access the UI at: http://localhost:${config.server.port}/`); // שינוי קל בהודעה
     // התחל את גילוי המכשירים לאחר שהשרת התחיל להאזין
     startDeviceDiscovery();
   });
