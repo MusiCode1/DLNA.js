@@ -13,13 +13,19 @@ interface RawMessagesBufferEntry {
 }
 const rawMessagesBuffer: RawMessagesBufferEntry[] = [];
 
-// הגדרת האופציות עבור ActiveDeviceManager
-// יש לוודא שהאופציות ב-DEFAULT_DISCOVERY_OPTIONS תואמות ל-ActiveDeviceManagerOptions
-// או לבצע המרה/התאמה. בשלב זה נניח שהן תואמות ברובן.
-const { networkInterfaces, ...restOfDefaultOptions } = DEFAULT_DISCOVERY_OPTIONS;
+let coreDeviceManager: ActiveDeviceManager | null = null;
 
+function getCoreDeviceManager(): ActiveDeviceManager {
+  if (!coreDeviceManager) {
+    logger.info('Creating ActiveDeviceManager instance');
+    coreDeviceManager = new ActiveDeviceManager(activeDeviceManagerOptions);
+  }
+  return coreDeviceManager;
+}
+
+// הגדרת האופציות עבור ActiveDeviceManager
 const activeDeviceManagerOptions: ActiveDeviceManagerOptions = {
-  ...restOfDefaultOptions,
+  ...DEFAULT_DISCOVERY_OPTIONS, // נשתמש בהגדרות ברירת המחדל
   // אם יש צורך להעביר את הקולבק להודעות גולמיות, נוסיף אותו כאן
   onRawSsdpMessage: (payload: RawSsdpMessagePayload) => { // תוקן ל-RawSsdpMessagePayload
     const messageString = payload.message.toString('utf-8');
@@ -35,16 +41,6 @@ const activeDeviceManagerOptions: ActiveDeviceManagerOptions = {
   // networkInterfaces הוסר מכאן כדי למנוע שגיאת טיפוסים.
   // ActiveDeviceManager ישתמש בממשקים הזמינים כברירת מחדל.
 };
-
-let coreDeviceManager: ActiveDeviceManager | null = null;
-
-function getCoreDeviceManager(): ActiveDeviceManager {
-  if (!coreDeviceManager) {
-    logger.info('Creating ActiveDeviceManager instance');
-    coreDeviceManager = new ActiveDeviceManager(activeDeviceManagerOptions);
-  }
-  return coreDeviceManager;
-}
 
 /**
  * @hebrew מתחיל את תהליך גילוי המכשירים הרציף.

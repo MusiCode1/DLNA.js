@@ -81,6 +81,7 @@ export async function invokeDeviceAction(
     const result = await action.invoke(args);
     logger.info(`Action '${actionName}' on device ${device.friendlyName} completed successfully.`);
     logger.debug('Action result:', result);
+    delete result?.$; // הסרת המאפיין $ אם קיים, כדי להקל על קריאות התוצאה
     return result;
   } catch (error: any) {
     logger.error(`Failed to invoke action '${actionName}' on device ${device.friendlyName}.`, {

@@ -21,9 +21,10 @@ import type {
 import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler';
 import { getActiveDevices } from './deviceManager';
-
+import { PING_POLLING_OPTIONS } from './config';
+ 
 const logger = createModuleLogger('PlayPresetHandler');
-
+ 
 /**
  * @hebrew שגיאה מותאמת אישית לתהליך הפעלת פריסט.
  */
@@ -111,16 +112,18 @@ async function confirmDeviceRespondsViaUrl(
   }
 }
 
-const INITIAL_POLLING_INTERVAL_MS = 250; // מרווח התחלתי
-const MAX_POLLING_INTERVAL_MS = 1500;    // מרווח מקסימלי בין בדיקות
-const POLLING_TIMEOUT_MS = 20 * 1000;         // זמן פולינג כולל
-const POLLING_INTERVAL_INCREMENT_FACTOR = 1.5; // פקטור הגדלת המרווח
-
 async function pollForRendererInActiveDevices(
   rendererUDN: string,
   rendererBaseURL: string, // הוספת ה-URL של הרנדרר
   presetName: string
 ): Promise<ApiDevice> {
+  const {
+    INITIAL_POLLING_INTERVAL_MS,
+    MAX_POLLING_INTERVAL_MS,
+    POLLING_TIMEOUT_MS,
+    POLLING_INTERVAL_INCREMENT_FACTOR
+  } = PING_POLLING_OPTIONS;
+  
   logger.info(`Polling for renderer UDN: ${rendererUDN} in active devices for preset '${presetName}' (total timeout: ${POLLING_TIMEOUT_MS}ms).`);
 
   // פונקציית עזר פנימית לבדיקת ההתקן ברשימה הנוכחית
