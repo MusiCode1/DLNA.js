@@ -8,6 +8,5 @@
       "lg-webos-remote": ["../lg-webos-remote/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../lg-webos-remote" }]
+  "include": ["src/**/*.ts"]
 }
