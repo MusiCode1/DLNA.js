@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { ActiveDeviceManager } from 'dlna.js';
 import { createLogger } from 'dlna.js';
 import { getActiveDevices } from './deviceManager';
 
@@ -15,10 +14,9 @@ const logger = createLogger('ProxyHandler');
  * @param next - פונקציית ה-middleware הבאה של Express.
  */
 export async function proxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  
   const currentActiveDevices = getActiveDevices();
-  const { deviceId } = req.params;
-  // הנתיב למשאב מתקבל מה-wildcard (*) בראוט
-  const resourcePath = req.params[0];
+  const { deviceId, resourcePath } = req.params;
 
   if (!deviceId || !resourcePath) {
     logger.warn('Bad request: Device ID or resource path is missing.');
