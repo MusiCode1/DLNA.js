@@ -1,0 +1,27 @@
+{
+  "name": "lg-webos-remote",
+  "version": "0.0.1",
+  "description": "A library to control LG webOS TVs",
+  "keywords": [
+    "lg",
+    "webos",
+    "tv",
+    "remote",
+    "control"
+  ],
+  "author": "",
+  "license": "MIT",
+  "module": "src/index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/ws": "^8.18.1",
+    "eventemitter3": "^5.0.1",
+    "ws": "^8.18.2"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "proxy-server",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ws": "^8.5.10"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "hono": "^4.7.11",
+    "lg-webos-remote": "workspace:*",
+    "ws": "^8.18.2"
+  }
+}

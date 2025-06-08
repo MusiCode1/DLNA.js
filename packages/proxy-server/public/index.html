@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LG WebOS Remote Control</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        h1, h2 { color: #333; }
+        #controls, #status-container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        select, button { padding: 10px 15px; margin: 5px; border-radius: 5px; border: 1px solid #ddd; cursor: pointer; font-size: 16px; }
+        button { background-color: #007bff; color: white; border-color: #007bff; }
+        button:hover { background-color: #0056b3; }
+        .control-group { margin-bottom: 15px; }
+        .control-group h3 { margin-top: 0; color: #555; }
+        #status { border: 1px solid #eee; padding: 10px; min-height: 50px; background-color: #fafafa; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>LG WebOS Remote Control</h1>
+
+    <div id="connection-setup">
+        <h2>בחר טלוויזיה</h2>
+        <select id="tv-select">
+            <option value="">-- בחר טלוויזיה --</option>
+        </select>
+        <button id="connect-btn">התחבר</button>
+    </div>
+
+    <div id="controls" style="display: none;">
+        <h2>פקדים</h2>
+        <div class="control-group">
+            <h3>שמע</h3>
+            <button data-command='{"type": "request", "uri": "ssap://audio/volumeUp"}'>הגבר שמע</button>
+            <button data-command='{"type": "request", "uri": "ssap://audio/volumeDown"}'>הנמך שמע</button>
+            <button data-command='{"type": "request", "uri": "ssap://audio/setMute", "payload": {"mute": true}}'>השתק</button>
+            <button data-command='{"type": "request", "uri": "ssap://audio/setMute", "payload": {"mute": false}}'>בטל השתקה</button>
+        </div>
+        <div class="control-group">
+            <h3>ניווט</h3>
+            <button data-command='{"type": "button", "name": "UP"}'>למעלה</button>
+            <button data-command='{"type": "button", "name": "DOWN"}'>למטה</button>
+            <button data-command='{"type": "button", "name": "LEFT"}'>שמאלה</button>
+            <button data-command='{"type": "button", "name": "RIGHT"}'>ימינה</button>
+            <button data-command='{"type": "button", "name": "ENTER"}'>אישור</button>
+            <button data-command='{"type": "button", "name": "BACK"}'>חזור</button>
+        </div>
+        <div class="control-group">
+            <h3>מערכת</h3>
+            <button data-command='{"type": "request", "uri": "ssap://system/turnOff"}'>כיבוי</button>
+            <button id="show-toast-btn">הצג הודעה</button>
+        </div>
+        <div class="control-group">
+            <h3>אפליקציות</h3>
+            <button data-command='{"type": "request", "uri": "ssap://system.launcher/launch", "payload": {"id": "youtube.leanback.v4"}}'>הפעל YouTube</button>
+        </div>
+    </div>
+
+    <div id="status-container">
+        <h2>סטטוס</h2>
+        <div id="status">לא מחובר</div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
