@@ -2,6 +2,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // DOM Elements
   const deviceNameEl = document.getElementById("device-name");
   const trackTitleEl = document.getElementById("track-title");
+  const trackArtistEl = document.getElementById("track-artist");
+  const trackAlbumEl = document.getElementById("track-album");
+  const trackAlbumArtEl = document.getElementById("track-album-art");
   const progressBarEl = document.getElementById("progress-bar");
   const currentTimeEl = document.getElementById("current-time");
   const totalTimeEl = document.getElementById("total-time");
@@ -139,12 +142,40 @@ document.addEventListener("DOMContentLoaded", () => {
     progressBarEl.max = durationSeconds;
     progressBarEl.value = currentSeconds;
 
-    if (trackMetaData && trackMetaData !== "NOT_IMPLEMENTED") {
-      // Simple XML parsing to get the title
-      const titleMatch = trackMetaData.match(/<dc:title>(.*?)<\/dc:title>/);
-      trackTitleEl.textContent = titleMatch ? titleMatch[1] : "מידע לא זמין";
+    if (trackMetaData && trackMetaData !== "NOT_IMPLEMENTED" && trackMetaData.startsWith("<")) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(trackMetaData, "text/xml");
+      
+      const item = xmlDoc.querySelector("item");
+      if (item) {
+        const title = item.querySelector("title")?.textContent || "מידע לא זמין";
+        const artist = item.querySelector("artist")?.textContent;
+        const album = item.querySelector("album")?.textContent;
+        const albumArtURI = item.querySelector("albumArtURI")?.textContent;
+
+        trackTitleEl.textContent = title;
+        trackArtistEl.textContent = artist || "";
+        trackAlbumEl.textContent = album || "";
+
+        if (albumArtURI) {
+          trackAlbumArtEl.src = albumArtURI;
+          trackAlbumArtEl.style.display = "block";
+        } else {
+          trackAlbumArtEl.style.display = "none";
+        }
+      } else {
+         // Fallback for simpler metadata
+         const titleMatch = trackMetaData.match(/<dc:title>(.*?)<\/dc:title>/);
+         trackTitleEl.textContent = titleMatch ? titleMatch[1] : "מידע לא זמין";
+         trackArtistEl.textContent = "";
+         trackAlbumEl.textContent = "";
+         trackAlbumArtEl.style.display = "none";
+      }
     } else {
       trackTitleEl.textContent = "לא מנגן כלום";
+      trackArtistEl.textContent = "";
+      trackAlbumEl.textContent = "";
+      trackAlbumArtEl.style.display = "none";
     }
   }
 

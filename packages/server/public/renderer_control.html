@@ -36,9 +36,19 @@
         .track-info {
             margin-bottom: 20px;
         }
+        #track-album-art {
+            max-width: 150px;
+            max-height: 150px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
         #track-title {
             font-weight: bold;
             font-size: 1.2em;
+        }
+        #track-artist, #track-album {
+            font-size: 1em;
+            color: #606770;
         }
         .progress-container {
             width: 100%;
@@ -88,7 +98,10 @@
         <div id="device-name">טוען...</div>
         <hr>
         <div class="track-info">
+            <img id="track-album-art" src="" alt="Album Art" style="display: none;" />
             <div id="track-title">לא מנגן כלום</div>
+            <div id="track-artist"></div>
+            <div id="track-album"></div>
             <div class="progress-container">
                 <input type="range" id="progress-bar" value="0" min="0" max="100">
                 <div class="time-display">
