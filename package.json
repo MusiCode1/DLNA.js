@@ -1,5 +1,5 @@
 {
-  "name": "dlna-tv-play-server",
+  "name": "play-with-dlna-to-tv-server",
   "private": true,
   "workspaces": [
     "packages/*"

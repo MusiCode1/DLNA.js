@@ -2,6 +2,7 @@
 import './config'; // מייבא ומריץ את config.ts, כולל dotenv.config()
 
 import { createModuleLogger } from 'dlna.js';
+
 import { startServer } from './app';
 import { stopDiscovery as stopDeviceDiscovery } from './deviceManager';
 // שים לב: startDeviceDiscovery נקרא כעת מתוך startServer ב-app.ts

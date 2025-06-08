@@ -1,10 +1,13 @@
-import dotenv from 'dotenv';
+
+// טעינת משתני סביבה מקובץ .env דרך טוען מותאם אישית
+// חשוב שזה יקרה כמה שיותר מוקדם בתהליך טעינת האפליקציה
+import './envLoader'; // טוען את הקובץ החדש שיצרנו
+
 import { DiscoveryDetailLevel } from 'dlna.js';
 import type { ContinueDiscoveryOptions } from './types';
 
-// טעינת משתני סביבה מקובץ .env
-// חשוב שזה יקרה כמה שיותר מוקדם בתהליך טעינת האפליקציה
-dotenv.config();
+
+
 
 // קבועים הקשורים לשרת
 export const PORT = process.env.PORT || 3300;

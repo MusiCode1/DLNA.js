@@ -182,6 +182,7 @@ export class ActiveDeviceManager extends EventEmitter {
   private async _handleSsdpMessage(msg: Buffer, rinfo: RemoteInfo, socketType: string): Promise<void> {
     const basicDevice = this._parseAndMapSsdpMessage(msg, rinfo);
 
+    // #region logging
     if (basicDevice) {
       let messageOriginType = 'Unknown';
       if (basicDevice.messageType === 'RESPONSE') {
@@ -197,6 +198,7 @@ export class ActiveDeviceManager extends EventEmitter {
         server: basicDevice.server,
       });
     }
+    // #endregion logging
 
     if (!basicDevice) {
       // הלוג נרשם כבר ב-_parseAndMapSsdpMessage
