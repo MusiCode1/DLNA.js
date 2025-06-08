@@ -28,9 +28,9 @@ const defaultConfig = {
     maxInactivityMs: 15 * 60 * 1000,
   },
   pingPolling: {
-    initialIntervalMs: 250,
-    maxIntervalMs: 1500,
-    timeoutMs: 40 * 1000,
+    initialIntervalMs: 1.5 * 1000,
+    maxIntervalMs: 5 * 1000,
+    timeoutMs: 60 * 1000,
     intervalIncrementFactor: 1.5,
   },
 };
@@ -73,13 +73,13 @@ const tempConfig = initializeConfig(defaultConfig);
 
 // 3. הרכבת התצורה הסופית תוך טיפול במקרים מיוחדים
 const finalConfig = {
-    ...tempConfig,
-    discovery: {
-        options: {
-            ...tempConfig.discovery.options,
-            detailLevel: (env.DISCOVERY_OPTIONS_DETAIL_LEVEL as DiscoveryDetailLevel) || DiscoveryDetailLevel.Full,
-        } as ActiveDeviceManagerOptions,
-    },
+  ...tempConfig,
+  discovery: {
+    options: {
+      ...tempConfig.discovery.options,
+      detailLevel: (env.DISCOVERY_OPTIONS_DETAIL_LEVEL as DiscoveryDetailLevel) || DiscoveryDetailLevel.Full,
+    } as ActiveDeviceManagerOptions,
+  },
 };
 
 export const config = finalConfig;
