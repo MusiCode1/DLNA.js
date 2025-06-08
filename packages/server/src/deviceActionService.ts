@@ -81,14 +81,24 @@ export async function invokeDeviceAction(
     const result = await action.invoke(args);
     logger.info(`Action '${actionName}' on device ${device.friendlyName} completed successfully.`);
     logger.debug('Action result:', result);
+    delete result?.$; // הסרת המאפיין $ אם קיים, כדי להקל על קריאות התוצאה
     return result;
   } catch (error: any) {
+    const soapFault = error.originalError?.soapFault;
+    const upnpErrorCode = soapFault?.upnpErrorCode || error.originalError?.upnpErrorCode || 'Unknown';
+    const upnpErrorDescription = soapFault?.upnpErrorDescription || error.originalError?.upnpErrorDescription || 'Unknown error';
     logger.error(`Failed to invoke action '${actionName}' on device ${device.friendlyName}.`, {
+      deviceName: device.friendlyName,
+      actionName,
       errorMessage: error.message,
-      soapFault: error.soapFault,
+      soapFault: soapFault,
+      upnpErrorCode,
+      upnpErrorDescription
     });
     // העברת שגיאת ה-SOAP המקורית אם קיימת
     const errorMessage = error.soapFault?.detail || error.message || 'An unknown error occurred.';
-    throw new ActionFailed(`Action '${actionName}' failed: ${errorMessage}`);
+    throw new ActionFailed(`Action '${actionName}' failed: ${errorMessage}` +
+      ` upnpErrorCode: ${upnpErrorCode}, ` +
+      `upnpErrorDescription: ${upnpErrorDescription}`);
   }
 }

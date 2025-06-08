@@ -74,6 +74,7 @@ async function parseSoapResponse(xmlResponse: string, actionName: string): Promi
                 detail: fault.detail?.toString() || fault.Detail?.toString()
             };
             if (fault.detail && fault.detail.UPnPError) {
+                soapFault.detail = fault.detail;
                 soapFault.upnpErrorCode = parseInt(fault.detail.UPnPError.errorCode, 10);
                 soapFault.upnpErrorDescription = fault.detail.UPnPError.errorDescription;
             } else if (fault.Detail && fault.Detail.UPnPError) {
@@ -189,6 +190,7 @@ export async function sendUpnpCommand(
     } catch (error: any) {
         if (axios.isAxiosError(error)) {
             moduleLogger.error(`[sendUpnpCommand] Axios error sending SOAP request for action ${actionName} to ${controlURL}:`, error.message);
+            
             if (error.response && typeof error.response.data === 'string') {
                 moduleLogger.error('[sendUpnpCommand] Axios error response data:', error.response.data);
                 moduleLogger.error('[sendUpnpCommand] Axios error response status:', error.response.status);
@@ -197,6 +199,7 @@ export async function sendUpnpCommand(
                     if ('faultCode' in parsedFault) {
                         const soapError = new Error(`SOAP Fault from error response: ${parsedFault.faultString} (Code: ${parsedFault.faultCode}, UPnP Code: ${parsedFault.upnpErrorCode || 'N/A'})`);
                         (soapError as any).soapFault = parsedFault;
+                        (error as any).soapFault = parsedFault; // Preserve the fault in the original error
                         throw soapError;
                     }
                 } catch (parseErr) {
