@@ -71,6 +71,16 @@ async function fetchDevices() {
                     browseButton.className = 'browse-button'; // Apply CSS class
                     deviceInfoContainer.appendChild(browseButton);
                 }
+
+                // הצגת כפתור "שליטה" אם שירות AVTransport קיים
+                if (device.serviceList && device.serviceList['AVTransport']) {
+                    const controlButton = document.createElement('a');
+                    controlButton.href = 'renderer_control.html?udn=' + device.UDN;
+                    controlButton.textContent = 'שליטה';
+                    controlButton.className = 'browse-button'; // שימוש באותו עיצוב
+                    controlButton.style.marginLeft = '10px';
+                    deviceInfoContainer.appendChild(controlButton);
+                }
                 
                 listItem.appendChild(deviceInfoContainer);
 
