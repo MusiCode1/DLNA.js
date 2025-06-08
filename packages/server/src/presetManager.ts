@@ -1,11 +1,11 @@
 // קובץ זה מכיל פונקציות לניהול הגדרות הפריסטים
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as url from "url";
 import type { Request, Response, NextFunction } from 'express'; // הוספת ייבואים נדרשים
 import {
   createModuleLogger,
-  DiscoveryDetailLevel, // הוספת ייבוא
-  processUpnpDeviceFromUrl, // הוספת ייבוא
+
 } from 'dlna.js'; // הוספת ייבוא ללוגר
 
 import type {
@@ -19,35 +19,44 @@ import { sendWakeOnLan, wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan'; 
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler'; // ייבוא הפונקציות החדשות
 import { executePlayPresetLogic, PlaybackError } from './playPresetHandler'; // ייבוא מהקובץ החדש
 const logger = createModuleLogger('PresetManager'); // הגדרת לוגר למודול
-const PRESETS_FILE_PATH = path.join(process.cwd(), '..','..', 'data', 'presets.json'); // process.cwd() הוא packages/server, לכן עולים שתי רמות (../../) לשורש הפרויקט, ואז נכנסים ל-data
+
+if (!__dirname) {
+  // @ts-ignore
+  const filePathUrl = import.meta.url; // המרת import.meta.url לנתיב קובץ רגיל
+  const filePath = url.fileURLToPath(filePathUrl); // המרת URL לקובץ לנתיב קובץ רגיל
+  
+  const dirname = path.dirname(filePath); 
+  __dirname = dirname; 
+}
+const PRESETS_FILE_PATH = path.join(__dirname, '..', '..','..', 'data', 'presets.json'); // process.cwd() הוא packages/server, לכן עולים שתי רמות (../../) לשורש הפרויקט, ואז נכנסים ל-data
 
 /**
  * @hebrew טוען את הגדרות הפריסט מקובץ ה-JSON וממיר אותן למערך.
  * @returns {Promise<AllPresetSettings>} אובייקט של כל הפריסטים. אם הקובץ לא קיים או לא תקין, מחזיר אובייקט ריק.
  */
 export async function loadPresets(): Promise<AllPresetSettings> {
-    try {
-        // בדיקה אם הקובץ קיים
-        await fs.access(PRESETS_FILE_PATH);
-        const data = await fs.readFile(PRESETS_FILE_PATH, 'utf-8');
-        if (!data.trim()) {
-            // אם הקובץ ריק, החזר אובייקט ריק
-            return {};
-        }
-        // ניתוח ה-JSON
-        const presetsObject = JSON.parse(data) as AllPresetSettings;
-        return presetsObject;
-    } catch (error: any) {
-        // אם הקובץ לא קיים (ENOENT) או שיש שגיאה אחרת בקריאה/ניתוח, החזר אובייקט ריק
-        if (error.code === 'ENOENT') {
-            // אם הקובץ לא קיים, ניצור אותו עם אובייקט ריק בפעם הבאה שישמרו הגדרות
-            // או שנחזיר אובייקט ריק כפי שנדרש
-            return {};
-        }
-        logger.error('Error loading presets:', error); // שימוש בלוגר במקום console.error
-        // במקרה של שגיאת JSON או שגיאה אחרת, החזר אובייקט ריק כדי למנוע קריסה
-        return {};
+  try {
+    // בדיקה אם הקובץ קיים
+    await fs.access(PRESETS_FILE_PATH);
+    const data = await fs.readFile(PRESETS_FILE_PATH, 'utf-8');
+    if (!data.trim()) {
+      // אם הקובץ ריק, החזר אובייקט ריק
+      return {};
     }
+    // ניתוח ה-JSON
+    const presetsObject = JSON.parse(data) as AllPresetSettings;
+    return presetsObject;
+  } catch (error: any) {
+    // אם הקובץ לא קיים (ENOENT) או שיש שגיאה אחרת בקריאה/ניתוח, החזר אובייקט ריק
+    if (error.code === 'ENOENT') {
+      // אם הקובץ לא קיים, ניצור אותו עם אובייקט ריק בפעם הבאה שישמרו הגדרות
+      // או שנחזיר אובייקט ריק כפי שנדרש
+      return {};
+    }
+    logger.error('Error loading presets:', error); // שימוש בלוגר במקום console.error
+    // במקרה של שגיאת JSON או שגיאה אחרת, החזר אובייקט ריק כדי למנוע קריסה
+    return {};
+  }
 }
 
 /**
@@ -56,16 +65,16 @@ export async function loadPresets(): Promise<AllPresetSettings> {
  * @returns {Promise<void>}
  */
 export async function savePresets(settings: AllPresetSettings): Promise<void> {
-    try {
-        const data = JSON.stringify(settings, null, 2); // עיצוב ה-JSON עם הזחה לקריאות
-        const directoryPath = path.dirname(PRESETS_FILE_PATH); // קבלת הנתיב לתיקייה
-        await fs.mkdir(directoryPath, { recursive: true }); // יצירת התיקייה אם היא לא קיימת
-        await fs.writeFile(PRESETS_FILE_PATH, data, 'utf-8');
-    } catch (error) {
-        logger.error('Error saving presets:', error); // שימוש בלוגר במקום console.error
-        // ניתן להוסיף כאן טיפול בשגיאות מתקדם יותר אם נדרש, כגון זריקת שגיאה מותאמת אישית
-        throw error; // זרוק את השגיאה כדי שהקוד הקורא יוכל לטפל בה
-    }
+  try {
+    const data = JSON.stringify(settings, null, 2); // עיצוב ה-JSON עם הזחה לקריאות
+    const directoryPath = path.dirname(PRESETS_FILE_PATH); // קבלת הנתיב לתיקייה
+    await fs.mkdir(directoryPath, { recursive: true }); // יצירת התיקייה אם היא לא קיימת
+    await fs.writeFile(PRESETS_FILE_PATH, data, 'utf-8');
+  } catch (error) {
+    logger.error('Error saving presets:', error); // שימוש בלוגר במקום console.error
+    // ניתן להוסיף כאן טיפול בשגיאות מתקדם יותר אם נדרש, כגון זריקת שגיאה מותאמת אישית
+    throw error; // זרוק את השגיאה כדי שהקוד הקורא יוכל לטפל בה
+  }
 }
 
 /**
