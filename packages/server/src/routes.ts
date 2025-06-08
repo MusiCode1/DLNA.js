@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { getActiveDevices, getRawMessagesBuffer } from './deviceManager'; // updateDeviceList הוסר
 import { handleBrowseRequest } from './browseHandler';
+import { proxyHandler } from './proxyHandler';
 import { createRendererHandler } from './rendererHandler';
 import { customJsonReplacer } from './customSerializer'; // ייבוא הפונקציה החדשה
 import {
@@ -92,5 +93,8 @@ router.post('/api/wol/wake/:presetName', handleWakePreset);
 router.get('/api/play-preset/:presetName', (req: Request, res: Response, next: NextFunction) => {
   handlePlayPresetByParam(req, res, next, getActiveDevices()); // updateDeviceList הוסר
 });
+
+// Proxy route
+router.get('/proxy/:deviceId/*', proxyHandler);
 
 export default router;

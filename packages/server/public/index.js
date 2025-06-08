@@ -41,7 +41,11 @@ async function fetchDevices() {
                 // שונה להתאים ל-iconList מהשרת
                 if (device.iconList && device.iconList.length > 0 && device.iconList[0].url) {
                     const img = document.createElement('img');
-                    img.src = device.iconList[0].url; // שימוש באייקון הראשון מהרשימה
+                    // We need to construct the full URL to correctly parse the pathname,
+                    // especially if the icon URL is relative.
+                    const fullIconUrl = new URL(device.iconList[0].url, device.baseURL);
+                    const iconUrlPath = fullIconUrl.pathname;
+                    img.src = `/proxy/${device.udn}${iconUrlPath}`; // שימוש בפרוקסי עם udn
                     img.alt = device.friendlyName + ' logo';
                     deviceInfoContainer.appendChild(img);
                 }

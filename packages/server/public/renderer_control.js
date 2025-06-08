@@ -142,13 +142,18 @@ document.addEventListener("DOMContentLoaded", () => {
     progressBarEl.max = durationSeconds;
     progressBarEl.value = currentSeconds;
 
-    if (trackMetaData && trackMetaData !== "NOT_IMPLEMENTED" && trackMetaData.startsWith("<")) {
+    if (
+      trackMetaData &&
+      trackMetaData !== "NOT_IMPLEMENTED" &&
+      trackMetaData.startsWith("<")
+    ) {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(trackMetaData, "text/xml");
-      
+
       const item = xmlDoc.querySelector("item");
       if (item) {
-        const title = item.querySelector("title")?.textContent || "מידע לא זמין";
+        const title =
+          item.querySelector("title")?.textContent || "מידע לא זמין";
         const artist = item.querySelector("artist")?.textContent;
         const album = item.querySelector("album")?.textContent;
         const albumArtURI = item.querySelector("albumArtURI")?.textContent;
@@ -158,18 +163,19 @@ document.addEventListener("DOMContentLoaded", () => {
         trackAlbumEl.textContent = album || "";
 
         if (albumArtURI) {
-          trackAlbumArtEl.src = albumArtURI;
+          const proxiedUrl = `/proxy/${udn}${new URL(albumArtURI).pathname}`;
+          trackAlbumArtEl.src = proxiedUrl;
           trackAlbumArtEl.style.display = "block";
         } else {
           trackAlbumArtEl.style.display = "none";
         }
       } else {
-         // Fallback for simpler metadata
-         const titleMatch = trackMetaData.match(/<dc:title>(.*?)<\/dc:title>/);
-         trackTitleEl.textContent = titleMatch ? titleMatch[1] : "מידע לא זמין";
-         trackArtistEl.textContent = "";
-         trackAlbumEl.textContent = "";
-         trackAlbumArtEl.style.display = "none";
+        // Fallback for simpler metadata
+        const titleMatch = trackMetaData.match(/<dc:title>(.*?)<\/dc:title>/);
+        trackTitleEl.textContent = titleMatch ? titleMatch[1] : "מידע לא זמין";
+        trackArtistEl.textContent = "";
+        trackAlbumEl.textContent = "";
+        trackAlbumArtEl.style.display = "none";
       }
     } else {
       trackTitleEl.textContent = "לא מנגן כלום";
@@ -219,11 +225,18 @@ document.addEventListener("DOMContentLoaded", () => {
         Channel: "Master",
       });
       if (response && response.data) {
-        const isMuted = response.data.CurrentMute === "1";
+        const muteState = response.data.CurrentMute;
+        let isMuted = false;
+        if (muteState === "0" || muteState === "1") {
+          isMuted = muteState === "1";
+        } else {
+          isMuted = muteState;
+        }
+
         await invokeAction("RenderingControl", "SetMute", {
           InstanceID: "0",
           Channel: "Master",
-          DesiredMute: !isMuted,
+          DesiredMute: !isMuted? "1" : "0",
         });
         pollOnce(); // Refresh mute state
       }

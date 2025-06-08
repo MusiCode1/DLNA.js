@@ -410,19 +410,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (itemClass.includes('imageItem')) {
                         actionLink = document.createElement('a');
                         actionLink.textContent = 'View';
-                        actionLink.href = resourceUrl;
+                        const proxiedUrl = `/proxy/${udn}${new URL(resourceUrl).pathname}`;
+                        actionLink.href = proxiedUrl;
                         actionLink.target = '_blank';
                         actionsSpan.appendChild(actionLink); // הוסף את הקישור ישירות
                     } else if (itemClass.includes('audioItem')) {
                         actionLink = document.createElement('a');
                         actionLink.textContent = 'Play';
-                        actionLink.href = resourceUrl;
+                        const proxiedUrl = `/proxy/${udn}${new URL(resourceUrl).pathname}`;
+                        actionLink.href = proxiedUrl;
                         actionLink.target = '_blank';
                         actionsSpan.appendChild(actionLink); // הוסף את הקישור ישירות
                     } else if (itemClass.includes('videoItem')) {
                         actionLink = document.createElement('a');
                         actionLink.textContent = 'Play';
-                        actionLink.href = resourceUrl;
+                        const proxiedUrl = `/proxy/${udn}${new URL(resourceUrl).pathname}`;
+                        actionLink.href = proxiedUrl;
                         actionLink.target = '_blank';
                         actionsSpan.appendChild(actionLink);
     
@@ -517,25 +520,24 @@ document.addEventListener('DOMContentLoaded', () => {
     
             const result = await response.json();
             if (result.success) {
-                showStatusMessage(`Video sent successfully to ${rendererName}.`, 'success');
+                showStatusMessage(`Successfully sent video to ${rendererName}.`, 'success');
             } else {
-                throw new Error(result.message || 'Playback command was not successful.');
+                throw new Error(result.message || 'Unknown error from server.');
             }
-    
         } catch (error) {
             console.error('Error sending play request:', error);
-            showStatusMessage(`Error sending video to ${rendererName}: ${error.message}`, 'error');
+            showStatusMessage(`Error: ${error.message}`, 'error');
         }
     }
-
-    // פונקציה לשליחת בקשת ניגון תיקייה
+    
+    // פונקציה לשליחת בקשת ניגון לתיקייה שלמה
     async function sendPlayFolderRequest(rendererUdn, mediaServerUdn, folderObjectID) {
         const selectedRenderer = availableRenderers.find(r => r.udn === rendererUdn);
         const rendererName = selectedRenderer ? selectedRenderer.friendlyName : 'selected device';
-
-        showStatusMessage(`Sending folder to ${rendererName}...`, 'info');
+    
+        showStatusMessage(`Sending all videos in folder to ${rendererName}...`, 'info');
         if (rendererModal) rendererModal.style.display = 'none';
-
+    
         try {
             const response = await fetch(`/api/renderers/${rendererUdn}/play-folder`, {
                 method: 'POST',
@@ -547,119 +549,107 @@ document.addEventListener('DOMContentLoaded', () => {
                     folderObjectID: folderObjectID
                 }),
             });
-
+    
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
-                throw new Error(errorData.message || `Failed to send play folder command. Status: ${response.status}`);
+                throw new Error(errorData.message || `Failed to send play-folder command. Status: ${response.status}`);
             }
-
+    
             const result = await response.json();
             if (result.success) {
-                showStatusMessage(`Folder sent successfully to ${rendererName}.`, 'success');
+                showStatusMessage(`Successfully sent folder to ${rendererName}.`, 'success');
             } else {
-                throw new Error(result.message || 'Play folder command was not successful.');
+                throw new Error(result.message || 'Unknown error from server.');
             }
-
         } catch (error) {
             console.error('Error sending play folder request:', error);
-            showStatusMessage(`Error sending folder to ${rendererName}: ${error.message}`, 'error');
+            showStatusMessage(`Error: ${error.message}`, 'error');
         }
     }
     
-    // Event listeners for modal buttons
+    
+    // הוספת event listener לכפתור האישור במודאל
     if (confirmPlayButton) {
         confirmPlayButton.addEventListener('click', () => {
-            const selectedRendererUdn = rendererSelect?.value;
-            if (!selectedRendererUdn) {
-                showModalStatusMessage('Please select a device.', 'error');
-                return;
-            }
-
-            const mediaServerUdn = udn; // UDN של שרת המדיה הנוכחי (מה-URL)
-            const isPlayAll = rendererModal?.dataset.isPlayAll === 'true'; // קריאת המצב מה-dataset
-
-        if (isPlayAll) {
-            // מצב "Play All To..."
-            const folderObjectID = currentObjectId; // ה-ID של התיקייה הנוכחית
-            if (!folderObjectID || folderObjectID === "0") {
-                showModalStatusMessage('Error: Cannot play all from root or invalid folder ID.', 'error');
-                console.error("Invalid folderObjectID for Play All:", folderObjectID);
-                return;
-            }
-            sendPlayFolderRequest(selectedRendererUdn, mediaServerUdn, folderObjectID);
-        } else {
-            // מצב "Play To..." (קובץ בודד)
-            if (!currentVideoItemForPlayTo || !currentVideoItemForPlayTo.id) {
-                showModalStatusMessage('Error: No video item selected or item has no ID.', 'error');
-                console.error("currentVideoItemForPlayTo or its ID is missing", currentVideoItemForPlayTo);
-                return;
-            }
-        
-            let objectIdForPlay;
-            if (Array.isArray(currentVideoItemForPlayTo.id)) {
-                objectIdForPlay = currentVideoItemForPlayTo.id[0];
-            } else {
-                objectIdForPlay = currentVideoItemForPlayTo.id;
-            }
-            
-            if (!objectIdForPlay) {
-                 showModalStatusMessage('Error: Video item ID is invalid.', 'error');
-                 console.error("Video item ID is invalid after processing", currentVideoItemForPlayTo.id);
-                 return;
-            }
-            sendPlayRequest(selectedRendererUdn, mediaServerUdn, objectIdForPlay);
-        }
-        // אין צורך לאפס את playAllModeActive כי הוא כבר לא משתנה גלובלי
-    });
+            if (rendererSelect && rendererSelect.value) {
+                const selectedRendererUdn = rendererSelect.value;
+                const isPlayAll = rendererModal?.dataset.isPlayAll === 'true';
     
-    }
-    if (cancelPlayButton) {
-        cancelPlayButton.addEventListener('click', () => {
-            if (rendererModal) rendererModal.style.display = 'none';
-            if (modalStatusMessage) modalStatusMessage.style.display = 'none'; // נקה הודעות מודאל ביציאה
+                if (isPlayAll) {
+                    // במצב Play All, אנו צריכים את ה-ID של התיקייה הנוכחית
+                    if (udn && currentObjectId) {
+                        sendPlayFolderRequest(selectedRendererUdn, udn, currentObjectId);
+                    } else {
+                        showModalStatusMessage('Could not determine current folder to play.', 'error');
+                    }
+                } else {
+                    // במצב Play יחיד, אנו צריכים את פרטי הפריט שנבחר
+                    if (currentVideoItemForPlayTo && udn) {
+                        const objectId = Array.isArray(currentVideoItemForPlayTo.id) ? currentVideoItemForPlayTo.id[0] : currentVideoItemForPlayTo.id;
+                        sendPlayRequest(selectedRendererUdn, udn, objectId);
+                    } else {
+                        showModalStatusMessage('No video item selected or media server UDN is missing.', 'error');
+                    }
+                }
+            } else {
+                showModalStatusMessage('Please select a rendering device.', 'info');
+            }
         });
     }
     
-    // סגירת המודאל בלחיצה מחוץ לתוכן שלו
-    window.onclick = function(event) {
-        if (event.target === rendererModal) {
-            if (rendererModal) rendererModal.style.display = "none";
-            if (modalStatusMessage) modalStatusMessage.style.display = 'none';
-        }
+    // הוספת event listener לכפתור הביטול במודאל
+    if (cancelPlayButton) {
+        cancelPlayButton.addEventListener('click', () => {
+            if (rendererModal) {
+                rendererModal.style.display = 'none';
+            }
+        });
     }
+    
+    // סגירת המודאל אם המשתמש לוחץ מחוץ לתוכן שלו
+    window.addEventListener('click', (event) => {
+        if (event.target === rendererModal) {
+            if (rendererModal) {
+                rendererModal.style.display = 'none';
+            }
+        }
+    });
     
     
     // פונקציה לעדכון פירורי הלחם
     function updateBreadcrumbs() {
         if (breadcrumbsContainer) {
-            breadcrumbsContainer.innerHTML = ''; // נקה פירורי לחם קיימים
-
+            breadcrumbsContainer.innerHTML = ''; // נקה פירורים קיימים
             currentPathTrail.forEach((segment, index) => {
-                const span = document.createElement('span');
+                const segmentSpan = document.createElement('span');
                 if (index < currentPathTrail.length - 1) {
-                    // זה לא הסגמנט האחרון, אז הוא יהיה קישור
-                    const anchor = document.createElement('a');
-                    anchor.href = "#";
-                    anchor.textContent = segment.title;
-                    // הוספת event listener ללחיצה על פירור לחם
-                    anchor.addEventListener('click', (event) => {
+                    // זהו לא הסגמנט האחרון, הפוך אותו לקישור
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.textContent = segment.title;
+                    link.addEventListener('click', (event) => {
                         event.preventDefault();
                         handleBreadcrumbClick(index);
                     });
-                    span.appendChild(anchor);
-                    span.appendChild(document.createTextNode(' > '));
+                    segmentSpan.appendChild(link);
                 } else {
-                    // זה הסגמנט האחרון, אז הוא טקסט רגיל
-                    span.textContent = segment.title;
+                    // זהו הסגמנט האחרון, הצג אותו כטקסט רגיל
+                    segmentSpan.textContent = segment.title;
                 }
-                breadcrumbsContainer.appendChild(span);
+                breadcrumbsContainer.appendChild(segmentSpan);
+    
+                // הוספת מפריד
+                if (index < currentPathTrail.length - 1) {
+                    const separator = document.createElement('span');
+                    separator.textContent = ' > ';
+                    separator.className = 'breadcrumb-separator';
+                    breadcrumbsContainer.appendChild(separator);
+                }
             });
         }
     }
-
-    // טעינת תוכן ראשוני
-    // currentObjectId ו-currentPathTrail כבר אותחלו למעלה
-    updateBreadcrumbs(); // עדכון ראשוני של פירורי הלחם על בסיס מה ששוחזר/נבנה
+    
+    // טעינה ראשונית של התוכן
     loadAndDisplayContent(currentObjectId);
-    // updateUrl ו-savePathTrailToStorage יקרו בתוך loadAndDisplayContent
+    
 });
