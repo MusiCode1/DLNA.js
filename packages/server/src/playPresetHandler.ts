@@ -123,7 +123,7 @@ async function pollForRendererInActiveDevices(
     POLLING_TIMEOUT_MS,
     POLLING_INTERVAL_INCREMENT_FACTOR
   } = PING_POLLING_OPTIONS;
-  
+
   logger.info(`Polling for renderer UDN: ${rendererUDN} in active devices for preset '${presetName}' (total timeout: ${POLLING_TIMEOUT_MS}ms).`);
 
   // פונקציית עזר פנימית לבדיקת ההתקן ברשימה הנוכחית
@@ -244,10 +244,13 @@ export async function executePlayPresetLogic(
 
     if (deviceFromActiveList) {
       logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') found in initial active devices. Confirming it responds via URL: ${rendererPreset.baseURL}...`);
+      
       const respondsViaUrl = await confirmDeviceRespondsViaUrl(deviceFromActiveList, rendererPreset.baseURL, presetName);
+      
       if (respondsViaUrl) {
         logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') confirmed responsive. Using this device instance.`);
         return deviceFromActiveList;
+
       } else {
         logger.warn(`Renderer ${rendererPreset.udn} (preset '${presetName}') failed to respond as expected via URL. Will proceed as if not found in active list (requires WOL, revival, polling).`);
         // התקן נכשל באישור התגובה, נמשיך כאילו לא היה קיים ברשימה הפעילה.
@@ -260,14 +263,6 @@ export async function executePlayPresetLogic(
 
     // שלב 1: הערה ואימות (WOL and ping)
     await wakeAndVerifyRenderer(rendererPreset, presetName);
-
-    // שלב 2: החייאת פרטי ההתקן המלאים מה-URL שלו
-    // פונקציה זו קוראת ל-processUpnpDeviceFromUrl עם DiscoveryDetailLevel.Services
-    // ומבצעת ולידציה בסיסית על התוצאה (למשל, קיום UDN).
-    const revivedDeviceDescription = await reviveRendererDetails(rendererPreset, presetName);
-    // revivedDeviceDescription הוא אובייקט תיאור מהספרייה, לא ApiDevice.
-    // ה-UDN שלו אמור להיות זהה ל-rendererPreset.udn.
-    logger.info(`Successfully revived details for renderer UDN: ${revivedDeviceDescription.UDN} (preset '${presetName}'). Now polling for its managed instance in active devices list.`);
 
     // שלב 3: פולינג לאיתור ההתקן המנוהל (ApiDevice) ברשימה המרכזית (activeDevices)
     // זה חשוב כדי לקבל את האובייקט המלא שמנוהל על ידי המערכת, כולל שירותים שעובדו.

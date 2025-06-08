@@ -32,6 +32,6 @@ export const MAX_DEVICE_INACTIVITY_MS = 15 * 60 * 1000; // מכשיר ייחשב
 export const PING_POLLING_OPTIONS = {
   INITIAL_POLLING_INTERVAL_MS: 250,       // מרווח התחלתי
   MAX_POLLING_INTERVAL_MS: 1500,          // מרווח מקסימלי בין בדיקות
-  POLLING_TIMEOUT_MS: 20 * 1000,          // זמן פולינג כולל
+  POLLING_TIMEOUT_MS: 40 * 1000,          // זמן פולינג כולל
   POLLING_INTERVAL_INCREMENT_FACTOR: 1.5, // פקטור הגדלת המרווח
 };
