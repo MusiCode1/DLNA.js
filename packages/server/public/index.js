@@ -45,7 +45,7 @@ async function fetchDevices() {
                     // especially if the icon URL is relative.
                     const fullIconUrl = new URL(device.iconList[0].url, device.baseURL);
                     const iconUrlPath = fullIconUrl.pathname;
-                    img.src = `/proxy/${device.udn}${iconUrlPath}`; // שימוש בפרוקסי עם udn
+                    img.src = `/proxy/${device.UDN}${iconUrlPath}`; // שימוש בפרוקסי עם udn
                     img.alt = device.friendlyName + ' logo';
                     deviceInfoContainer.appendChild(img);
                 }

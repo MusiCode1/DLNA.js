@@ -16,7 +16,8 @@ const logger = createLogger('ProxyHandler');
 export async function proxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   
   const currentActiveDevices = getActiveDevices();
-  const { deviceId, resourcePath } = req.params;
+  const deviceId = req.params[0];
+  const resourcePath = req.params[1];
 
   if (!deviceId || !resourcePath) {
     logger.warn('Bad request: Device ID or resource path is missing.');

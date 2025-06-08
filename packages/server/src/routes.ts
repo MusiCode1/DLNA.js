@@ -99,7 +99,7 @@ try {
   });
 
   // Proxy route
-  router.get('/proxy/:deviceId/:resourcePath', proxyHandler);
+  router.get(/\/proxy\/(.+?)\/(.*)/, proxyHandler);
 
 } catch (error) {
 
