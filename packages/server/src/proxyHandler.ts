@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { ActiveDeviceManager } from '@dlna-core/core';
-import { createLogger } from '@dlna-core/core';
+import type { ActiveDeviceManager } from 'dlna.js';
+import { createLogger } from 'dlna.js';
+import { getActiveDevices } from './deviceManager';
 
 const logger = createLogger('ProxyHandler');
 
@@ -14,7 +15,7 @@ const logger = createLogger('ProxyHandler');
  * @param next - פונקציית ה-middleware הבאה של Express.
  */
 export async function proxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const deviceManager: ActiveDeviceManager = req.app.locals.deviceManager;
+  const currentActiveDevices = getActiveDevices();
   const { deviceId } = req.params;
   // הנתיב למשאב מתקבל מה-wildcard (*) בראוט
   const resourcePath = req.params[0];
@@ -28,7 +29,7 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
   logger.info(`Proxy request for deviceId: "${deviceId}", path: "${resourcePath}"`);
 
   try {
-    const device = deviceManager.getDevice(deviceId);
+    const device = currentActiveDevices.get(deviceId);
 
     if (!device) {
       logger.warn(`Device with ID "${deviceId}" not found.`);
@@ -36,7 +37,7 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { baseURL } = device.description;
+    const { baseURL } = device;
     if (!baseURL) {
       logger.error(`Device with ID "${deviceId}" does not have a baseURL.`);
       res.status(404).send(`Device with ID "${deviceId}" does not have a baseURL.`);
