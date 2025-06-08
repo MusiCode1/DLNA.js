@@ -1,37 +1,80 @@
-
-// טעינת משתני סביבה מקובץ .env דרך טוען מותאם אישית
-// חשוב שזה יקרה כמה שיותר מוקדם בתהליך טעינת האפליקציה
-import './envLoader'; // טוען את הקובץ החדש שיצרנו
-
+import { env } from './envLoader';
 import { DiscoveryDetailLevel } from 'dlna.js';
 import type { ActiveDeviceManagerOptions } from 'dlna.js';
-import type { ContinueDiscoveryOptions } from './types';
 
 
-
-
-// קבועים הקשורים לשרת
-export const PORT = process.env.PORT || 3300;
-
-// קבועים הקשורים למאגר הודעות גולמיות
-export const MAX_RAW_MESSAGES = 100; // קבוע לגודל המאגר
-
-// הגדרות ברירת מחדל לגילוי מכשירים רציף
-export const DEFAULT_DISCOVERY_OPTIONS: ActiveDeviceManagerOptions = {
-  detailLevel: DiscoveryDetailLevel.Full, // בקש מספיק פרטים עבור ה-API
-  includeIPv6: false, // בדרך כלל לא נחוץ ל-DLNA ביתי ועלול להאט
-  mSearchIntervalMs:60 * 1000,
-  deviceCleanupIntervalMs: 1.5 * 60 * 1000, // כל 1.5 דקות
+const defaultConfig = {
+  server: {
+    port: 3300,
+  },
+  rawMessages: {
+    maxSize: 100,
+  },
+  discovery: {
+    options: {
+      // detailLevel מטופל בנפרד בגלל היותו enum
+      includeIPv6: false,
+      mSearchIntervalMs: 60 * 1000,
+      deviceCleanupIntervalMs: 1.5 * 60 * 1000,
+    },
+  },
+  deviceCleanup: {
+    intervalMs: 10 * 60 * 1000,
+    maxInactivityMs: 15 * 60 * 1000,
+  },
+  pingPolling: {
+    initialIntervalMs: 250,
+    maxIntervalMs: 1500,
+    timeoutMs: 40 * 1000,
+    intervalIncrementFactor: 1.5,
+  },
 };
 
-// קבועים לניקוי מכשירים לא פעילים
-export const DEVICE_CLEANUP_INTERVAL_MS = 10 * 60 * 1000; // כל 10 דקות
-export const MAX_DEVICE_INACTIVITY_MS = 15 * 60 * 1000; // מכשיר ייחשב לא פעיל אם לא נראה 15 דקות
+// פונקציית עזר להמרת camelCase ל-SNAKE_CASE
+const camelToSnakeCase = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter}`).toUpperCase();
 
-// הגדרות עבור בדיקת זמינות מכשיר (Polling)
-export const PING_POLLING_OPTIONS = {
-  INITIAL_POLLING_INTERVAL_MS: 250,       // מרווח התחלתי
-  MAX_POLLING_INTERVAL_MS: 1500,          // מרווח מקסימלי בין בדיקות
-  POLLING_TIMEOUT_MS: 40 * 1000,          // זמן פולינג כולל
-  POLLING_INTERVAL_INCREMENT_FACTOR: 1.5, // פקטור הגדלת המרווח
+/**
+ * פונקציה רקורסיבית שמאתחלת את התצורה.
+ * היא עוברת על אובייקט ברירות המחדל, ומחפשת משתני סביבה תואמים
+ * כדי לדרוס את הערכים.
+ * @param defaultConfig - אובייקט עם ערכי ברירת המחדל.
+ * @param path - הנתיב הנוכחי באובייקט (לשימוש רקורסיבי).
+ * @returns אובייקט תצורה מאותחל.
+ */
+function initializeConfig<T extends object>(defaultConfig: T, path: string[] = []): T {
+  const initializedConfig: any = {};
+
+  for (const key in defaultConfig) {
+    if (Object.prototype.hasOwnProperty.call(defaultConfig, key)) {
+      const newPath = [...path, key];
+      const value = (defaultConfig as any)[key];
+
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        initializedConfig[key] = initializeConfig(value, newPath);
+      } else {
+        const envVarName = newPath.map(camelToSnakeCase).join('_');
+        initializedConfig[key] = env[envVarName] !== undefined ? env[envVarName] : value;
+      }
+    }
+  }
+  return initializedConfig as T;
+}
+
+// 1. הגדרת מבנה התצורה עם ערכי ברירת המחדל
+
+
+// 2. יצירת תצורה זמנית עם הערכים הגנריים
+const tempConfig = initializeConfig(defaultConfig);
+
+// 3. הרכבת התצורה הסופית תוך טיפול במקרים מיוחדים
+const finalConfig = {
+    ...tempConfig,
+    discovery: {
+        options: {
+            ...tempConfig.discovery.options,
+            detailLevel: (env.DISCOVERY_OPTIONS_DETAIL_LEVEL as DiscoveryDetailLevel) || DiscoveryDetailLevel.Full,
+        } as ActiveDeviceManagerOptions,
+    },
 };
+
+export const config = finalConfig;

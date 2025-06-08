@@ -37,3 +37,58 @@ loadEnvFile(localEnvPath, true);
 // console.log('[EnvLoader] Environment variables loading process completed.');
 // console.log(`[EnvLoader] Current NODE_ENV: ${process.env.NODE_ENV}`);
 // console.log(`[EnvLoader] Current LOGTAIL_SOURCE_TOKEN: ${process.env.LOGTAIL_SOURCE_TOKEN ? 'SET' : 'NOT SET'}`);
+/**
+ * בודק אם מחרוזת ניתנת להמרה למספר ללא איבוד מידע.
+ * 
+ * הפונקציה מוודאת שהמחרוזת מייצגת מספר סופי (לא NaN או Infinity),
+ * שההמרה לא גרמה לאיבוד דיוק (במספרים גדולים),
+ * ומתייחסת נכון לייצוגים שונים של אותו מספר (למשל "1" ו-"1.0").
+ *
+ * @param value - הערך לבדיקה.
+ * @returns {boolean} - אמת אם ההמרה אפשרית ללא איבוד מידע, אחרת שקר.
+ */
+function isStringLosslesslyNumeric(value: any): boolean {
+    // בדיקה ראשונית - null, undefined, או מחרוזת ריקה אינם מספרים.
+    if (value == null || typeof value !== 'string' || value.trim() === '') {
+        return false;
+    }
+
+    const num = Number(value);
+
+    // בדיקה שהתוצאה היא מספר סופי (לא NaN, Infinity, or -Infinity)
+    if (!isFinite(num)) {
+        return false;
+    }
+
+    // התנאי המרכזי:
+    // 1. `String(num) === value`: בודק אם ההמרה חזרה למחרוזת זהה למקור.
+    // 2. `num === parseFloat(value)`: בודק אם הערכים המספריים זהים.
+    return String(num) === value || num === parseFloat(value);
+}
+
+/**
+ * מעבד את כל משתני הסביבה ב-process.env,
+ * וממיר ערכים מספריים למספרים (שלם או צף).
+ * @returns {Record<string, string | number | undefined>} - אובייקט חדש עם הערכים המעובדים.
+ */
+const getProcessedEnv = (): Record<string, string | number | undefined> => {
+    const processed: Record<string, string | number | undefined> = {};
+    const envSnapshot = { ...process.env };
+
+    for (const key in envSnapshot) {
+        const value = envSnapshot[key];
+        if (isStringLosslesslyNumeric(value)) {
+            processed[key] = Number(value);
+        } else {
+            processed[key] = value;
+        }
+    }
+    return processed;
+};
+
+/**
+ * אובייקט המכיל את משתני הסביבה לאחר טעינה ועיבוד.
+ * ערכים שניתן להמיר למספר ללא איבוד מידע יומרו.
+ * יש לייבא את האובייקט הזה במקום לגשת ישירות ל-process.env.
+ */
+export const env = getProcessedEnv();
