@@ -5,10 +5,12 @@ import {
   ContentDirectoryService, BrowseFlag,
   createSingleItemDidlLiteXml // ייבוא הפונקציה החדשה
 } from 'dlna.js';
+import { getActiveDevices } from './deviceManager';
 // נניח שהטיפוסים DidlLiteObject ו-Resource מיוצאים גם הם מ-dlna.js
 // אם לא, נצטרך להתאים את הנתיב ל: import type { DidlLiteObject, Resource } from '@dlna-vision/dlna-core/src/types';
 import type { ServiceDescription, DidlLiteObject, Resource } from "dlna.js";
 import type { ApiDevice } from './types';
+
 
 // טיפוס חדש לפריט וידאו מעובד שמוכן לניגון
 export interface ProcessedPlaylistItem {
@@ -131,14 +133,14 @@ export async function getFolderItemsFromMediaServer(
 
     // אם יש מידע נוסף על המשאב ב-itemData.res[0].$ (כמו size, duration), נוסיף אותו
     if (itemData.res && Array.isArray(itemData.res) && itemData.res[0] && itemData.res[0].$) {
-        if (itemData.res[0].$.size) resourceObject.size = parseInt(itemData.res[0].$.size, 10);
-        if (itemData.res[0].$.duration) resourceObject.duration = itemData.res[0].$.duration;
-        // ניתן להוסיף עוד מאפיינים כמו bitrate, sampleFrequency, nrAudioChannels, resolution
+      if (itemData.res[0].$.size) resourceObject.size = parseInt(itemData.res[0].$.size, 10);
+      if (itemData.res[0].$.duration) resourceObject.duration = itemData.res[0].$.duration;
+      // ניתן להוסיף עוד מאפיינים כמו bitrate, sampleFrequency, nrAudioChannels, resolution
     } else if (itemData.resources && itemData.resources[0]) {
-        // טיפול במקרה שהמידע נמצא תחת itemData.resources[0]
-        // (הלוגיקה הזו עשויה להזדקק להתאמה לפי מבנה הנתונים המדויק של המקור)
-        if (itemData.resources[0].size) resourceObject.size = parseInt(itemData.resources[0].size, 10);
-        if (itemData.resources[0].duration) resourceObject.duration = itemData.resources[0].duration;
+      // טיפול במקרה שהמידע נמצא תחת itemData.resources[0]
+      // (הלוגיקה הזו עשויה להזדקק להתאמה לפי מבנה הנתונים המדויק של המקור)
+      if (itemData.resources[0].size) resourceObject.size = parseInt(itemData.resources[0].size, 10);
+      if (itemData.resources[0].duration) resourceObject.duration = itemData.resources[0].duration;
     }
 
 
@@ -299,7 +301,9 @@ function getValidatedDevice(
   activeDevices: Map<string, ApiDevice>,
   res: Response
 ): ApiDevice | null {
-  const device = activeDevices.get(udn);
+  const currentActiveDevices = getActiveDevices();
+  const device = currentActiveDevices.get(udn);
+
   if (!device) {
     logger.warn(`Request failed: ${deviceType} with UDN ${udn} not found.`);
     res.status(404).send({ error: `${deviceType} with UDN ${udn} not found` });
@@ -430,8 +434,8 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
               const resourceDetails: Resource = {
                 uri: itemUrl, // itemUrl כבר חושב והפך לאבסולוטי
                 protocolInfo: (itemData.resources && itemData.resources[0] && itemData.resources[0].protocolInfo) ||
-                              (itemData.res && itemData.res[0] && itemData.res[0].$ && itemData.res[0].$.protocolInfo) ||
-                              "http-get:*:video/*:*", // ערך ברירת מחדל
+                  (itemData.res && itemData.res[0] && itemData.res[0].$ && itemData.res[0].$.protocolInfo) ||
+                  "http-get:*:video/*:*", // ערך ברירת מחדל
               };
               // הוספת פרטים נוספים למשאב אם קיימים
               if (itemData.res) {
@@ -449,7 +453,7 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
               // במקרה כזה, אין לנו מספיק מידע לבנות DIDL-Lite תקין עם הפונקציה.
               // נשאיר אזהרה ונמנע מיצירת XML שגוי.
               const extractedItemXmlForLog = itemMatch[0].replace(/</g, '<').replace(/>/g, '>'); // ללוג בלבד
-              logger.warn(`Could not rebuild full DIDL-Lite for ${objectID} as itemData was not available, though <item> XML was extracted. extractedItemXml (first 200 chars): ${extractedItemXmlForLog.substring(0,200)}`);
+              logger.warn(`Could not rebuild full DIDL-Lite for ${objectID} as itemData was not available, though <item> XML was extracted. extractedItemXml (first 200 chars): ${extractedItemXmlForLog.substring(0, 200)}`);
               // itemMetadataXml יישאר ריק, והלוגיקה בהמשך תטפל בזה.
             }
           } else {
@@ -461,7 +465,7 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
 
         if (!itemMetadataXml && itemData) { // itemData זמין כאן מה-browseResult
           logger.info(`Attempting to build fallback DIDL-Lite for ${objectID} using createSingleItemDidlLiteXml (second attempt if raw parsing failed)`);
-          
+
           const itemDetails: DidlLiteObject = {
             id: objectID,
             parentId: itemData.parentId || '-1', // parentID עשוי להיות זמין ב-itemData
@@ -473,10 +477,10 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
           const resourceDetails: Resource = {
             uri: itemUrl,
             protocolInfo: (itemData.resources && itemData.resources[0] && itemData.resources[0].protocolInfo) ||
-                          (itemData.res && itemData.res[0] && itemData.res[0].$ && itemData.res[0].$.protocolInfo) ||
-                          "http-get:*:video/*:*",
+              (itemData.res && itemData.res[0] && itemData.res[0].$ && itemData.res[0].$.protocolInfo) ||
+              "http-get:*:video/*:*",
           };
-          
+
           // לוגיקה דומה לזו שב-getFolderItemsFromMediaServer להוספת פרטי משאב
           if (itemData.res) {
             if (Array.isArray(itemData.res) && itemData.res[0] && itemData.res[0].$) {

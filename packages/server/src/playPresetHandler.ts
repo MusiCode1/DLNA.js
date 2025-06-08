@@ -22,9 +22,9 @@ import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler';
 import { getActiveDevices } from './deviceManager';
 import { config } from './config';
- 
+
 const logger = createModuleLogger('PlayPresetHandler');
- 
+
 /**
  * @hebrew שגיאה מותאמת אישית לתהליך הפעלת פריסט.
  */
@@ -60,24 +60,6 @@ async function wakeAndVerifyRenderer(
   }
 }
 
-async function reviveRendererDetails(
-  rendererPreset: NonNullable<PresetSettings['renderer']>,
-  presetName: string
-): Promise<DeviceDescription | DeviceWithServicesDescription | FullDeviceDescription | import('dlna.js').BasicSsdpDevice> { // Added import('dlna.js').BasicSsdpDevice for clarity
-  logger.info(`Attempting to revive renderer ${rendererPreset.udn} from URL: ${rendererPreset.baseURL} after successful wake-up for preset '${presetName}'.`);
-  const revivedDevice = await processUpnpDeviceFromUrl(rendererPreset.baseURL, DiscoveryDetailLevel.Services);
-  if (!revivedDevice) {
-    logger.error(`Failed to retrieve renderer details for ${rendererPreset.udn} (URL: ${rendererPreset.baseURL}) after WOL and ping for preset '${presetName}'.`);
-    throw new PlaybackError(`Failed to retrieve renderer details for preset '${presetName}' after successful Wake on LAN.`, 500);
-  }
-  // Check for essential properties to ensure the device object is usable
-  if (!('UDN' in revivedDevice && revivedDevice.UDN)) { // Ensure UDN is present and not empty
-    logger.error(`Revived renderer for preset '${presetName}' is missing UDN. URL: ${rendererPreset.baseURL}`);
-    throw new PlaybackError(`Revived renderer for preset '${presetName}' is incomplete (missing UDN).`, 500);
-  }
-  return revivedDevice;
-}
-
 /**
  * @hebrew מאשר שהתקן מגיב לבקשה דרך ה-URL שלו.
  * @description פונקציה זו מנסה לאחזר פרטים בסיסיים של ההתקן מה-URL שסופק
@@ -94,11 +76,12 @@ async function confirmDeviceRespondsViaUrl(
 ): Promise<boolean> {
   logger.info(`Confirming renderer ${deviceToConfirm.UDN} responds via URL: ${deviceBaseURL} for preset '${presetName}'.`);
   try {
-    // שימוש ב-DiscoveryDetailLevel.Basic מספיק לבדיקת תגובה מהירה.
     // הוא מאחזר את קובץ התיאור הראשי של ההתקן.
-    const checkedDevice = await processUpnpDeviceFromUrl(deviceBaseURL, DiscoveryDetailLevel.Basic);
+    const checkedDevice = await processUpnpDeviceFromUrl(deviceBaseURL, DiscoveryDetailLevel.Full);
 
-    if (checkedDevice && 'UDN' in checkedDevice && checkedDevice.UDN === deviceToConfirm.UDN) {
+    const checkedDeviceUDN = checkedDevice?.UDN?.replace('uuid:', '') ?? ''; // הסרת 'uuid:' אם קיים
+
+    if (checkedDevice && 'UDN' in checkedDevice && checkedDeviceUDN === deviceToConfirm.UDN) {
       logger.info(`Confirmation successful: Renderer ${deviceToConfirm.UDN} (preset '${presetName}') responded as expected.`);
       return true;
     } else {
@@ -112,9 +95,46 @@ async function confirmDeviceRespondsViaUrl(
   }
 }
 
-async function pollForRendererInActiveDevices(
+/**
+ * @hebrew מנסה למצוא התקן ברשימה הפעילה ולאשר שהוא מגיב.
+ * @param udnToFind - ה-UDN של ההתקן לחיפוש.
+ * @param baseURL - ה-URL של ההתקן לאישור תגובה.
+ * @param presetName - שם הפריסט (לצורך לוגים).
+ * @returns את אובייקט ה-ApiDevice אם נמצא ואושר, אחרת undefined.
+ */
+async function tryFindAndConfirmDevice(
+  udnToFind: string,
+  presetName: string
+): Promise<ApiDevice | undefined> {
+  const currentActiveDevices = getActiveDevices();
+  const device = currentActiveDevices.get(udnToFind);
+
+  if (device) {
+    logger.info(`Device ${udnToFind} found in active list for preset '${presetName}'. Confirming responsiveness...`);
+    const isResponsive = await confirmDeviceRespondsViaUrl(device, device.location, presetName);
+    if (isResponsive) {
+      logger.info(`Device ${udnToFind} confirmed responsive for preset '${presetName}'.`);
+      return device;
+    } else {
+      logger.warn(`Device ${udnToFind} found but failed responsiveness check for preset '${presetName}'.`);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * @hebrew ממתין באופן פעיל לאישור שהתקן זמין ומגיב.
+ * @description הפונקציה מנסה למצוא התקן ברשימה הפעילה שמתעדכנת ברקע,
+ * ולאחר מכן מוודאת שההתקן אכן מגיב לבקשת רשת ישירה.
+ * התהליך נמשך עד למציאת ההתקן או עד לפקיעת הזמן המוגדר.
+ * @param rendererUDN - ה-UDN של הרנדרר שאותו יש למצוא.
+ * @param rendererBaseURL - ה-URL של הרנדרר לאימות תגובה.
+ * @param presetName - שם הפריסט (לצורך לוגים).
+ * @returns הבטחה שמסתיימת עם אובייקט ה-ApiDevice שנמצא ואושר.
+ * @throws {PlaybackError} אם ההתקן לא נמצא ואושר במסגרת הזמן שהוגדרה.
+ */
+async function waitForDeviceConfirmation(
   rendererUDN: string,
-  rendererBaseURL: string, // הוספת ה-URL של הרנדרר
   presetName: string
 ): Promise<ApiDevice> {
   const {
@@ -124,86 +144,41 @@ async function pollForRendererInActiveDevices(
     intervalIncrementFactor
   } = config.pingPolling;
 
-  logger.info(`Polling for renderer UDN: ${rendererUDN} in active devices for preset '${presetName}' (total timeout: ${timeoutMs}ms).`);
+  logger.info(`Waiting for device confirmation: UDN=${rendererUDN}, Preset='${presetName}', Timeout=${timeoutMs}ms`);
 
-  // פונקציית עזר פנימית לבדיקת ההתקן ברשימה הנוכחית
-  function findDeviceInCurrentList(udnToFind: string): ApiDevice | undefined {
-    const currentActiveDevices = getActiveDevices();
-    return currentActiveDevices.get(udnToFind);
-  }
-
-  let foundDevice: ApiDevice | undefined = undefined;
   const startTime = Date.now();
-  let currentInterval = Number(initialIntervalMs);
-  let attempts = 0;
+  let currentInterval = initialIntervalMs;
 
-  while (Date.now() - startTime < Number(timeoutMs)) {
-    attempts++;
-    foundDevice = findDeviceInCurrentList(rendererUDN);
+  while (Date.now() - startTime < timeoutMs) {
+    const foundDevice = await tryFindAndConfirmDevice(rendererUDN, presetName);
     if (foundDevice) {
-      logger.info(`Renderer ${rendererUDN} found in active devices list (attempt ${attempts}). Confirming responsiveness...`);
-      const isResponsive = await confirmDeviceRespondsViaUrl(foundDevice, rendererBaseURL, presetName);
-      if (isResponsive) {
-        logger.info(`Renderer ${rendererUDN} confirmed responsive. Polling successful after ${Date.now() - startTime}ms.`);
-        break; // יציאה מהלולאה הראשית - התנאי הכפול התקיים
-      } else {
-        logger.warn(`Renderer ${rendererUDN} found in list but did not respond to confirmation. Continuing to poll...`);
-        foundDevice = undefined; // איפוס כדי שהלולאה תמשיך
-      }
+      logger.info(`Device ${rendererUDN} confirmed successfully for preset '${presetName}' after ${Date.now() - startTime}ms.`);
+      return foundDevice;
     }
 
-    // בדוק אם ההמתנה הבאה תחרוג מהזמן הכולל
     const timeElapsed = Date.now() - startTime;
-    if (timeElapsed + currentInterval >= Number(timeoutMs)) {
-      // אם כן, בצע בדיקה אחרונה מיד לפני היציאה (אם נשאר זמן קטן מהאינטרוול הבא)
-      const remainingTime = Number(timeoutMs) - timeElapsed;
-      if (remainingTime > 0) { // רק אם נשאר זמן כלשהו
-        logger.debug(`Approaching timeout for ${rendererUDN}. Performing one last check within ${remainingTime}ms.`);
-        // המתן את הזמן הנותר (או חלק ממנו אם הוא קטן מאוד) לפני הבדיקה האחרונה
-        await new Promise(resolve => setTimeout(resolve, Math.max(0, remainingTime - 10))); // המתן כמעט את כל הזמן הנותר
-        foundDevice = findDeviceInCurrentList(rendererUDN);
-        if (foundDevice) {
-          logger.info(`Renderer ${rendererUDN} found in list in final check. Confirming responsiveness...`);
-          const isResponsive = await confirmDeviceRespondsViaUrl(foundDevice, rendererBaseURL, presetName);
-          if (isResponsive) {
-            logger.info(`Renderer ${rendererUDN} confirmed responsive in final check (attempt ${attempts + 1}).`);
-          } else {
-            logger.warn(`Renderer ${rendererUDN} found in final check but was not responsive. Polling will fail.`);
-            foundDevice = undefined; // איפוס כדי שהבדיקה הסופית תיכשל
-          }
-        }
-      }
-      break; // צא מהלולאה, כי ההמתנה הבאה תחרוג או שהזמן נגמר
+    const nextWaitTime = Math.min(currentInterval, timeoutMs - timeElapsed);
+
+    if (nextWaitTime <= 0) {
+      break; // יציאה אם לא נשאר זמן להמתנה נוספת
     }
 
-    logger.debug(`Renderer ${rendererUDN} not found yet for preset '${presetName}' (attempt ${attempts}). Waiting ${currentInterval}ms... Time elapsed: ${timeElapsed}ms.`);
-    await new Promise(resolve => setTimeout(resolve, currentInterval));
+    logger.debug(`Device ${rendererUDN} not confirmed for preset '${presetName}'. Waiting ${nextWaitTime}ms...`);
+    await new Promise(resolve => setTimeout(resolve, nextWaitTime));
 
-    // הגדלת המרווח לניסיון הבא
-    currentInterval = Math.min(Number(maxIntervalMs), Math.floor(currentInterval * Number(intervalIncrementFactor)));
+    currentInterval = Math.min(maxIntervalMs, Math.floor(currentInterval * intervalIncrementFactor));
   }
 
-  // אם יצאנו מהלולאה ולא מצאנו, נבצע בדיקה אחרונה למקרה שההתקן הופיע ממש ברגע האחרון
-  // (זה מכסה גם את המקרה שהלולאה לא רצה כלל כי הזמן הראשוני כבר עבר את ה-timeout, או שההתקן הופיע בזמן ההמתנה האחרונה)
-  if (!foundDevice) {
-    foundDevice = findDeviceInCurrentList(rendererUDN);
-    if (foundDevice) {
-      logger.info(`Renderer ${rendererUDN} found in post-loop check. Confirming final responsiveness...`);
-      const isResponsive = await confirmDeviceRespondsViaUrl(foundDevice, rendererBaseURL, presetName);
-      if (isResponsive) {
-        logger.info(`Renderer ${rendererUDN} confirmed responsive in post-loop final check.`);
-      } else {
-        logger.warn(`Renderer ${rendererUDN} found in post-loop check but was not responsive. Polling failed.`);
-        foundDevice = undefined;
-      }
-    }
+  // ניסיון אחרון אחרי שהלולאה הסתיימה
+  logger.info(`Polling timeout reached for ${rendererUDN}. Performing one final check for preset '${presetName}'.`);
+  const lastAttemptDevice = await tryFindAndConfirmDevice(rendererUDN, presetName);
+  if (lastAttemptDevice) {
+    logger.info(`Device ${rendererUDN} confirmed in final check for preset '${presetName}'.`);
+    return lastAttemptDevice;
   }
 
-  if (!foundDevice) {
-    logger.error(`Renderer ${rendererUDN} still not found in active devices after polling for approx ${timeoutMs}ms for preset '${presetName}'. Total attempts: ${attempts}.`);
-    throw new PlaybackError(`Renderer for preset '${presetName}' (UDN: ${rendererUDN}) could not be confirmed in active devices after polling timeout.`, 500);
-  }
-  return foundDevice;
+  logger.error(`Device ${rendererUDN} could not be confirmed after polling for ${timeoutMs}ms for preset '${presetName}'.`);
+  throw new PlaybackError(`Renderer for preset '${presetName}' (UDN: ${rendererUDN}) could not be confirmed after polling timeout.`, 500);
 }
 
 // הפונקציה executePlayPresetLogic תתווסף כאן בשלב הבא
@@ -244,9 +219,9 @@ export async function executePlayPresetLogic(
 
     if (deviceFromActiveList) {
       logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') found in initial active devices. Confirming it responds via URL: ${rendererPreset.baseURL}...`);
-      
+
       const respondsViaUrl = await confirmDeviceRespondsViaUrl(deviceFromActiveList, rendererPreset.baseURL, presetName);
-      
+
       if (respondsViaUrl) {
         logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') confirmed responsive. Using this device instance.`);
         return deviceFromActiveList;
@@ -267,7 +242,7 @@ export async function executePlayPresetLogic(
     // שלב 3: פולינג לאיתור ההתקן המנוהל (ApiDevice) ברשימה המרכזית (activeDevices)
     // זה חשוב כדי לקבל את האובייקט המלא שמנוהל על ידי המערכת, כולל שירותים שעובדו.
     // אנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנו מצפים לו.
-    const polledApiDevice = await pollForRendererInActiveDevices(rendererPreset.udn, rendererPreset.baseURL, presetName);
+    const polledApiDevice = await waitForDeviceConfirmation(rendererPreset.udn, presetName);
 
     return polledApiDevice;
   };
