@@ -7,7 +7,8 @@
   "scripts": {
     "start": "bun --cwd packages/server start",
     "build": "bun run --filter=\"*\" build",
-    "test": "bun -w run test"
+    "test": "bun -w run test",
+    "clean": "powershell -ExecutionPolicy Bypass -File ./scripts/clean.ps1"
   },
   "devDependencies": {
     "@types/bun": "^1.2.14",

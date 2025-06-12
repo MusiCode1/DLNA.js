@@ -7,6 +7,7 @@ bun build .\server\index.ts --compile --minify --outfile .\dist\dlna-server
 ```tasmota
 WebQuery http://www.mysite.com/api/status GET
 WebQuery http://192.168.1.117:5544/play GET
+WebQuery http://192.168.1.50:3300/api/play-preset/moishy-tv GET
 
 ON <trigger> DO <command> [ENDON | BREAK]
 
@@ -15,7 +16,7 @@ Rule1 ON Button1#state=1 DO WebSend [192.168.1.102:3300] /api/play-preset?preset
 
 Rule1 ON Button1#state=12 DO WebSend [192.168.1.102:3300] /api/play-preset?presetName=Moishy ENDON 
 
-Rule1 ON Button1#state=2 DO WebQuery http://192.168.1.102:3300/api/play-preset/Moishy GET ENDON 
+Rule1 ON Button1#state=2 DO WebQuery http://192.168.1.50:3300/api/play-preset/moishy-tv GET ENDON 
 
 
 https://v6vbmfkm-3300.euw.devtunnels.ms/api/play-preset/moishy-tv

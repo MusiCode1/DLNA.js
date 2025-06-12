@@ -1,5 +1,8 @@
-import WebSocket from 'ws';
-import EventEmitter from 'eventemitter3';
+import { WebSocket, type MessageEvent } from 'ws';
+import { EventEmitter } from 'eventemitter3';
+import crypto from "node:crypto";
+
+
 import { REGISTRATION_PAYLOAD } from './constants';
 export * from './types';
 import type { WebOSMessage, WebOSResponse, VolumeStatus, ForegroundAppInfo } from './types';
@@ -21,6 +24,7 @@ export interface WebOSRemoteConfig {
     ip: string;
     clientKey?: string;
     timeout?: number;
+    pairingType?: 'PROMPT' | 'PIN';
 }
 
 /**
@@ -32,7 +36,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     public ws: WebSocket | null = null;
     public inputWs: WebSocket | null = null;
     private messageIdCounter = 0;
-
+    private resQueue = new EventEmitter();
     /**
      * יוצר אובייקט חדש לשליטה על טלוויזיית LG.
      * @param config - הגדרות החיבור.
@@ -40,6 +44,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     constructor(config: WebOSRemoteConfig) {
         super();
         this.config = {
+            pairingType: 'PIN',
             timeout: 5000, // ברירת מחדל של 5 שניות
             ...config,
         };
@@ -56,8 +61,8 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
             this.disconnect(); // נתק חיבורים קיימים לפני חיבור חדש
 
-            const url = `ws://${this.config.ip}:3000`;
-            this.ws = new WebSocket(url, { timeout: this.config.timeout });
+            const url = `wss://${this.config.ip}:3001`;
+            this.ws = new WebSocket(url, {});
 
             const onConnect = () => {
                 this.register();
@@ -82,12 +87,17 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
      * מבצע רישום מול הטלוויזיה.
      * @private
      */
-    private register(): void {
-        const payload = { ...REGISTRATION_PAYLOAD };
-        if (this.config.clientKey) {
-            payload['client-key'] = this.config.clientKey;
-        }
-        this.sendMessage('register', undefined, payload);
+    private register() {
+        const payload = {
+            ...REGISTRATION_PAYLOAD,
+            pairingType: "PROMPT",
+            'client-key': this.config.clientKey ?? undefined,
+        };
+
+        return this.sendMessage({
+            type: 'register',
+            payload: payload
+        });
     }
 
     /**
@@ -95,10 +105,12 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
      * @param data - המידע שהתקבל.
      * @private
      */
-    private handleMessage(data: WebSocket.Data): void {
+    private handleMessage(data: MessageEvent): void {
         try {
-            const message: WebOSResponse = JSON.parse(data.toString());
-            this.emit('message', message);
+            const resData = data.toString();
+            const message: WebOSResponse = JSON.parse(resData);
+
+            const listenCallback = this.resQueue.listeners(message.id);
 
             if (message.type === 'registered') {
                 const clientKey = message.payload?.['client-key'];
@@ -108,28 +120,58 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
                 }
             } else if (message.payload?.pairingType === 'PROMPT') {
                 this.emit('prompt');
+            } else if (
+                message.type === 'response' ||
+                message.type === 'error' ||
+                listenCallback.length > 0
+            ) {
+
+                this.resQueue.emit(message.id, message);
+            } else {
+                this.emit('message', message);
             }
+
+
         } catch (error) {
             this.emit('error', new Error(`Failed to parse message: ${error}`));
         }
     }
 
-    /**
-     * שולח הודעה לטלוויזיה.
-     * @param type - סוג ההודעה.
-     * @param uri - נקודת הקצה (אופציונלי).
-     * @param payload - המטען (אופציונלי).
-     */
-    public sendMessage(type: WebOSMessage['type'], uri?: string, payload?: any): string {
+
+    public send(message: WebOSMessage): string {
+
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             throw new Error('Not connected to TV');
         }
 
-        const id = `${type}:${this.messageIdCounter++}`;
-        const message: WebOSMessage = { type, id, uri, payload };
-        
+        message.id ?? (message.id = crypto.randomUUID()); // אם לא סופק מזהה, ניצור אחד חדש
+
         this.ws.send(JSON.stringify(message));
-        return id;
+
+        this.resQueue.once(message.id, () => {
+            console.log(`Response received for message ID: ${message.id}`);
+
+        });
+        return message.id;
+    }
+
+    public async sendMessage(message: WebOSMessage) {
+
+        const msgId = this.send(message);
+
+        return await new Promise((resolve, reject) => {
+            this.resQueue.once(msgId, (response: WebOSResponse) => {
+
+                if (response.type === 'error') {
+                    reject(new Error(response.error || 'Unknown error'));
+                } else {
+                    resolve(response);
+                }
+            });
+            setTimeout(() => {
+                reject(new Error(`Request timed out after ${this.config.timeout} ms`));
+            }, this.config.timeout);
+        })
     }
 
     /**

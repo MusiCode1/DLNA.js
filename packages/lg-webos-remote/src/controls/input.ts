@@ -35,7 +35,7 @@ function connectToInputSocket(remote: WebOSRemote): Promise<void> {
                     resolve();
                 });
 
-                remote.inputWs.on('error', (error) => {
+                remote.inputWs.on('error', (error: Error) => {
                     console.error('Input socket error:', error);
                     remote.inputWs = null;
                     // לא לדחות את ההבטחה כאן, כדי לאפשר ניסיונות חוזרים

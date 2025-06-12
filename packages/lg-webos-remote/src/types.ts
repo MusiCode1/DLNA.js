@@ -8,7 +8,7 @@
  */
 export interface WebOSMessage {
     type: 'register' | 'request' | 'subscribe' | 'unsubscribe';
-    id: string;
+    id?: string;
     uri?: string;
     payload?: any;
 }

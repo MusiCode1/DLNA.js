@@ -3,10 +3,11 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true,
-    "paths": {
-      "lg-webos-remote": ["../lg-webos-remote/src/index.ts"]
-    }
+    "composite": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts","src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"],
+  "references": [
+    { "path": "../lg-webos-remote"}
+  ]
 }

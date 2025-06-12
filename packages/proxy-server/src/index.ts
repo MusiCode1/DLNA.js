@@ -38,7 +38,7 @@ wss.on('connection', (ws, req) => {
     console.log('Message from client:', data.toString());
     try {
       const message = JSON.parse(data.toString());
-      remote.sendMessage(message.type, message.uri, message.payload);
+      remote.sendMessage(message);
     } catch (error) {
       console.error('Failed to parse or send client message:', error);
     }
