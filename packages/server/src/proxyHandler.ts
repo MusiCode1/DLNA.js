@@ -48,7 +48,17 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
     const targetUrl = new URL(resourcePath, baseURL).toString();
     logger.info(`Forwarding request to: ${targetUrl}`);
 
-    const deviceResponse = await fetch(targetUrl);
+    // העברת כל הכותרות הרלוונטיות מהבקשה המקורית
+    const excludedHeaders = ['host', 'connection', 'referer', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest', 'accept-encoding', 'accept-language'];
+    const proxyHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (!excludedHeaders.includes(key.toLowerCase()) && value) {
+        proxyHeaders[key] = Array.isArray(value) ? value.join(', ') : value;
+      }
+    }
+    logger.info(`Forwarding headers: ${Object.keys(proxyHeaders).join(', ')}`);
+
+    const deviceResponse = await fetch(targetUrl, { headers: proxyHeaders });
 
     // העברת ה-headers מהתשובה של המכשיר לתשובה שלנו
     deviceResponse.headers.forEach((value, name) => {
