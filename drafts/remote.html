@@ -161,6 +161,12 @@
                 clientKeyInput.value = e.detail.clientKey;
             });
 
+            remote.addEventListener('screenshot', (e) => {
+                // הוספת פרמטר זמן ייחודי כדי למנוע שמירת מטמון
+                screenshotImg.src = `${e.detail.uri}?t=${new Date().getTime()}`;
+                screenshotContainer.style.display = 'block';
+            });
+
             // --- UI Event Listeners ---
             connectBtn.addEventListener('click', () => {
                 const ip = tvIpInput.value.trim();
