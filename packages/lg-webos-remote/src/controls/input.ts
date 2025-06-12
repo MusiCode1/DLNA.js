@@ -12,42 +12,40 @@ import type { WebOSResponse } from '../types';
  * @param remote - מופע של WebOSRemote.
  * @returns הבטחה שמסתיימת כאשר החיבור נוצר.
  */
-function connectToInputSocket(remote: WebOSRemote): Promise<void> {
+async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
+    if (remote.inputWs && remote.inputWs.readyState === WebSocket.OPEN) {
+        return;
+    }
+
+    const response = await remote.sendMessage({ type: 'request', uri: 'ssap://com.webos.service.networkinput/getPointerInputSocket' });
+    if (!response.payload?.socketPath) {
+        throw new Error('Failed to get pointer input socket path');
+    }
+
+    const socketPath = response.payload.socketPath;
+    const inputWs = new WebSocket(socketPath);
+    remote.inputWs = inputWs;
+
     return new Promise((resolve, reject) => {
-        if (remote.inputWs && remote.inputWs.readyState === WebSocket.OPEN) {
-            return resolve();
-        }
+        inputWs.on('open', () => {
+            console.log('Connected to input socket');
+            resolve();
+        });
 
-        const id = remote.sendMessage('request', 'ssap://com.webos.service.networkinput/getPointerInputSocket');
-
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error' || !message.payload?.socketPath) {
-                    return reject(new Error(message.error || 'Failed to get pointer input socket'));
-                }
-
-                const socketPath = message.payload.socketPath;
-                remote.inputWs = new WebSocket(socketPath);
-
-                remote.inputWs.on('open', () => {
-                    console.log('Connected to input socket');
-                    resolve();
-                });
-
-                remote.inputWs.on('error', (error: Error) => {
-                    console.error('Input socket error:', error);
-                    remote.inputWs = null;
-                    // לא לדחות את ההבטחה כאן, כדי לאפשר ניסיונות חוזרים
-                });
-
-                remote.inputWs.on('close', () => {
-                    console.log('Input socket closed');
-                    remote.inputWs = null;
-                });
+        inputWs.on('error', (error: Error) => {
+            console.error('Input socket error:', error);
+            if (remote.inputWs === inputWs) {
+                remote.inputWs = null;
             }
-        };
-        remote.on('message', messageHandler);
+            reject(error); // It's better to reject on error
+        });
+
+        inputWs.on('close', () => {
+            console.log('Input socket closed');
+            if (remote.inputWs === inputWs) {
+                remote.inputWs = null;
+            }
+        });
     });
 }
 

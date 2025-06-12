@@ -11,21 +11,9 @@ import type { VolumeStatus, WebOSResponse } from '../types';
  * @param remote - מופע של WebOSRemote.
  * @returns הבטחה שמחזירה את מצב הווליום.
  */
-export function getVolume(remote: WebOSRemote): Promise<VolumeStatus> {
-    return new Promise((resolve, reject) => {
-        const id = remote.sendMessage('request', 'ssap://audio/getVolume');
-        
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error') {
-                    return reject(new Error(message.error));
-                }
-                resolve(message.payload.volumeStatus as VolumeStatus);
-            }
-        };
-        remote.on('message', messageHandler);
-    });
+export async function getVolume(remote: WebOSRemote): Promise<VolumeStatus> {
+    const response = await remote.sendMessage({ type: 'request', uri: 'ssap://audio/getVolume' });
+    return response.payload as VolumeStatus;
 }
 
 /**
@@ -34,22 +22,13 @@ export function getVolume(remote: WebOSRemote): Promise<VolumeStatus> {
  * @param volume - עוצמת הווליום (0-100).
  * @returns הבטחה שמסתיימת כאשר הפעולה הושלמה.
  */
-export function setVolume(remote: WebOSRemote, volume: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const id = remote.sendMessage('request', 'ssap://audio/setVolume', {
+export async function setVolume(remote: WebOSRemote, volume: number): Promise<void> {
+    await remote.sendMessage({
+        type: 'request',
+        uri: 'ssap://audio/setVolume',
+        payload: {
             volume: Math.min(100, Math.max(0, volume))
-        });
-
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error' || !message.payload?.returnValue) {
-                    return reject(new Error(message.error || 'Failed to set volume'));
-                }
-                resolve();
-            }
-        };
-        remote.on('message', messageHandler);
+        }
     });
 }
 
@@ -59,21 +38,8 @@ export function setVolume(remote: WebOSRemote, volume: number): Promise<void> {
  * @param mute - `true` להשתקה, `false` לביטול.
  * @returns הבטחה שמסתיימת כאשר הפעולה הושלמה.
  */
-export function setMute(remote: WebOSRemote, mute: boolean): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const id = remote.sendMessage('request', 'ssap://audio/setMute', { mute });
-
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error' || !message.payload?.returnValue) {
-                    return reject(new Error(message.error || 'Failed to set mute'));
-                }
-                resolve();
-            }
-        };
-        remote.on('message', messageHandler);
-    });
+export async function setMute(remote: WebOSRemote, mute: boolean): Promise<void> {
+    await remote.sendMessage({ type: 'request', uri: 'ssap://audio/setMute', payload: { mute } });
 }
 
 /**
@@ -81,7 +47,7 @@ export function setMute(remote: WebOSRemote, mute: boolean): Promise<void> {
  * @param remote - מופע של WebOSRemote.
  */
 export function volumeUp(remote: WebOSRemote): void {
-    remote.sendMessage('request', 'ssap://audio/volumeUp');
+    remote.sendRaw({ type: 'request', uri: 'ssap://audio/volumeUp' });
 }
 
 /**
@@ -89,5 +55,5 @@ export function volumeUp(remote: WebOSRemote): void {
  * @param remote - מופע של WebOSRemote.
  */
 export function volumeDown(remote: WebOSRemote): void {
-    remote.sendMessage('request', 'ssap://audio/volumeDown');
+    remote.sendRaw({ type: 'request', uri: 'ssap://audio/volumeDown' });
 }

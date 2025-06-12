@@ -18,22 +18,9 @@ interface LaunchAppParams {
  * @param options - פרמטרים נוספים להפעלה.
  * @returns הבטחה שמסתיימת כאשר הפעולה הושלמה.
  */
-export function launchApp(remote: WebOSRemote, appId: string, options: LaunchAppParams = {}): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const payload = { id: appId, ...options };
-        const id = remote.sendMessage('request', 'ssap://system.launcher/launch', payload);
-
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error' || !message.payload?.returnValue) {
-                    return reject(new Error(message.error || `Failed to launch app ${appId}`));
-                }
-                resolve();
-            }
-        };
-        remote.on('message', messageHandler);
-    });
+export async function launchApp(remote: WebOSRemote, appId: string, options: LaunchAppParams = {}): Promise<void> {
+    const payload = { id: appId, ...options };
+    await remote.sendMessage({ type: 'request', uri: 'ssap://system.launcher/launch', payload });
 }
 
 /**
@@ -42,21 +29,8 @@ export function launchApp(remote: WebOSRemote, appId: string, options: LaunchApp
  * @param appId - מזהה האפליקציה.
  * @returns הבטחה שמסתיימת כאשר הפעולה הושלמה.
  */
-export function closeApp(remote: WebOSRemote, appId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const id = remote.sendMessage('request', 'ssap://system.launcher/close', { id: appId });
-
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error' || !message.payload?.returnValue) {
-                    return reject(new Error(message.error || `Failed to close app ${appId}`));
-                }
-                resolve();
-            }
-        };
-        remote.on('message', messageHandler);
-    });
+export async function closeApp(remote: WebOSRemote, appId: string): Promise<void> {
+    await remote.sendMessage({ type: 'request', uri: 'ssap://system.launcher/close', payload: { id: appId } });
 }
 
 /**
@@ -64,21 +38,9 @@ export function closeApp(remote: WebOSRemote, appId: string): Promise<void> {
  * @param remote - מופע של WebOSRemote.
  * @returns הבטחה שמחזירה מידע על האפליקציה.
  */
-export function getForegroundAppInfo(remote: WebOSRemote): Promise<ForegroundAppInfo> {
-    return new Promise((resolve, reject) => {
-        const id = remote.sendMessage('request', 'ssap://com.webos.applicationManager/getForegroundAppInfo');
-
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error' || !message.payload?.returnValue) {
-                    return reject(new Error(message.error || 'Failed to get foreground app info'));
-                }
-                resolve(message.payload as ForegroundAppInfo);
-            }
-        };
-        remote.on('message', messageHandler);
-    });
+export async function getForegroundAppInfo(remote: WebOSRemote): Promise<ForegroundAppInfo> {
+    const response = await remote.sendMessage({ type: 'request', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo' });
+    return response.payload as ForegroundAppInfo;
 }
 
 /**
@@ -86,19 +48,7 @@ export function getForegroundAppInfo(remote: WebOSRemote): Promise<ForegroundApp
  * @param remote - מופע של WebOSRemote.
  * @returns הבטחה שמחזירה מערך של אפליקציות.
  */
-export function listApps(remote: WebOSRemote): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-        const id = remote.sendMessage('request', 'ssap://com.webos.applicationManager/listApps');
-
-        const messageHandler = (message: WebOSResponse) => {
-            if (message.id === id) {
-                remote.off('message', messageHandler);
-                if (message.type === 'error' || !message.payload?.returnValue) {
-                    return reject(new Error(message.error || 'Failed to list apps'));
-                }
-                resolve(message.payload.apps);
-            }
-        };
-        remote.on('message', messageHandler);
-    });
+export async function listApps(remote: WebOSRemote): Promise<any[]> {
+    const response = await remote.sendMessage({ type: 'request', uri: 'ssap://com.webos.applicationManager/listApps' });
+    return response.payload.apps;
 }

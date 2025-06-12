@@ -36,7 +36,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     public ws: WebSocket | null = null;
     public inputWs: WebSocket | null = null;
     private messageIdCounter = 0;
-    private resQueue = new EventEmitter();
+    private pendingRequests = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void, timeout: NodeJS.Timeout }>();
     /**
      * יוצר אובייקט חדש לשליטה על טלוויזיית LG.
      * @param config - הגדרות החיבור.
@@ -94,7 +94,8 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             'client-key': this.config.clientKey ?? undefined,
         };
 
-        return this.sendMessage({
+        // We use sendRaw here because register has a special response handling
+        this.sendRaw({
             type: 'register',
             payload: payload
         });
@@ -109,9 +110,23 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
         try {
             const resData = data.toString();
             const message: WebOSResponse = JSON.parse(resData);
+            this.emit('message', message);
 
-            const listenCallback = this.resQueue.listeners(message.id);
+            // Check if this message is a response to a pending request
+            if (message.id && this.pendingRequests.has(message.id)) {
+                const { resolve, reject, timeout } = this.pendingRequests.get(message.id)!;
+                clearTimeout(timeout);
 
+                if (message.type === 'error') {
+                    reject(new Error(message.error || 'Unknown error'));
+                } else {
+                    resolve(message);
+                }
+                this.pendingRequests.delete(message.id);
+                return;
+            }
+
+            // Handle other types of messages
             if (message.type === 'registered') {
                 const clientKey = message.payload?.['client-key'];
                 if (clientKey) {
@@ -120,58 +135,36 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
                 }
             } else if (message.payload?.pairingType === 'PROMPT') {
                 this.emit('prompt');
-            } else if (
-                message.type === 'response' ||
-                message.type === 'error' ||
-                listenCallback.length > 0
-            ) {
-
-                this.resQueue.emit(message.id, message);
-            } else {
-                this.emit('message', message);
             }
-
-
         } catch (error) {
             this.emit('error', new Error(`Failed to parse message: ${error}`));
         }
     }
 
 
-    public send(message: WebOSMessage): string {
-
+    public sendRaw(message: WebOSMessage): string {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             throw new Error('Not connected to TV');
         }
 
         message.id ?? (message.id = crypto.randomUUID()); // אם לא סופק מזהה, ניצור אחד חדש
-
         this.ws.send(JSON.stringify(message));
-
-        this.resQueue.once(message.id, () => {
-            console.log(`Response received for message ID: ${message.id}`);
-
-        });
         return message.id;
     }
 
-    public async sendMessage(message: WebOSMessage) {
+    public sendMessage(message: WebOSMessage): Promise<WebOSResponse> {
+        return new Promise((resolve, reject) => {
+            const msgId = this.sendRaw(message);
 
-        const msgId = this.send(message);
-
-        return await new Promise((resolve, reject) => {
-            this.resQueue.once(msgId, (response: WebOSResponse) => {
-
-                if (response.type === 'error') {
-                    reject(new Error(response.error || 'Unknown error'));
-                } else {
-                    resolve(response);
+            const timeout = setTimeout(() => {
+                if (this.pendingRequests.has(msgId)) {
+                    this.pendingRequests.delete(msgId);
+                    reject(new Error(`Request timed out after ${this.config.timeout} ms`));
                 }
-            });
-            setTimeout(() => {
-                reject(new Error(`Request timed out after ${this.config.timeout} ms`));
             }, this.config.timeout);
-        })
+
+            this.pendingRequests.set(msgId, { resolve, reject, timeout });
+        });
     }
 
     /**
