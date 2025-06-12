@@ -107,6 +107,19 @@
 5. לפני שימוש בפקודות עכבר, יש להתחבר לשקע העכבר באמצעות `ssap://com.webos.service.networkinput/getPointerInputSocket`
 
 
+`ssap://com.webos.service.networkinput/getPointerInputSocket`
+```json
+{
+    "type":"response",
+    "id":"febdfbf0-34df-4cb4-9fcc-87d9e6d4ae16",
+    "payload":{
+        "returnValue":true,
+        "socketPath":"wss://192.168.1.41:3001/resources/3cad29d9f95bf5ffe3f56ef744994298c7011b3c/netinput.pointer.sock"
+    }
+}
+```
+
+
 # 
 - קבל צילום מסך - `ssap://tv/executeOneShot`
 ## דוגמאות לשימוש
@@ -201,9 +214,18 @@ tv.sendMessage('subscribe', 'ssap://tv/getCurrentChannel');
 tv.sendMessage('subscribe', 'ssap://com.webos.applicationManager/getForegroundAppInfo');
 ```
 
-צילום מסך
-```
-ssap://tv/executeOneShot
+### צילום מסך
+`ssap://tv/executeOneShot`
+
+```json
+{
+    "type":"response",
+    "id":"9da62942-c41f-4554-b9dc-2305c079505b",
+    "payload":{
+        "returnValue":true,
+        "imageUri":"https://192.168.1.41:3001/resources/9a2311fee1182fcea6e96cc563a92a0e04837093/capture.jpg"
+    }
+}
 ```
 
 ## תיעוד פקודות

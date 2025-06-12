@@ -157,11 +157,6 @@
                 clientKeyInput.value = e.detail.clientKey;
             });
 
-            remote.addEventListener('screenshot', (e) => {
-                screenshotImg.src = e.detail.uri;
-                screenshotContainer.style.display = 'block';
-            });
-
             // --- UI Event Listeners ---
             connectBtn.addEventListener('click', () => {
                 const ip = tvIpInput.value.trim();
@@ -185,8 +180,18 @@
                 }
             });
 
-            screenshotBtn.addEventListener('click', () => {
-                remote.sendMessage('request', 'ssap://tv/executeOneShot', {}).catch(err => alert(err.message));
+            screenshotBtn.addEventListener('click', async () => {
+                try {
+                    const payload = await remote.sendMessage('request', 'ssap://tv/executeOneShot', {});
+                    if (payload && payload.imageUri) {
+                        screenshotImg.src = payload.imageUri;
+                        screenshotContainer.style.display = 'block';
+                    } else {
+                        alert('לא התקבלה תמונה מהטלוויזיה.');
+                    }
+                } catch (err) {
+                    alert(err.message);
+                }
             });
 
             showToastBtn.addEventListener('click', () => {
