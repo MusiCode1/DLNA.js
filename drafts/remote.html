@@ -85,9 +85,10 @@
             <h2>התחברות</h2>
             <div class="input-group">
                 <input type="text" id="tv-ip" placeholder="הכנס כתובת IP של הטלוויזיה">
+                <input type="text" id="client-key" placeholder="מפתח לקוח (אופציונלי)">
                 <button id="connect-btn">התחבר</button>
             </div>
-            <p><strong>הערה:</strong> אם זו הפעם הראשונה, ייתכן שתצטרך לגשת ל-<code>https://[TV_IP]:3001</code> ולאשר את החריגה האבטחתית בדפדפן.</p>
+            <p><strong>הערה:</strong> אם זו הפעם הראשונה, יש לאשר את החריגה האבטחתית בדפדפן. <a id="cert-link" href="#" target="_blank" style="display: none;">פתח קישור לאישור תעודה</a>.</p>
             <div id="status" class="status disconnected">לא מחובר</div>
         </div>
 
@@ -107,173 +108,130 @@
                 <button data-button="HOME">בית</button>
                 <button data-uri="ssap://system/turnOff">כיבוי</button>
                 <button id="show-toast-btn">הצג הודעה</button>
+                <button id="screenshot-btn">צלם מסך</button>
             </div>
             <div id="toast-input" class="input-group">
                 <input type="text" id="toast-message" placeholder="הודעה להצגה">
                 <button id="send-toast-btn">שלח</button>
             </div>
         </div>
+        <div id="screenshot-container" class="card" style="display: none;">
+            <h2>צילום מסך</h2>
+            <img id="screenshot-img" src="" alt="צילום מסך" style="width: 100%; border-radius: 6px;">
+        </div>
     </div>
 
+    <script src="remote-control.js"></script>
     <script>
-        const tvIpInput = document.getElementById('tv-ip');
-        const connectBtn = document.getElementById('connect-btn');
-        const statusDiv = document.getElementById('status');
-        const controlsDiv = document.getElementById('controls');
-        const showToastBtn = document.getElementById('show-toast-btn');
-        const toastInputDiv = document.getElementById('toast-input');
-        const toastMessageInput = document.getElementById('toast-message');
-        const sendToastBtn = document.getElementById('send-toast-btn');
+        document.addEventListener('DOMContentLoaded', () => {
+            const remote = new WebOSRemoteClient();
 
-        let ws = null;
-        let messageId = 0;
-        const REGISTRATION_PAYLOAD = {
-            "forcePairing": false,
-            "pairingType": "PROMPT",
-            "manifest": {
-                "manifestVersion": 1,
-                "appVersion": "1.1",
-                "signed": {
-                    "created": "20140509",
-                    "appId": "com.your.app.id",
-                    "vendorId": "com.your.vendor.id",
-                    "localizedAppNames": {
-                        "": "LG Remote",
-                        "ko-KR": "리모컨"
-                    },
-                    "localizedVendorNames": {
-                        "": "Your Company"
-                    },
-                    "permissions": [
-                        "TEST_SECURE", "CONTROL_INPUT_TEXT", "CONTROL_MOUSE_AND_KEYBOARD", "READ_INSTALLED_APPS",
-                        "READ_LGE_SDX", "READ_NOTIFICATIONS", "SEARCH", "WRITE_SETTINGS", "WRITE_NOTIFICATION_ALERT",
-                        "CONTROL_POWER", "READ_CURRENT_CHANNEL", "READ_RUNNING_APPS", "READ_UPDATE_INFO",
-                        "UPDATE_FROM_REMOTE_APP", "READ_LGE_TV_INPUT_EVENTS", "READ_TV_CHANNEL_LIST"
-                    ],
-                    "serial": "2f930e2d2cfe083771f68e4fe7bb07"
-                },
-                "permissions": [
-                    "LAUNCH", "LAUNCH_WEBAPP", "APP_TO_APP", "CLOSE", "TEST_OPEN", "TEST_PROTECTED",
-                    "CONTROL_AUDIO", "CONTROL_DISPLAY", "CONTROL_INPUT_JOYSTICK", "CONTROL_INPUT_MEDIA_RECORDING",
-                    "CONTROL_INPUT_MEDIA_PLAYBACK", "CONTROL_INPUT_TV", "CONTROL_POWER", "READ_APP_STATUS",
-                    "READ_CURRENT_CHANNEL", "READ_INPUT_DEVICE_LIST", "READ_NETWORK_STATE", "READ_RUNNING_APPS",
-                    "READ_TV_CHANNEL_LIST", "WRITE_TARGET_INPUT", "READ_POWER_STATE", "READ_COUNTRY_INFO"
-                ],
-                "signatures": [{
-                    "signatureVersion": 1,
-                    "signature": "eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3au3U8pEc1T2R0cEw3EV6kSpJs5T+A/I/pOHdHxV/bB3OjAbpC9125sKinNAp6Vo4v4LIvAO01xMMIevxflGX/525S2O0g1gMWOvDHf/8/25bgJeAIv8A/4aEpRC2kG2eEiVvK0NApSMv/+LSvs2xCCdRsP0GNzAsTV8D0Lw7Q3a0L4J/6M9G/haHGF/R+A/XyJ9DRf7qRjaho358f3c_S_k6/2Y_e2d-OL2y1i_V_v_g_v_G_g_v_x_e_y_E_y_f_y_z"
-                }]
-            }
-        };
+            const tvIpInput = document.getElementById('tv-ip');
+            const clientKeyInput = document.getElementById('client-key');
+            const connectBtn = document.getElementById('connect-btn');
+            const statusDiv = document.getElementById('status');
+            const controlsDiv = document.getElementById('controls');
+            const showToastBtn = document.getElementById('show-toast-btn');
+            const toastInputDiv = document.getElementById('toast-input');
+            const toastMessageInput = document.getElementById('toast-message');
+            const sendToastBtn = document.getElementById('send-toast-btn');
+            const screenshotBtn = document.getElementById('screenshot-btn');
+            const screenshotContainer = document.getElementById('screenshot-container');
+            const screenshotImg = document.getElementById('screenshot-img');
+            const certLink = document.getElementById('cert-link');
 
-        function updateStatus(message, type) {
-            statusDiv.textContent = message;
-            statusDiv.className = 'status ' + type;
-        }
-
-        function connect() {
-            const ip = tvIpInput.value.trim();
-            if (!ip) {
-                alert("אנא הכנס כתובת IP.");
-                return;
-            }
-
-            const url = `wss://${ip}:3001`;
-            updateStatus('מתחבר...', 'prompt');
-            connectBtn.disabled = true;
-
-            ws = new WebSocket(url);
-
-            ws.onopen = () => {
-                const payload = { ...REGISTRATION_PAYLOAD };
-                const clientKey = localStorage.getItem('lg-client-key');
-                if (clientKey) {
-                    payload['client-key'] = clientKey;
-                }
-                sendMessage('register', undefined, payload);
-            };
-
-            ws.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                console.log('Message from TV:', msg);
-
-                if (msg.type === 'registered') {
-                    const clientKey = msg.payload['client-key'];
-                    localStorage.setItem('lg-client-key', clientKey);
-                    updateStatus('מחובר בהצלחה!', 'connected');
+            // --- Event Listeners from Remote Class ---
+            remote.addEventListener('status', (e) => {
+                statusDiv.textContent = e.detail.message;
+                statusDiv.className = 'status ' + e.detail.type;
+                connectBtn.disabled = (e.detail.type !== 'disconnected');
+                if (e.detail.type === 'disconnected') {
+                    controlsDiv.style.display = 'none';
+                } else {
                     controlsDiv.style.display = 'block';
-                } else if (msg.payload && msg.payload.pairingType === 'PROMPT') {
-                    updateStatus('נא לאשר את החיבור בטלוויזיה.', 'prompt');
                 }
-            };
+            });
 
-            ws.onerror = (error) => {
-                console.error('WebSocket Error:', error);
-                updateStatus('שגיאת חיבור. בדוק קונסולה וודא שאישרת את החריגה.', 'disconnected');
-                connectBtn.disabled = false;
-            };
+            remote.addEventListener('registered', (e) => {
+                localStorage.setItem('lg-client-key', e.detail.clientKey);
+                clientKeyInput.value = e.detail.clientKey;
+            });
 
-            ws.onclose = () => {
-                updateStatus('מנותק', 'disconnected');
-                controlsDiv.style.display = 'none';
-                connectBtn.disabled = false;
-                ws = null;
-            };
-        }
+            remote.addEventListener('screenshot', (e) => {
+                screenshotImg.src = e.detail.uri;
+                screenshotContainer.style.display = 'block';
+            });
 
-        function sendMessage(type, uri, payload) {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                alert("לא מחובר לטלוויזיה.");
-                return;
+            // --- UI Event Listeners ---
+            connectBtn.addEventListener('click', () => {
+                const ip = tvIpInput.value.trim();
+                const key = clientKeyInput.value.trim();
+                if (!ip) {
+                    alert("אנא הכנס כתובת IP.");
+                    return;
+                }
+                remote.connect(ip, key);
+            });
+
+            controlsDiv.addEventListener('click', (event) => {
+                const target = event.target.closest('button');
+                if (!target) return;
+
+                if (target.dataset.button) {
+                    remote.sendButton(target.dataset.button);
+                } else if (target.dataset.uri) {
+                    const payload = target.dataset.payload ? JSON.parse(target.dataset.payload) : {};
+                    remote.sendMessage('request', target.dataset.uri, payload).catch(err => alert(err.message));
+                }
+            });
+
+            screenshotBtn.addEventListener('click', () => {
+                remote.sendMessage('request', 'ssap://tv/executeOneShot', {}).catch(err => alert(err.message));
+            });
+
+            showToastBtn.addEventListener('click', () => {
+                toastInputDiv.style.display = toastInputDiv.style.display === 'none' ? 'flex' : 'none';
+            });
+
+            sendToastBtn.addEventListener('click', () => {
+                const message = toastMessageInput.value;
+                if (message) {
+                    remote.sendMessage('request', 'ssap://system.notifications/createToast', { message: message });
+                    toastMessageInput.value = '';
+                    toastInputDiv.style.display = 'none';
+                }
+            });
+
+            // --- Local Storage and UI Helpers ---
+            function updateCertLink() {
+                const ip = tvIpInput.value.trim();
+                if (ip) {
+                    certLink.href = `https://${ip}:3001`;
+                    certLink.style.display = 'inline';
+                } else {
+                    certLink.style.display = 'none';
+                }
             }
-            const message = {
-                id: `${type}_${++messageId}`,
-                type: type,
-                uri: uri,
-                payload: payload
-            };
-            console.log('Sending message:', message);
-            ws.send(JSON.stringify(message));
-        }
 
-        connectBtn.addEventListener('click', connect);
+            tvIpInput.addEventListener('input', () => {
+                localStorage.setItem('lg-tv-ip', tvIpInput.value);
+                updateCertLink();
+            });
+            clientKeyInput.addEventListener('change', () => {
+                localStorage.setItem('lg-client-key', clientKeyInput.value);
+            });
 
-        controlsDiv.addEventListener('click', (event) => {
-            const target = event.target.closest('button');
-            if (!target) return;
-
-            if (target.dataset.uri) {
-                const payload = target.dataset.payload ? JSON.parse(target.dataset.payload) : undefined;
-                sendMessage('request', target.dataset.uri, payload);
-            } else if (target.dataset.button) {
-                sendMessage('request', 'ssap://com.webos.service.networkinput/sendButton', { name: target.dataset.button });
+            // Load saved values
+            const savedIp = localStorage.getItem('lg-tv-ip');
+            if (savedIp) {
+                tvIpInput.value = savedIp;
             }
-        });
-        
-        showToastBtn.addEventListener('click', () => {
-            toastInputDiv.style.display = toastInputDiv.style.display === 'none' ? 'flex' : 'none';
-        });
-
-        sendToastBtn.addEventListener('click', () => {
-            const message = toastMessageInput.value;
-            if (message) {
-                sendMessage('request', 'ssap://system.notifications/createToast', { message: message });
-                toastMessageInput.value = '';
-                toastInputDiv.style.display = 'none';
+            const savedKey = localStorage.getItem('lg-client-key');
+            if (savedKey) {
+                clientKeyInput.value = savedKey;
             }
+            updateCertLink();
         });
-
-        // נסה לטעון IP שמור
-        const savedIp = localStorage.getItem('lg-tv-ip');
-        if (savedIp) {
-            tvIpInput.value = savedIp;
-        }
-
-        // שמור IP בעת שינוי
-        tvIpInput.addEventListener('change', () => {
-            localStorage.setItem('lg-tv-ip', tvIpInput.value);
-        });
-
     </script>
 </body>
 </html>
