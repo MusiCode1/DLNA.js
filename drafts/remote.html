@@ -108,7 +108,11 @@
                 <button data-button="HOME">בית</button>
                 <button data-uri="ssap://system/turnOff">כיבוי</button>
                 <button id="show-toast-btn">הצג הודעה</button>
-                <button id="screenshot-btn">צלם מסך</button>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button id="screenshot-btn">צלם מסך</button>
+                    <input type="checkbox" id="continuous-screenshot-cb" title="צלם ברצף">
+                    <label for="continuous-screenshot-cb">רציף</label>
+                </div>
             </div>
             <div id="toast-input" class="input-group">
                 <input type="text" id="toast-message" placeholder="הודעה להצגה">
@@ -180,17 +184,17 @@
                 }
             });
 
-            screenshotBtn.addEventListener('click', async () => {
-                try {
-                    const payload = await remote.sendMessage('request', 'ssap://tv/executeOneShot', {});
-                    if (payload && payload.imageUri) {
-                        screenshotImg.src = payload.imageUri;
-                        screenshotContainer.style.display = 'block';
-                    } else {
-                        alert('לא התקבלה תמונה מהטלוויזיה.');
-                    }
-                } catch (err) {
-                    alert(err.message);
+            const continuousScreenshotCb = document.getElementById('continuous-screenshot-cb');
+
+            screenshotBtn.addEventListener('click', () => {
+                remote.takeScreenshot();
+            });
+
+            continuousScreenshotCb.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    remote.startContinuousScreenshot();
+                } else {
+                    remote.stopContinuousScreenshot();
                 }
             });
 

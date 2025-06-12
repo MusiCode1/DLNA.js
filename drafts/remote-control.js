@@ -115,6 +115,7 @@ class WebOSRemoteClient extends EventTarget {
         this.inputWs = null;
         this.messageId = 0;
         this.pendingRequests = new Map();
+        this.screenshotInterval = null;
         this.REGISTRATION_PAYLOAD = REGISTRATION_PAYLOAD;
     }
 
@@ -238,5 +239,35 @@ class WebOSRemoteClient extends EventTarget {
         const command = `type:button\nname:${buttonName}\n\n`;
         console.log("Sending input command:", command);
         this.inputWs.send(command);
+    }
+
+    async takeScreenshot() {
+        try {
+            const payload = await this.sendMessage('request', 'ssap://tv/executeOneShot', {});
+            if (payload && payload.imageUri) {
+                this.dispatchEvent(new CustomEvent('screenshot', { detail: { uri: payload.imageUri } }));
+            }
+        } catch (error) {
+            console.error("Screenshot failed:", error);
+            // אולי לעצור את הלולאה אם יש שגיאה?
+            this.stopContinuousScreenshot();
+            this.dispatchEvent(new CustomEvent('status', { detail: { message: 'שגיאה בצילום מסך', type: 'disconnected' } }));
+        }
+    }
+
+    startContinuousScreenshot(interval = 1000) {
+        if (this.screenshotInterval) {
+            this.stopContinuousScreenshot();
+        }
+        // קריאה מיידית אחת, ואז הגדרת האינטרוול
+        this.takeScreenshot();
+        this.screenshotInterval = setInterval(() => this.takeScreenshot(), interval);
+    }
+
+    stopContinuousScreenshot() {
+        if (this.screenshotInterval) {
+            clearInterval(this.screenshotInterval);
+            this.screenshotInterval = null;
+        }
     }
 }
