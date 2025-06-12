@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LG WebOS - שלט רחוק</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #1c1e21;
+            text-align: center;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            background-color: #1877f2;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #166fe5;
+        }
+        button:disabled {
+            background-color: #e4e6eb;
+            color: #bcc0c4;
+            cursor: not-allowed;
+        }
+        .grid-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 500;
+        }
+        .status.connected { background-color: #e7f3ff; color: #1877f2; }
+        .status.disconnected { background-color: #fbe9e7; color: #d32f2f; }
+        .status.prompt { background-color: #fff9c4; color: #f57f17; }
+        #toast-input { display: none; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>שלט רחוק WebOS</h1>
+
+        <div class="card">
+            <h2>התחברות</h2>
+            <div class="input-group">
+                <input type="text" id="tv-ip" placeholder="הכנס כתובת IP של הטלוויזיה">
+                <button id="connect-btn">התחבר</button>
+            </div>
+            <p><strong>הערה:</strong> אם זו הפעם הראשונה, ייתכן שתצטרך לגשת ל-<code>https://[TV_IP]:3001</code> ולאשר את החריגה האבטחתית בדפדפן.</p>
+            <div id="status" class="status disconnected">לא מחובר</div>
+        </div>
+
+        <div id="controls" class="card" style="display: none;">
+            <h2>פקדים</h2>
+            <div class="grid-controls">
+                <button data-uri="ssap://audio/volumeUp">Volume +</button>
+                <button data-uri="ssap://audio/volumeDown">Volume -</button>
+                <button data-uri="ssap://audio/setMute" data-payload='{"mute": true}'>השתק</button>
+                <button data-uri="ssap://audio/setMute" data-payload='{"mute": false}'>בטל השתקה</button>
+                <button data-button="UP">▲</button>
+                <button data-button="DOWN">▼</button>
+                <button data-button="LEFT">◄</button>
+                <button data-button="RIGHT">►</button>
+                <button data-button="ENTER">אישור</button>
+                <button data-button="BACK">חזור</button>
+                <button data-button="HOME">בית</button>
+                <button data-uri="ssap://system/turnOff">כיבוי</button>
+                <button id="show-toast-btn">הצג הודעה</button>
+            </div>
+            <div id="toast-input" class="input-group">
+                <input type="text" id="toast-message" placeholder="הודעה להצגה">
+                <button id="send-toast-btn">שלח</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tvIpInput = document.getElementById('tv-ip');
+        const connectBtn = document.getElementById('connect-btn');
+        const statusDiv = document.getElementById('status');
+        const controlsDiv = document.getElementById('controls');
+        const showToastBtn = document.getElementById('show-toast-btn');
+        const toastInputDiv = document.getElementById('toast-input');
+        const toastMessageInput = document.getElementById('toast-message');
+        const sendToastBtn = document.getElementById('send-toast-btn');
+
+        let ws = null;
+        let messageId = 0;
+        const REGISTRATION_PAYLOAD = {
+            "forcePairing": false,
+            "pairingType": "PROMPT",
+            "manifest": {
+                "manifestVersion": 1,
+                "appVersion": "1.1",
+                "signed": {
+                    "created": "20140509",
+                    "appId": "com.your.app.id",
+                    "vendorId": "com.your.vendor.id",
+                    "localizedAppNames": {
+                        "": "LG Remote",
+                        "ko-KR": "리모컨"
+                    },
+                    "localizedVendorNames": {
+                        "": "Your Company"
+                    },
+                    "permissions": [
+                        "TEST_SECURE", "CONTROL_INPUT_TEXT", "CONTROL_MOUSE_AND_KEYBOARD", "READ_INSTALLED_APPS",
+                        "READ_LGE_SDX", "READ_NOTIFICATIONS", "SEARCH", "WRITE_SETTINGS", "WRITE_NOTIFICATION_ALERT",
+                        "CONTROL_POWER", "READ_CURRENT_CHANNEL", "READ_RUNNING_APPS", "READ_UPDATE_INFO",
+                        "UPDATE_FROM_REMOTE_APP", "READ_LGE_TV_INPUT_EVENTS", "READ_TV_CHANNEL_LIST"
+                    ],
+                    "serial": "2f930e2d2cfe083771f68e4fe7bb07"
+                },
+                "permissions": [
+                    "LAUNCH", "LAUNCH_WEBAPP", "APP_TO_APP", "CLOSE", "TEST_OPEN", "TEST_PROTECTED",
+                    "CONTROL_AUDIO", "CONTROL_DISPLAY", "CONTROL_INPUT_JOYSTICK", "CONTROL_INPUT_MEDIA_RECORDING",
+                    "CONTROL_INPUT_MEDIA_PLAYBACK", "CONTROL_INPUT_TV", "CONTROL_POWER", "READ_APP_STATUS",
+                    "READ_CURRENT_CHANNEL", "READ_INPUT_DEVICE_LIST", "READ_NETWORK_STATE", "READ_RUNNING_APPS",
+                    "READ_TV_CHANNEL_LIST", "WRITE_TARGET_INPUT", "READ_POWER_STATE", "READ_COUNTRY_INFO"
+                ],
+                "signatures": [{
+                    "signatureVersion": 1,
+                    "signature": "eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3au3U8pEc1T2R0cEw3EV6kSpJs5T+A/I/pOHdHxV/bB3OjAbpC9125sKinNAp6Vo4v4LIvAO01xMMIevxflGX/525S2O0g1gMWOvDHf/8/25bgJeAIv8A/4aEpRC2kG2eEiVvK0NApSMv/+LSvs2xCCdRsP0GNzAsTV8D0Lw7Q3a0L4J/6M9G/haHGF/R+A/XyJ9DRf7qRjaho358f3c_S_k6/2Y_e2d-OL2y1i_V_v_g_v_G_g_v_x_e_y_E_y_f_y_z"
+                }]
+            }
+        };
+
+        function updateStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+        }
+
+        function connect() {
+            const ip = tvIpInput.value.trim();
+            if (!ip) {
+                alert("אנא הכנס כתובת IP.");
+                return;
+            }
+
+            const url = `wss://${ip}:3001`;
+            updateStatus('מתחבר...', 'prompt');
+            connectBtn.disabled = true;
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                const payload = { ...REGISTRATION_PAYLOAD };
+                const clientKey = localStorage.getItem('lg-client-key');
+                if (clientKey) {
+                    payload['client-key'] = clientKey;
+                }
+                sendMessage('register', undefined, payload);
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                console.log('Message from TV:', msg);
+
+                if (msg.type === 'registered') {
+                    const clientKey = msg.payload['client-key'];
+                    localStorage.setItem('lg-client-key', clientKey);
+                    updateStatus('מחובר בהצלחה!', 'connected');
+                    controlsDiv.style.display = 'block';
+                } else if (msg.payload && msg.payload.pairingType === 'PROMPT') {
+                    updateStatus('נא לאשר את החיבור בטלוויזיה.', 'prompt');
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                updateStatus('שגיאת חיבור. בדוק קונסולה וודא שאישרת את החריגה.', 'disconnected');
+                connectBtn.disabled = false;
+            };
+
+            ws.onclose = () => {
+                updateStatus('מנותק', 'disconnected');
+                controlsDiv.style.display = 'none';
+                connectBtn.disabled = false;
+                ws = null;
+            };
+        }
+
+        function sendMessage(type, uri, payload) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert("לא מחובר לטלוויזיה.");
+                return;
+            }
+            const message = {
+                id: `${type}_${++messageId}`,
+                type: type,
+                uri: uri,
+                payload: payload
+            };
+            console.log('Sending message:', message);
+            ws.send(JSON.stringify(message));
+        }
+
+        connectBtn.addEventListener('click', connect);
+
+        controlsDiv.addEventListener('click', (event) => {
+            const target = event.target.closest('button');
+            if (!target) return;
+
+            if (target.dataset.uri) {
+                const payload = target.dataset.payload ? JSON.parse(target.dataset.payload) : undefined;
+                sendMessage('request', target.dataset.uri, payload);
+            } else if (target.dataset.button) {
+                sendMessage('request', 'ssap://com.webos.service.networkinput/sendButton', { name: target.dataset.button });
+            }
+        });
+        
+        showToastBtn.addEventListener('click', () => {
+            toastInputDiv.style.display = toastInputDiv.style.display === 'none' ? 'flex' : 'none';
+        });
+
+        sendToastBtn.addEventListener('click', () => {
+            const message = toastMessageInput.value;
+            if (message) {
+                sendMessage('request', 'ssap://system.notifications/createToast', { message: message });
+                toastMessageInput.value = '';
+                toastInputDiv.style.display = 'none';
+            }
+        });
+
+        // נסה לטעון IP שמור
+        const savedIp = localStorage.getItem('lg-tv-ip');
+        if (savedIp) {
+            tvIpInput.value = savedIp;
+        }
+
+        // שמור IP בעת שינוי
+        tvIpInput.addEventListener('change', () => {
+            localStorage.setItem('lg-tv-ip', tvIpInput.value);
+        });
+
+    </script>
+</body>
+</html>
