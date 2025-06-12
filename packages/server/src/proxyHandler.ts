@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { Readable } from 'stream';
 import { createLogger } from 'dlna.js';
 import { getActiveDevices } from './deviceManager';
 
@@ -57,9 +58,17 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
     // העברת ה-status code
     res.status(deviceResponse.status);
 
-    // קריאת גוף התשובה כ-ArrayBuffer והעברתו
-    const body = await deviceResponse.arrayBuffer();
-    res.send(Buffer.from(body));
+    // הזרמת גוף התשובה ישירות לקליינט
+    if (deviceResponse.body) {
+      const bodyStream = Readable.fromWeb(deviceResponse.body as any);
+      await new Promise((resolve, reject) => {
+        bodyStream.pipe(res);
+        bodyStream.on('end', resolve);
+        bodyStream.on('error', reject);
+      });
+    } else {
+      res.end();
+    }
 
   } catch (error) {
     logger.error(`Proxy error for device "${deviceId}" and path "${resourcePath}":`, error);
