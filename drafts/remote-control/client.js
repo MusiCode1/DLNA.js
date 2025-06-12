@@ -108,7 +108,7 @@ const REGISTRATION_PAYLOAD = {
     "pairingType": "PROMPT"
 };
 
-class WebOSRemoteClient extends EventTarget {
+export class WebOSRemoteClient extends EventTarget {
     constructor() {
         super();
         this.ws = null;
