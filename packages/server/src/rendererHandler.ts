@@ -1,5 +1,5 @@
 // server/rendererHandler.ts
-import { Request, Response, NextFunction, Router } from 'express';
+import { Request, Response, NextFunction, Router, response } from 'express';
 import {
   createModuleLogger,
   ContentDirectoryService, BrowseFlag,
@@ -19,11 +19,19 @@ export interface ProcessedPlaylistItem {
   title: string; // לנוחות לוגים
 }
 
-const logger = createModuleLogger('rendererHandler');
+const createRenderMockRes = (rendererUdn: string) => ({
+  status: (code: number) => ({
+    send: (body: any) => {
+      throw {
+        statusCode: code,
+        body,
+        message: `Error with renderer ${rendererUdn}: ${body?.error || JSON.stringify(body)}`
+      };
+    }
+  })
+} as any as Response);
 
-// הפונקציה הזו תכיל את הלוגיקה המרכזית לניגון תיקייה
-// היא תקבל את כל התלויות הנדרשות ותחזיר Promise
-// export async function playFolderOnRenderer(...) // הפונקציה הישנה תוסר
+const logger = createModuleLogger('rendererHandler');
 
 /**
  * @hebrew מאחזר ומעבד פריטים מתיקייה בשרת מדיה.
@@ -37,7 +45,21 @@ export async function getFolderItemsFromMediaServer(
 ): Promise<ProcessedPlaylistItem[]> {
   parentLogger.info(`Attempting to browse folder ${folderObjectId} on media server ${mediaServerUdn}`);
 
-  const mediaServer = getValidatedDevice(mediaServerUdn, 'Media Server', activeDevices, { status: (code: number) => ({ send: (body: any) => { throw { statusCode: code, body, message: `Media Server UDN ${mediaServerUdn} not found or invalid.` }; } }) } as any as Response);
+  const resMock = ({
+    status: (code: number) => ({
+      send: (body: any) => {
+        throw {
+          statusCode: code,
+          body,
+          message: `Media Server UDN ${mediaServerUdn} not found or invalid.`
+        };
+      }
+    })
+  } as any as Response);
+
+
+
+  const mediaServer = getValidatedDevice(mediaServerUdn, 'Media Server', resMock);
   if (!mediaServer) { // בדיקה נוספת למרות ש-getValidatedDevice אמור לזרוק שגיאה
     throw new Error(`Media Server with UDN ${mediaServerUdn} not found or invalid.`);
   }
@@ -167,6 +189,69 @@ export async function getFolderItemsFromMediaServer(
 }
 
 /**
+ * @hebrew בודק אם הרנדרר מנגן כעת מדיה.
+ * @returns {Promise<boolean>} מחזיר true אם הרנדרר מנגן, אחרת false.
+ * @throws {Error} אם המכשיר או השירות לא נמצאו, כדי לאפשר טיפול בשגיאות ברמה העליונה.
+ */
+export async function isRendererPlaying(
+  rendererUdn: string,
+  activeDevices: Map<string, ApiDevice>,
+  parentLogger: typeof logger,
+): Promise<boolean> {
+  parentLogger.info(`Checking playback state for renderer ${rendererUdn}`);
+
+  // שימוש ב-res פקטיבי שזורק שגיאה במקום לשלוח תגובה, כדי שהקורא יוכל לטפל בה
+  const mockRes = createRenderMockRes(rendererUdn);
+
+  const renderer = getValidatedDevice(rendererUdn, 'Renderer', mockRes);
+  if (!renderer) {
+    // למרות ש-getValidatedDevice אמור לזרוק שגיאה, נוסיף בדיקה למקרה חירום
+    parentLogger.error(`getValidatedDevice returned null for UDN ${rendererUdn}, which should not happen.`);
+    return false;
+  }
+
+  const avTransportService = getValidatedService(renderer, 'AVTransport', 'AVTransport', mockRes);
+  if (!avTransportService) {
+    // גם כאן, זו בדיקת בטיחות נוספת
+    return false;
+  }
+
+  // הגדרת טיפוסים ברורים יותר עבור התוצאה הצפויה
+  type GetTransportInfoResult = {
+    CurrentTransportState: 'STOPPED' | 'PLAYING' | 'PAUSED_PLAYBACK' | 'TRANSITIONING' | 'NO_MEDIA_PRESENT';
+    CurrentTransportStatus: string;
+    CurrentSpeed: string;
+  };
+
+  type GetTransportInfoAction = (
+    args: { InstanceID: string }
+  ) => Promise<GetTransportInfoResult>;
+
+  const getTransportInfoAction =
+    (renderer.serviceList.get('AVTransport')
+      ?.actionList?.get('GetTransportInfo')?.invoke) as unknown as GetTransportInfoAction | undefined;
+
+  if (!getTransportInfoAction) {
+    parentLogger.warn(`Renderer ${rendererUdn} does not support GetTransportInfo action. Assuming not playing.`);
+    return false;
+  }
+
+  try {
+
+    const result = await getTransportInfoAction({ InstanceID: '0' });
+
+    const currentState = result.CurrentTransportState;
+    parentLogger.info(`Renderer ${rendererUdn} current transport state is: ${currentState}`);
+
+    return currentState === 'PLAYING';
+
+  } catch (error: any) {
+    parentLogger.error(`Failed to get transport info from renderer ${rendererUdn}: ${error.message}`, { fault: error.soapFault });
+    // במקרה של שגיאת תקשורת, נניח שהרנדרר לא מנגן כדי לא לחסום את הפעולה שלא לצורך
+    return false;
+  }
+}
+/**
  * @hebrew מנגן רשימת פריטים מעובדים על גבי renderer נתון.
  */
 export async function playProcessedItemsOnRenderer(
@@ -179,9 +264,9 @@ export async function playProcessedItemsOnRenderer(
 
   // ולידציה של ה-renderer ושירות ה-AVTransport שלו
   // שימוש ב-res פקטיבי כי הפונקציה הזו לא אמורה לשלוח תגובת HTTP ישירות אלא לזרוק שגיאה או להחזיר תוצאה
-  const mockRes = { status: (code: number) => ({ send: (body: any) => { throw { statusCode: code, body, message: `Error with renderer ${rendererUdn}: ${body?.error || JSON.stringify(body)}` }; } }) } as any as Response;
+  const mockRes = createRenderMockRes(rendererUdn);
 
-  const renderer = getValidatedDevice(rendererUdn, 'Renderer', activeDevices, mockRes);
+  const renderer = getValidatedDevice(rendererUdn, 'Renderer', mockRes);
   if (!renderer) { // בדיקה נוספת, למרות ש-getValidatedDevice אמור לזרוק
     const message = `Renderer with UDN ${rendererUdn} not found or invalid for playback.`;
     parentLogger.warn(message);
@@ -298,7 +383,6 @@ interface PlayFolderRequestBody { // שם הממשק הוחזר למקורי
 function getValidatedDevice(
   udn: string,
   deviceType: 'Renderer' | 'Media Server',
-  activeDevices: Map<string, ApiDevice>,
   res: Response
 ): ApiDevice | null {
   const currentActiveDevices = getActiveDevices();
@@ -359,10 +443,10 @@ export function createRendererHandler(activeDevices: Map<string, ApiDevice>): Ro
         return;
       }
 
-      const renderer = getValidatedDevice(rendererUdn, 'Renderer', activeDevices, res);
+      const renderer = getValidatedDevice(rendererUdn, 'Renderer', res);
       if (!renderer) return;
 
-      const mediaServer = getValidatedDevice(mediaServerUdn, 'Media Server', activeDevices, res);
+      const mediaServer = getValidatedDevice(mediaServerUdn, 'Media Server', res);
       if (!mediaServer) return;
 
       const cdServiceDescriptionOriginal = getValidatedService(mediaServer, 'ContentDirectory', 'ContentDirectory', res);

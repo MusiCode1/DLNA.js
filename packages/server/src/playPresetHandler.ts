@@ -19,7 +19,7 @@ import type {
 } from 'dlna.js';
 
 import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
-import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler';
+import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem, isRendererPlaying } from './rendererHandler';
 import { getActiveDevices } from './deviceManager';
 import { config } from './config';
 
@@ -224,6 +224,14 @@ export async function executePlayPresetLogic(
 
       if (respondsViaUrl) {
         logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') confirmed responsive. Using this device instance.`);
+        // --- תוספת חדשה ---
+        // בדיקה אם הרנדרר כבר מנגן משהו
+        const isPlaying = await isRendererPlaying(deviceFromActiveList.UDN, activeDevices, logger);
+        if (isPlaying) {
+          logger.warn(`Renderer ${deviceFromActiveList.UDN} is already playing. Halting preset '${presetName}'.`);
+          throw new PlaybackError(`Renderer is already playing. Halting preset execution.`, 409); // 409 Conflict
+        }
+        // --- סוף תוספת ---
         return deviceFromActiveList;
 
       } else {
@@ -244,6 +252,14 @@ export async function executePlayPresetLogic(
     // אנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנו מצפים לו.
     const polledApiDevice = await waitForDeviceConfirmation(rendererPreset.udn, presetName);
 
+    // --- תוספת חדשה ---
+    // בדיקה אם הרנדרר כבר מנגן משהו
+    const isPlayingAfterPoll = await isRendererPlaying(polledApiDevice.UDN, activeDevices, logger);
+    if (isPlayingAfterPoll) {
+      logger.warn(`Renderer ${polledApiDevice.UDN} is already playing after poll. Halting preset '${presetName}'.`);
+      throw new PlaybackError(`Renderer is already playing. Halting preset execution.`, 409); // 409 Conflict
+    }
+    // --- סוף תוספת ---
     return polledApiDevice;
   };
 

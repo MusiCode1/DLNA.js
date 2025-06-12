@@ -216,6 +216,10 @@ export async function handlePostPreset(req: Request, res: Response, next: NextFu
 
 // פונקציית executePlayPresetLogic הועברה לקובץ playPresetHandler.ts
 
+// מפה לאחסון חותמות זמן של ריצות אחרונות של פריסטים
+const presetLastRun = new Map<string, number>();
+const PRESET_RUN_COOLDOWN_MS = 60000; // 60 שניות
+
 /**
  * @hebrew מטפל בבקשת GET להפעלת פריסט (באמצעות path parameter).
  */
@@ -232,6 +236,17 @@ export async function handlePlayPresetByParam(
   if (!presetName) {
     logger.warn('Preset name not provided in path parameters for /api/play-preset/:presetName.');
     res.status(400).json({ error: "Preset name is required as a path parameter." });
+    return;
+  }
+
+  // בדיקה אם הפריסט הורץ בתקופת הצינון
+  const lastRunTimestamp = presetLastRun.get(presetName);
+  const now = Date.now();
+  if (lastRunTimestamp && (now - lastRunTimestamp < PRESET_RUN_COOLDOWN_MS)) {
+    const timeLeft = Math.round((PRESET_RUN_COOLDOWN_MS - (now - lastRunTimestamp)) / 1000);
+    const errorMessage = `Preset '${presetName}' was run recently. Please wait ${timeLeft} seconds before running it again.`;
+    logger.warn(errorMessage);
+    res.status(429).json({ error: errorMessage }); // 429 Too Many Requests
     return;
   }
 
@@ -253,6 +268,9 @@ export async function handlePlayPresetByParam(
     //   res.status(400).json({ error: `Preset '${presetName}' is critically incomplete.` });
     //   return;
     // }
+
+    // עדכון חותמת הזמן לפני הריצה
+    presetLastRun.set(presetName, now);
 
     const result = await executePlayPresetLogic(
       presetName,
