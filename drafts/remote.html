@@ -161,10 +161,25 @@
                 clientKeyInput.value = e.detail.clientKey;
             });
 
-            remote.addEventListener('screenshot', (e) => {
-                // הוספת פרמטר זמן ייחודי כדי למנוע שמירת מטמון
-                screenshotImg.src = `${e.detail.uri}?t=${new Date().getTime()}`;
-                screenshotContainer.style.display = 'block';
+            let currentScreenshotUrl = null;
+            remote.addEventListener('screenshot', async (e) => {
+                try {
+                    // נשתמש ב-fetch עם no-cache כדי להבטיח שהתמונה תמיד תטען מחדש
+                    const response = await fetch(e.detail.uri, { cache: 'no-cache' });
+                    const imageBlob = await response.blob();
+
+                    // אם יש כתובת ישנה, נשחרר אותה מהזיכרון
+                    if (currentScreenshotUrl) {
+                        URL.revokeObjectURL(currentScreenshotUrl);
+                    }
+
+                    // ניצור כתובת חדשה ונעדכן את התמונה
+                    currentScreenshotUrl = URL.createObjectURL(imageBlob);
+                    screenshotImg.src = currentScreenshotUrl;
+                    screenshotContainer.style.display = 'block';
+                } catch (error) {
+                    console.error("Failed to fetch or display screenshot:", error);
+                }
             });
 
             // --- UI Event Listeners ---
