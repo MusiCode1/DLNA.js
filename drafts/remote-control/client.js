@@ -108,7 +108,7 @@ const REGISTRATION_PAYLOAD = {
     "pairingType": "PROMPT"
 };
 
-export class WebOSRemoteClient extends EventTarget {
+class WebOSRemoteClient extends EventTarget {
     constructor() {
         super();
         this.ws = null;
@@ -214,8 +214,11 @@ export class WebOSRemoteClient extends EventTarget {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
                 return reject(new Error("לא מחובר לטלוויזיה."));
             }
-            const id = `${type}_${++this.messageId}`;
+
+            
+            const id = `${type}-${++this.messageId}-${crypto.randomUUID()}`;
             const message = { id, type, uri, payload };
+            const msgTxt = JSON.stringify(message);
 
             this.pendingRequests.set(id, {
                 resolve,
@@ -226,7 +229,7 @@ export class WebOSRemoteClient extends EventTarget {
                 }, 5000)
             });
 
-            console.log('Sending message:', message);
+            console.log('Sending message:', msgTxt);
             this.ws.send(JSON.stringify(message));
         });
     }
@@ -270,4 +273,19 @@ export class WebOSRemoteClient extends EventTarget {
             this.screenshotInterval = null;
         }
     }
+
+    sendText(text) {
+        return this.sendMessage('request', 'ssap://com.webos.service.ime/insertText', { text, replace: 0 });
+    }
+
+    sendEnter() {
+        return this.sendMessage('request', 'ssap://com.webos.service.ime/sendEnterKey');
+    }
+
+    sendDelete() {
+        // The API expects a count of characters to delete. We'll delete one by one.
+        return this.sendMessage('request', 'ssap://com.webos.service.ime/deleteCharacters', { count: 1 });
+    }
 }
+
+

@@ -1,4 +1,4 @@
-import { WebOSRemoteClient } from "./client.js";
+//import { WebOSRemoteClient } from "./client.js";
 
 document.addEventListener('DOMContentLoaded', () => {
     
@@ -17,6 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const screenshotContainer = document.getElementById('screenshot-container');
     const screenshotImg = document.getElementById('screenshot-img');
     const certLink = document.getElementById('cert-link');
+
+    const textInput = document.getElementById('text-input');
+    const enterBtn = document.getElementById('enter-btn');
+    const deleteBtn = document.getElementById('delete-btn');
 
     // --- Event Listeners from Remote Class ---
     remote.addEventListener('status', (e) => {
@@ -101,6 +105,32 @@ document.addEventListener('DOMContentLoaded', () => {
             toastMessageInput.value = '';
             toastInputDiv.style.display = 'none';
         }
+    });
+
+    // --- Typing controls ---
+    let lastText = '';
+    textInput.addEventListener('input', (e) => {
+        const currentText = e.target.value;
+        if (currentText.length > lastText.length) {
+            // User typed a character
+            const newChar = currentText.slice(lastText.length);
+            remote.sendText(newChar).catch(err => console.error("Send text error:", err));
+        } else {
+            // User deleted a character
+            remote.sendDelete().catch(err => console.error("Send delete error:", err));
+        }
+        lastText = currentText;
+    });
+
+    enterBtn.addEventListener('click', () => {
+        remote.sendEnter().catch(err => console.error("Send enter error:", err));
+    });
+
+    deleteBtn.addEventListener('click', () => {
+        remote.sendDelete().catch(err => console.error("Send delete error:", err));
+        // Also update the input field and our state
+        textInput.value = textInput.value.slice(0, -1);
+        lastText = textInput.value;
     });
 
     // --- Local Storage and UI Helpers ---
