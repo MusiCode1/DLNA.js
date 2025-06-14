@@ -248,4 +248,16 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
     // Input Controls
     public sendButton = (buttonName: string): Promise<void> => input.sendButton(this, buttonName);
+    public sendEnter = (): Promise<void> => this.sendMessage({ type: 'request', uri: 'ssap://com.webos.service.ime/sendEnterKey' }).then(() => {});
+    public sendText = (text: string): Promise<void> => this.sendMessage({ type: 'request', uri: 'ssap://com.webos.service.ime/insertText', payload: { text, replace: 0 } }).then(() => {});
+    public sendDelete = (): Promise<void> => this.sendMessage({ type: 'request', uri: 'ssap://com.webos.service.ime/deleteCharacters', payload: { count: 1 } }).then(() => {});
+
+    // Capture Controls
+    public takeScreenshot = async (): Promise<string> => {
+        const response = await this.sendMessage({ type: 'request', uri: 'ssap://tv/executeOneShot' });
+        if (response.payload?.imageUri) {
+            return response.payload.imageUri;
+        }
+        throw new Error('Failed to get screenshot URI');
+    };
 }

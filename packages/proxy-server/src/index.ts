@@ -81,8 +81,20 @@ app.get(
 
           tvWs.send(evt.data.toString());
         } else {
-          console.error('A message was received before opening the connection.');
-
+          // אם הפרוקסי עדיין לא מחובר לטלוויזיה, שלח שגיאה חזרה ללקוח
+          console.error('Message received before proxy connection to TV was established.');
+          try {
+            const clientMessage = JSON.parse(evt.data.toString());
+            if (clientMessage.id) {
+              ws.send(JSON.stringify({
+                id: clientMessage.id,
+                type: 'error',
+                error: 'Proxy not connected to TV. Please wait and try again.'
+              }));
+            }
+          } catch (e) {
+            console.error('Could not parse client message to send error response.');
+          }
         }
       },
       onClose: (evt, ws) => {
