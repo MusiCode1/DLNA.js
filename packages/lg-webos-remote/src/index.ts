@@ -1,7 +1,5 @@
-import { WebSocket, type MessageEvent } from 'ws';
 import { EventEmitter } from 'eventemitter3';
-import crypto from "node:crypto";
-
+import { getWebSocketImplementation } from './platform';
 import { REGISTRATION_PAYLOAD } from './constants';
 export * from './types';
 import type { WebOSMessage, WebOSResponse, VolumeStatus, ForegroundAppInfo } from './types';
@@ -10,9 +8,11 @@ import * as system from './controls/system';
 import * as application from './controls/application';
 import * as input from './controls/input';
 
+
+
 interface WebOSRemoteEvents {
     connect: () => void;
-    disconnect: (code: number, reason: Buffer<ArrayBufferLike>) => void;
+    disconnect: (code: number, reason: string) => void;
     error: (error: Error) => void;
     prompt: () => void;
     registered: (clientKey: string) => void;
@@ -24,6 +24,7 @@ export interface WebOSRemoteConfig {
     clientKey?: string;
     timeout?: number;
     pairingType?: 'PROMPT' | 'PIN';
+    proxyUrl?: string; // Optional proxy URL
 }
 
 interface PendingRequestsItem {
@@ -32,16 +33,19 @@ interface PendingRequestsItem {
     timeout: NodeJS.Timeout;
 }
 
+type BrowserWebsocket = typeof globalThis.window['WebSocket']['prototype'];
+
 /**
  * # LG WebOS Remote Control
  * A library to control LG webOS TVs.
  */
 export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     private config: WebOSRemoteConfig;
-    public ws: WebSocket | null = null;
-    public inputWs: WebSocket | null = null;
+    public ws: any | null = null;
+    public inputWs: any | null = null;
     private messageIdCounter = 0;
     private pendingRequests = new Map<string, PendingRequestsItem>();
+    private WebSocketImpl: any;
     /**
      * יוצר אובייקט חדש לשליטה על טלוויזיית LG.
      * @param config - הגדרות החיבור.
@@ -53,48 +57,55 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             timeout: 5000, // ברירת מחדל של 5 שניות
             ...config,
         };
-        (process.env as any).NODE_TLS_REJECT_UNAUTHORIZED = '0';
+        if (globalThis.process?.env) {
+            (process.env as any).NODE_TLS_REJECT_UNAUTHORIZED = '0';
+        }
     }
 
     /**
      * מתחבר לטלוויזיה באמצעות WebSocket.
      */
-    public connect(): Promise<void> {
+    public async connect(): Promise<void> {
+        if (this.ws && this.ws.readyState === 1) { // WebSocket.OPEN
+            return;
+        }
+
+        this.disconnect(); // Disconnect any existing connections
+
+        this.WebSocketImpl = await getWebSocketImplementation();
+        
+        // Use proxy URL if provided, otherwise connect directly
+        const url = this.config.proxyUrl ? `${this.config.proxyUrl}?ip=${this.config.ip}` : `wss://${this.config.ip}:3001`;
+
+        const isBrowser = !!globalThis.window;
+        const wsOptions = isBrowser ? {} : {
+            rejectUnauthorized: false // Option for 'ws' library in Node.js
+        };
+
+        this.ws = new this.WebSocketImpl(url, wsOptions);
+
         return new Promise((resolve, reject) => {
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                return resolve();
-            }
-
-            this.disconnect(); // נתק חיבורים קיימים לפני חיבור חדש
-
-            const url = `wss://${this.config.ip}:3001`;
-
-            
-            this.ws = new WebSocket(url, {
-                // @ts-ignore
-                tls: {
-                    rejectUnauthorized: false,
-                },
-
-                //rejectUnauthorized: false,
-            });
-
             const onConnect = () => {
                 this.register();
                 this.emit('connect');
                 resolve();
             };
 
-            const onError = (error: Error) => {
+            const onError = (event: any) => {
+                const error = event.message ? new Error(event.message) : new Error('WebSocket connection error');
                 this.emit('error', error);
                 this.disconnect();
                 reject(error);
             };
 
-            this.ws.once('open', onConnect);
-            this.ws.once('error', onError);
-            this.ws.on('message', this.handleMessage.bind(this));
-            this.ws.on('close', (code, reason) => this.emit('disconnect', code, reason));
+            const onClose = (event: any) => {
+                this.emit('disconnect', event.code, event.reason);
+            };
+
+            this.ws.addEventListener('open', onConnect);
+            this.ws.addEventListener('error', onError);
+            this.ws.addEventListener('message', this.handleMessage.bind(this));
+            this.ws.addEventListener('close', onClose);
         });
     }
 
@@ -158,11 +169,11 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
 
     public sendRaw(message: WebOSMessage): string {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        if (!this.ws || this.ws.readyState !== 1) { // WebSocket.OPEN
             throw new Error('Not connected to TV');
         }
 
-        message.id ?? (message.id = crypto.randomUUID()); // אם לא סופק מזהה, ניצור אחד חדש
+        message.id ?? (message.id = crypto.randomUUID()); // Use global crypto
         this.ws.send(JSON.stringify(message));
         return message.id;
     }
@@ -187,14 +198,14 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
      */
     public disconnect(): void {
         if (this.ws) {
-            this.ws.removeAllListeners();
+
             if (this.ws.readyState === WebSocket.OPEN) {
                 this.ws.close();
             }
             this.ws = null;
         }
         if (this.inputWs) {
-            this.inputWs.removeAllListeners();
+
             if (this.inputWs.readyState === WebSocket.OPEN) {
                 this.inputWs.close();
             }
@@ -220,5 +231,5 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     public listApps = (): Promise<any[]> => application.listApps(this);
 
     // Input Controls
-    public sendButton = (buttonName: string): Promise<void> => input.sendButton(this, buttonName);
+    public sendButton = (buttonName: string): Promise<void> => input.sendButton(this, buttonName, this.WebSocketImpl);
 }

@@ -3,6 +3,10 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "start:proxy": "bun run src/simple-proxy.ts",
+    "build:client": "bun build ./public/remote-control/client.ts --outdir ./public/remote-control/dist"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/ws": "^8.5.10"

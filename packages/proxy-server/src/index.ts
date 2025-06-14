@@ -100,7 +100,7 @@ app.get('ws', upgradeWebSocket((c) => {
     onClose(evt, ws) {
       console.log('Client disconnected');
       remote?.disconnect();
-      console.log('WebSocket connection closed:');
+      console.log('WebSocket connection closed:', evt.code, evt.reason);
     },
 
     onError(err, ws) {

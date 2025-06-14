@@ -1,4 +1,3 @@
-import WebSocket from 'ws';
 import type { WebOSRemote } from '../index';
 import type { WebOSResponse } from '../types';
 
@@ -12,8 +11,8 @@ import type { WebOSResponse } from '../types';
  * @param remote - מופע של WebOSRemote.
  * @returns הבטחה שמסתיימת כאשר החיבור נוצר.
  */
-async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
-    if (remote.inputWs && remote.inputWs.readyState === WebSocket.OPEN) {
+async function connectToInputSocket(remote: WebOSRemote, WebSocketImpl: any): Promise<void> {
+    if (remote.inputWs && remote.inputWs.readyState === 1) { // WebSocket.OPEN
         return;
     }
 
@@ -23,29 +22,33 @@ async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
     }
 
     const socketPath = response.payload.socketPath;
-    const inputWs = new WebSocket(socketPath);
+    const inputWs = new WebSocketImpl(socketPath);
     remote.inputWs = inputWs;
 
     return new Promise((resolve, reject) => {
-        inputWs.on('open', () => {
+        const onOpen = () => {
             console.log('Connected to input socket');
             resolve();
-        });
+        };
 
-        inputWs.on('error', (error: Error) => {
+        const onError = (error: any) => {
             console.error('Input socket error:', error);
             if (remote.inputWs === inputWs) {
                 remote.inputWs = null;
             }
-            reject(error); // It's better to reject on error
-        });
+            reject(error.message ? new Error(error.message) : new Error('Input socket error'));
+        };
 
-        inputWs.on('close', () => {
+        const onClose = () => {
             console.log('Input socket closed');
             if (remote.inputWs === inputWs) {
                 remote.inputWs = null;
             }
-        });
+        };
+
+        inputWs.addEventListener('open', onOpen);
+        inputWs.addEventListener('error', onError);
+        inputWs.addEventListener('close', onClose);
     });
 }
 
@@ -55,9 +58,9 @@ async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
  * @param buttonName - שם הכפתור (למשל, 'UP', 'DOWN', 'ENTER').
  * @returns הבטחה שמסתיימת כאשר הפקודה נשלחה.
  */
-export async function sendButton(remote: WebOSRemote, buttonName: string): Promise<void> {
-    if (!remote.inputWs || remote.inputWs.readyState !== WebSocket.OPEN) {
-        await connectToInputSocket(remote);
+export async function sendButton(remote: WebOSRemote, buttonName: string, WebSocketImpl: any): Promise<void> {
+    if (!remote.inputWs || remote.inputWs.readyState !== 1) { // WebSocket.OPEN
+        await connectToInputSocket(remote, WebSocketImpl);
     }
 
     if (!remote.inputWs) {
