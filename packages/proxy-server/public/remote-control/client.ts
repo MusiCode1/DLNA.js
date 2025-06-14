@@ -163,8 +163,9 @@ function sendToast() {
 async function takeScreenshot() {
     if (!remote) return;
     try {
-        const url = await remote.takeScreenshot();
-        dom.screenshotImg.src = `${url}?t=${new Date().getTime()}`;
+        const originalUrl = await remote.takeScreenshot();
+        const proxyUrl = `/proxy?url=${encodeURIComponent(originalUrl)}`;
+        dom.screenshotImg.src = `${proxyUrl}&t=${new Date().getTime()}`;
         dom.screenshotContainer.style.display = 'flex';
     } catch (error) {
         handleRemoteError(error as Error);

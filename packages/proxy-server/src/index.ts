@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import axios from 'axios';
 
 
 import { createBunWebSocket } from 'hono/bun';
@@ -15,6 +16,44 @@ const port = 3005;
 
 // Serve static files for the frontend
 app.use(serveStatic({ root: './public' }));
+
+// Generic proxy for fetching resources from the TV to solve CORS issues.
+// This supports streaming the response body.
+app.get('/proxy', async (c) => {
+    const targetUrl = c.req.query('url');
+    if (!targetUrl) {
+        return c.text('URL parameter is required', 400);
+    }
+
+    try {
+        const response = await axios({
+            method: 'get',
+            url: targetUrl,
+            responseType: 'stream',
+        });
+
+        // Although c.body(stream) handles piping implicitly,
+        // we can be more explicit for clarity.
+        const stream = response.data;
+        
+        c.status(response.status as any);
+        for (const key in response.headers) {
+            if (Object.prototype.hasOwnProperty.call(response.headers, key)) {
+                const value = response.headers[key];
+                if (value) {
+                    c.header(key, Array.isArray(value) ? value.join(', ') : value.toString());
+                }
+            }
+        }
+        
+        // Hono's body method handles the stream piping.
+        return c.body(stream);
+
+    } catch (error: any) {
+        console.error(`Proxy error for ${targetUrl}:`, error.message);
+        return c.text(`Proxy error: ${error.message}`, 500);
+    }
+});
 
 // Define the WebSocket proxy route
 app.get(
