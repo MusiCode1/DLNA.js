@@ -8,7 +8,9 @@ import type { Server } from 'http';
 const app = new Hono();
 const port = 3005;
 
-app.get('/', serveStatic({ path: './index.html', root: './public' }));
+app.use(serveStatic({ root: './public' }));
+
+// app.get('/', serveStatic({ path: './index.html', root: './public' }));
 app.get('/proxy', (c) => {
   // The WebSocket server will handle this
   return c.text('Upgrading to WebSocket', 426);

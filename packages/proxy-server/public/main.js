@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     const tvList = [
-        ['192.168.1.41', 'e6d865a8129fc69d17db75829985ad14', 'סלון'],
+        ['192.168.1.41', 'e6d865a8129fc69d17db75829985ad14', 'מרתף'],
         ['192.168.1.42', '7971b54a460430a87ed9207ed314cada', 'חדר שינה']
     ];
 
