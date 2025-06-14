@@ -1,5 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
-import { getWebSocketImplementation } from './platform';
+import { getWebSocketImplementation, type AnyWebSocket } from './platform';
 import { REGISTRATION_PAYLOAD } from './constants';
 export * from './types';
 import type { WebOSMessage, WebOSResponse, VolumeStatus, ForegroundAppInfo } from './types';
@@ -8,7 +8,7 @@ import * as system from './controls/system';
 import * as application from './controls/application';
 import * as input from './controls/input';
 
-
+type BrowserWebsocket = Window['window']['WebSocket']['prototype'];
 
 interface WebOSRemoteEvents {
     connect: () => void;
@@ -33,19 +33,16 @@ interface PendingRequestsItem {
     timeout: NodeJS.Timeout;
 }
 
-type BrowserWebsocket = typeof globalThis.window['WebSocket']['prototype'];
-
 /**
  * # LG WebOS Remote Control
  * A library to control LG webOS TVs.
  */
 export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     private config: WebOSRemoteConfig;
-    public ws: any | null = null;
+    public ws: BrowserWebsocket | null = null;
     public inputWs: any | null = null;
     private messageIdCounter = 0;
     private pendingRequests = new Map<string, PendingRequestsItem>();
-    private WebSocketImpl: any;
     /**
      * יוצר אובייקט חדש לשליטה על טלוויזיית LG.
      * @param config - הגדרות החיבור.
@@ -72,19 +69,16 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
         this.disconnect(); // Disconnect any existing connections
 
-        this.WebSocketImpl = await getWebSocketImplementation();
-        
         // Use proxy URL if provided, otherwise connect directly
         const url = this.config.proxyUrl ? `${this.config.proxyUrl}?ip=${this.config.ip}` : `wss://${this.config.ip}:3001`;
 
         const isBrowser = !!globalThis.window;
-        const wsOptions = isBrowser ? {} : {
+        const wsOptions = isBrowser ? undefined : {
             rejectUnauthorized: false // Option for 'ws' library in Node.js
         };
 
-        this.ws = new this.WebSocketImpl(url, wsOptions);
+        return new Promise(async (resolve, reject) => {
 
-        return new Promise((resolve, reject) => {
             const onConnect = () => {
                 this.register();
                 this.emit('connect');
@@ -101,6 +95,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             const onClose = (event: any) => {
                 this.emit('disconnect', event.code, event.reason);
             };
+            this.ws = await getWebSocketImplementation(url);
 
             this.ws.addEventListener('open', onConnect);
             this.ws.addEventListener('error', onError);
@@ -129,12 +124,12 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
     /**
      * מטפל בהודעות נכנסות מהטלוויזיה.
-     * @param data - המידע שהתקבל.
+     * @param event - המידע שהתקבל.
      * @private
      */
-    private handleMessage(data: MessageEvent): void {
+    private handleMessage(event: MessageEvent): void {
         try {
-            const resData = data.toString();
+            const resData = event.toString();
             const message: WebOSResponse = JSON.parse(resData);
             this.emit('message', message);
 
@@ -231,5 +226,5 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     public listApps = (): Promise<any[]> => application.listApps(this);
 
     // Input Controls
-    public sendButton = (buttonName: string): Promise<void> => input.sendButton(this, buttonName, this.WebSocketImpl);
+    public sendButton = (buttonName: string): Promise<void> => input.sendButton(this, buttonName);
 }

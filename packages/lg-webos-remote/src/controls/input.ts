@@ -1,5 +1,6 @@
 import type { WebOSRemote } from '../index';
 import type { WebOSResponse } from '../types';
+import { getWebSocketImplementation } from "../platform";
 
 /**
  * # Input Control
@@ -11,7 +12,7 @@ import type { WebOSResponse } from '../types';
  * @param remote - מופע של WebOSRemote.
  * @returns הבטחה שמסתיימת כאשר החיבור נוצר.
  */
-async function connectToInputSocket(remote: WebOSRemote, WebSocketImpl: any): Promise<void> {
+async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
     if (remote.inputWs && remote.inputWs.readyState === 1) { // WebSocket.OPEN
         return;
     }
@@ -22,7 +23,7 @@ async function connectToInputSocket(remote: WebOSRemote, WebSocketImpl: any): Pr
     }
 
     const socketPath = response.payload.socketPath;
-    const inputWs = new WebSocketImpl(socketPath);
+    const inputWs = await getWebSocketImplementation(socketPath);
     remote.inputWs = inputWs;
 
     return new Promise((resolve, reject) => {
@@ -58,9 +59,9 @@ async function connectToInputSocket(remote: WebOSRemote, WebSocketImpl: any): Pr
  * @param buttonName - שם הכפתור (למשל, 'UP', 'DOWN', 'ENTER').
  * @returns הבטחה שמסתיימת כאשר הפקודה נשלחה.
  */
-export async function sendButton(remote: WebOSRemote, buttonName: string, WebSocketImpl: any): Promise<void> {
+export async function sendButton(remote: WebOSRemote, buttonName: string): Promise<void> {
     if (!remote.inputWs || remote.inputWs.readyState !== 1) { // WebSocket.OPEN
-        await connectToInputSocket(remote, WebSocketImpl);
+        await connectToInputSocket(remote);
     }
 
     if (!remote.inputWs) {

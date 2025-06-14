@@ -1,4 +1,4 @@
-import { WebOSRemote } from '../../../lg-webos-remote/src/index.js';
+import { WebOSRemote } from 'lg-webos-remote';
 
 // DOM Elements
 const ipInput = document.getElementById('tv-ip') as HTMLInputElement;
