@@ -55,6 +55,10 @@ app.get(
             console.log(event.data);
 
             clientWs.send(event.data);
+            console.log('\n' + 'recived message from remote:');
+            console.log(event.data);
+
+            clientWs.send(event.data);
           }
         });
 
@@ -76,6 +80,9 @@ app.get(
       onMessage: (evt, ws) => {
         // Forward message from client to TV
         if (tvWs && tvWs.readyState === 1) { // WebSocket.OPEN
+          console.log('\n' + 'Recived message from client:');
+          console.log(evt.data.toString());
+
           console.log('\n' + 'Recived message from client:');
           console.log(evt.data.toString());
 
