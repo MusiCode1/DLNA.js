@@ -4,11 +4,11 @@ import { WebOSRemote } from 'lg-webos-remote';
 const ipInput = document.getElementById('tv-ip') as HTMLInputElement;
 const clientKeyInput = document.getElementById('client-key') as HTMLInputElement;
 const connectButton = document.getElementById('connect-btn') as HTMLButtonElement;
-const disconnectButton = document.getElementById('disconnect-btn') as HTMLButtonElement;
+// const disconnectButton = document.getElementById('disconnect-btn') as HTMLButtonElement; // This button does not exist in the HTML
 const statusDiv = document.getElementById('status') as HTMLDivElement;
 const controlsDiv = document.getElementById('controls') as HTMLDivElement;
-const toastButton = document.getElementById('toast-btn') as HTMLButtonElement;
-const turnOffButton = document.getElementById('turn-off-btn') as HTMLButtonElement;
+const toastButton = document.getElementById('show-toast-btn') as HTMLButtonElement; // Corrected ID
+const turnOffButton = document.querySelector('button[data-uri="ssap://system/turnOff"]') as HTMLButtonElement; // Corrected selector
 
 let remote: WebOSRemote | null = null;
 
@@ -19,8 +19,12 @@ function updateStatus(message: string, type: 'prompt' | 'connected' | 'disconnec
 
 function setupEventListeners() {
     connectButton.addEventListener('click', connect);
-    disconnectButton.addEventListener('click', disconnect);
-    toastButton.addEventListener('click', () => remote?.createToast('Hello from browser!'));
+    // disconnectButton.addEventListener('click', disconnect);
+    toastButton.addEventListener('click', () => {
+        const toastInput = document.getElementById('toast-message') as HTMLInputElement;
+        const message = toastInput.value || 'Hello from browser!';
+        remote?.createToast(message);
+    });
     turnOffButton.addEventListener('click', () => remote?.turnOff());
 }
 
@@ -66,14 +70,14 @@ function addRemoteEventHandlers() {
     remote.on('connect', () => {
         updateStatus('Connected to TV via proxy!', 'connected');
         connectButton.disabled = true;
-        disconnectButton.disabled = false;
+        // disconnectButton.disabled = false;
         controlsDiv.style.display = 'block';
     });
 
     remote.on('disconnect', () => {
         updateStatus('Disconnected', 'disconnected');
         connectButton.disabled = false;
-        disconnectButton.disabled = true;
+        // disconnectButton.disabled = true;
         controlsDiv.style.display = 'none';
         remote = null;
     });
