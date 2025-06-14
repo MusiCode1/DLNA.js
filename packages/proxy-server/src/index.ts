@@ -48,10 +48,13 @@ app.get(
           }
         });
 
-        tvWs.addEventListener('message', (data) => {
+        tvWs.addEventListener('message', (event) => {
           // Forward message from TV to client
           if (clientWs.readyState === 1) { // OPEN
-            clientWs.send(data.data);
+            console.log('\n' + 'recived message from remote:');
+            console.log(event.data);
+
+            clientWs.send(event.data);
           }
         });
 
@@ -73,10 +76,13 @@ app.get(
       onMessage: (evt, ws) => {
         // Forward message from client to TV
         if (tvWs && tvWs.readyState === 1) { // WebSocket.OPEN
+          console.log('\n' + 'Recived message from client:');
+          console.log(evt.data.toString());
+
           tvWs.send(evt.data.toString());
         } else {
           console.error('A message was received before opening the connection.');
-          
+
         }
       },
       onClose: (evt, ws) => {

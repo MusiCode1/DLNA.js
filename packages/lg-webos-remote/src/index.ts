@@ -137,8 +137,14 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
      */
     private handleMessage(event: MessageEvent): void {
         try {
-            const resData = event.toString();
-            const message: WebOSResponse | ProxyConnectedMessage= JSON.parse(resData);
+            let message: WebOSResponse | ProxyConnectedMessage
+            if (event.type === 'message') {
+                const resData = event.data;
+                message = JSON.parse(resData);
+            } else {
+                throw new Error("Message type is not 'message'");
+            }
+
 
             // אם זו הודעה מהפרוקסי שהחיבור לטלוויזיה הצליח
             if (message.type === 'proxy_connected') {

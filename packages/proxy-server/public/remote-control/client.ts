@@ -39,13 +39,16 @@ async function connect() {
 
     updateStatus(`Connecting to proxy for TV at ${ip}...`, 'prompt');
 
+    const wsProtocol = (window.location.protocol === 'http:') ? 'ws' : 'wss';
+    const proxyUrl= `${wsProtocol}://${window.location.hostname}/ws`;
+
     // We instantiate our isomorphic WebOSRemote class.
     // It will run entirely in the browser, but connect via our simple proxy.
     remote = new WebOSRemote({
         ip,
         clientKey,
         // We use the `proxyUrl` config we added to solve the CORS issue.
-        proxyUrl: `ws://localhost:3005/ws`
+        proxyUrl
     });
 
     addRemoteEventHandlers();
