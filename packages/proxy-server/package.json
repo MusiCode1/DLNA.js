@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start:proxy": "bun run src/simple-proxy.ts",
+    "start": "bun run src/index.ts",
+    "dev": "bun run --watch src/index.ts",
     "build:client": "bun build ./public/remote-control/client.ts --outdir ./public/remote-control/dist"
   },
   "devDependencies": {

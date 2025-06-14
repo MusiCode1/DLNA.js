@@ -41,7 +41,7 @@ async function connect() {
         ip,
         clientKey,
         // We use the `proxyUrl` config we added to solve the CORS issue.
-        proxyUrl: `ws://localhost:3006`
+        proxyUrl: `ws://localhost:3005/ws`
     });
 
     addRemoteEventHandlers();
