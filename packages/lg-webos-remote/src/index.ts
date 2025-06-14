@@ -2,7 +2,7 @@ import { EventEmitter } from 'eventemitter3';
 import { getWebSocketImplementation, type AnyWebSocket } from './platform';
 import { REGISTRATION_PAYLOAD } from './constants';
 export * from './types';
-import type { WebOSMessage, WebOSResponse, VolumeStatus, ForegroundAppInfo } from './types';
+import type { WebOSMessage, WebOSResponse, VolumeStatus, ForegroundAppInfo, ProxyConnectedMessage } from './types';
 import * as audio from './controls/audio';
 import * as system from './controls/system';
 import * as application from './controls/application';
@@ -12,6 +12,7 @@ type BrowserWebsocket = Window['window']['WebSocket']['prototype'];
 
 interface WebOSRemoteEvents {
     connect: () => void;
+    proxyConnected: () => void; // אירוע המופעל כאשר הפרוקסי מתחבר לטלוויזיה
     disconnect: (code: number, reason: string) => void;
     error: (error: Error) => void;
     prompt: () => void;
@@ -43,6 +44,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     public inputWs: any | null = null;
     private messageIdCounter = 0;
     private pendingRequests = new Map<string, PendingRequestsItem>();
+    private isProxy: boolean = false;
     /**
      * יוצר אובייקט חדש לשליטה על טלוויזיית LG.
      * @param config - הגדרות החיבור.
@@ -54,6 +56,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             timeout: 5000, // ברירת מחדל של 5 שניות
             ...config,
         };
+        this.isProxy = !!config.proxyUrl;
         if (globalThis.process?.env) {
             (process.env as any).NODE_TLS_REJECT_UNAUTHORIZED = '0';
         }
@@ -69,32 +72,37 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
         this.disconnect(); // Disconnect any existing connections
 
-        // Use proxy URL if provided, otherwise connect directly
         const url = this.config.proxyUrl ? `${this.config.proxyUrl}?ip=${this.config.ip}` : `wss://${this.config.ip}:3001`;
 
-        const isBrowser = !!globalThis.window;
-        const wsOptions = isBrowser ? undefined : {
-            rejectUnauthorized: false // Option for 'ws' library in Node.js
-        };
-
         return new Promise(async (resolve, reject) => {
+            // ה-Promise הראשי ימתין לאירוע הרישום הסופי או לשגיאה
+            this.once('registered', () => resolve());
+            this.once('error', (err) => reject(err));
+            this.once('disconnect', (code, reason) => reject(new Error(`Disconnected with code ${code}: ${reason}`)));
 
             const onConnect = () => {
-                this.register();
                 this.emit('connect');
-                resolve();
+                if (this.isProxy) {
+                    // אם זה פרוקסי, נמתין לאישור שהפרוקסי מחובר לטלוויזיה
+                    this.once('proxyConnected', () => {
+                        this.register();
+                    });
+                } else {
+                    // אם זה חיבור ישיר, נבצע רישום מיד
+                    this.register();
+                }
             };
 
             const onError = (event: any) => {
                 const error = event.message ? new Error(event.message) : new Error('WebSocket connection error');
                 this.emit('error', error);
                 this.disconnect();
-                reject(error);
             };
 
             const onClose = (event: any) => {
                 this.emit('disconnect', event.code, event.reason);
             };
+
             this.ws = await getWebSocketImplementation(url);
 
             this.ws.addEventListener('open', onConnect);
@@ -130,7 +138,14 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     private handleMessage(event: MessageEvent): void {
         try {
             const resData = event.toString();
-            const message: WebOSResponse = JSON.parse(resData);
+            const message: WebOSResponse | ProxyConnectedMessage= JSON.parse(resData);
+
+            // אם זו הודעה מהפרוקסי שהחיבור לטלוויזיה הצליח
+            if (message.type === 'proxy_connected') {
+                this.emit('proxyConnected');
+                return;
+            }
+
             this.emit('message', message);
 
             // Check if this message is a response to a pending request

@@ -23,6 +23,10 @@ export interface WebOSResponse {
     error?: string;
 }
 
+export interface ProxyConnectedMessage {
+    type: 'proxy_connected'
+}
+
 /**
  * מידע על עוצמת השמע.
  */

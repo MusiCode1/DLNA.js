@@ -43,6 +43,9 @@ app.get(
         // TV WebSocket event handlers
         tvWs.addEventListener('open', () => {
           console.log('Proxy connected to TV.');
+          if (clientWs.readyState === 1) { // OPEN
+            clientWs.send(JSON.stringify({ type: 'proxy_connected' }));
+          }
         });
 
         tvWs.addEventListener('message', (data) => {
@@ -71,6 +74,9 @@ app.get(
         // Forward message from client to TV
         if (tvWs && tvWs.readyState === 1) { // WebSocket.OPEN
           tvWs.send(evt.data.toString());
+        } else {
+          console.error('A message was received before opening the connection.');
+          
         }
       },
       onClose: (evt, ws) => {
@@ -92,7 +98,8 @@ app.get(
 console.log(`Server is running on http://localhost:${port}`);
 console.log(`WebSocket proxy is available at ws://localhost:${port}/ws`);
 
-serve({
+export default {
   fetch: app.fetch,
-  port,
-});
+  websocket,
+  port
+}
