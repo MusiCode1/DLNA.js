@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ws) {
             ws.close();
         }
-        
+
         const selectedTv = tvSelect.value;
         if (!selectedTv) {
             updateStatus('נא לבחור טלוויזיה להתחברות.');
@@ -31,8 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const { ip, clientKey } = JSON.parse(selectedTv);
-        const wsUrl = `ws://${window.location.host}/?ip=${ip}&clientKey=${clientKey}`;
-        
+        const wsProtocol = (window.location.protocol === 'http:') ? 'ws' : 'wss';
+        const wsUrl = `${wsProtocol}://${window.location.host}/ws?ip=${ip}&clientKey=${clientKey}`;
+
         updateStatus(`מתחבר לטלוויזיה בכתובת ${ip}...`);
         ws = new WebSocket(wsUrl);
 

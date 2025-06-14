@@ -2,7 +2,6 @@ import { WebSocket, type MessageEvent } from 'ws';
 import { EventEmitter } from 'eventemitter3';
 import crypto from "node:crypto";
 
-
 import { REGISTRATION_PAYLOAD } from './constants';
 export * from './types';
 import type { WebOSMessage, WebOSResponse, VolumeStatus, ForegroundAppInfo } from './types';
@@ -13,7 +12,7 @@ import * as input from './controls/input';
 
 interface WebOSRemoteEvents {
     connect: () => void;
-    disconnect: () => void;
+    disconnect: (code: number, reason: Buffer<ArrayBufferLike>) => void;
     error: (error: Error) => void;
     prompt: () => void;
     registered: (clientKey: string) => void;
@@ -27,6 +26,12 @@ export interface WebOSRemoteConfig {
     pairingType?: 'PROMPT' | 'PIN';
 }
 
+interface PendingRequestsItem {
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+    timeout: NodeJS.Timeout;
+}
+
 /**
  * # LG WebOS Remote Control
  * A library to control LG webOS TVs.
@@ -36,7 +41,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     public ws: WebSocket | null = null;
     public inputWs: WebSocket | null = null;
     private messageIdCounter = 0;
-    private pendingRequests = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void, timeout: NodeJS.Timeout }>();
+    private pendingRequests = new Map<string, PendingRequestsItem>();
     /**
      * יוצר אובייקט חדש לשליטה על טלוויזיית LG.
      * @param config - הגדרות החיבור.
@@ -48,6 +53,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             timeout: 5000, // ברירת מחדל של 5 שניות
             ...config,
         };
+        (process.env as any).NODE_TLS_REJECT_UNAUTHORIZED = '0';
     }
 
     /**
@@ -62,7 +68,16 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             this.disconnect(); // נתק חיבורים קיימים לפני חיבור חדש
 
             const url = `wss://${this.config.ip}:3001`;
-            this.ws = new WebSocket(url, {});
+
+            
+            this.ws = new WebSocket(url, {
+                // @ts-ignore
+                tls: {
+                    rejectUnauthorized: false,
+                },
+
+                //rejectUnauthorized: false,
+            });
 
             const onConnect = () => {
                 this.register();
@@ -79,7 +94,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             this.ws.once('open', onConnect);
             this.ws.once('error', onError);
             this.ws.on('message', this.handleMessage.bind(this));
-            this.ws.on('close', () => this.emit('disconnect'));
+            this.ws.on('close', (code, reason) => this.emit('disconnect', code, reason));
         });
     }
 
