@@ -63,6 +63,13 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     }
 
     /**
+     * getConfig
+     */
+    public getConfig() {
+        return this.config;
+    }
+
+    /**
      * מתחבר לטלוויזיה באמצעות WebSocket.
      */
     public async connect(): Promise<void> {
@@ -72,7 +79,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
         this.disconnect(); // Disconnect any existing connections
 
-        const url = this.config.proxyUrl ? `${this.config.proxyUrl}?ip=${this.config.ip}` : `wss://${this.config.ip}:3001`;
+        const url = `wss://${this.config.ip}:3001`;
 
         return new Promise(async (resolve, reject) => {
             // ה-Promise הראשי ימתין לאירוע הרישום הסופי או לשגיאה
@@ -103,7 +110,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
                 this.emit('disconnect', event.code, event.reason);
             };
 
-            this.ws = await getWebSocketImplementation(url);
+            this.ws = await getWebSocketImplementation(url, this.config.proxyUrl);
 
             this.ws.addEventListener('open', onConnect);
             this.ws.addEventListener('error', onError);
@@ -248,9 +255,20 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
     // Input Controls
     public sendButton = (buttonName: string): Promise<void> => input.sendButton(this, buttonName);
-    public sendEnter = (): Promise<void> => this.sendMessage({ type: 'request', uri: 'ssap://com.webos.service.ime/sendEnterKey' }).then(() => {});
-    public sendText = (text: string): Promise<void> => this.sendMessage({ type: 'request', uri: 'ssap://com.webos.service.ime/insertText', payload: { text, replace: 0 } }).then(() => {});
-    public sendDelete = (): Promise<void> => this.sendMessage({ type: 'request', uri: 'ssap://com.webos.service.ime/deleteCharacters', payload: { count: 1 } }).then(() => {});
+    public sendEnter = (): Promise<void> => this.sendMessage({
+        type: 'request',
+        uri: 'ssap://com.webos.service.ime/sendEnterKey'
+    }).then(() => { });
+    public sendText = (text: string): Promise<void> => this.sendMessage({
+        type: 'request',
+        uri: 'ssap://com.webos.service.ime/insertText',
+        payload: { text, replace: 0 }
+    }).then(() => { });
+    public sendDelete = (): Promise<void> => this.sendMessage({
+        type: 'request',
+        uri: 'ssap://com.webos.service.ime/deleteCharacters',
+        payload: { count: 1 }
+    }).then(() => { });
 
     // Capture Controls
     public takeScreenshot = async (): Promise<string> => {

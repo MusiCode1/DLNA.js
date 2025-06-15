@@ -9,12 +9,14 @@ export type AnyWebSocket = BrowserWebsocket | NodeWebSocketType;
  * In Node.js or Bun, it dynamically imports and returns the implementation from the 'ws' library.
  * @returns A promise that resolves to the WebSocket constructor.
  */
-export async function getWebSocketImplementation(url: string): Promise<BrowserWebsocket> {
+export async function getWebSocketImplementation(url: string, proxyUrl?: string): Promise<BrowserWebsocket> {
+
+    const finalUrl = proxyUrl ? `${proxyUrl}?targetUrl=${encodeURIComponent(url)}` : url;
 
     const isBrowser = !!globalThis.window;
     if (isBrowser) {
 
-        return new globalThis.window.WebSocket(url);
+        return new globalThis.window.WebSocket(finalUrl);
     } else {
         // Dynamically import 'ws' for Node.js/Bun environments.
         const { WebSocket: NodeWebSocket } = await import('ws');
@@ -23,7 +25,7 @@ export async function getWebSocketImplementation(url: string): Promise<BrowserWe
             rejectUnauthorized: false // Option for 'ws' library in Node.js
         };
 
-        return new NodeWebSocket(url, wsOptions) as unknown as BrowserWebsocket;
+        return new NodeWebSocket(finalUrl, wsOptions) as unknown as BrowserWebsocket;
 
     }
 }

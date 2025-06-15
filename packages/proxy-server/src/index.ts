@@ -65,17 +65,16 @@ app.get(
       onOpen: (evt, clientWs) => {
         console.log('Client connected to proxy');
 
-        const tvIp = c.req.query('ip');
-        if (!tvIp) {
-          console.error('Client connected without TV IP.');
-          clientWs.close(1008, 'TV IP address is required');
+        const targetUrl = c.req.query('targetUrl');
+        if (!targetUrl) {
+          console.error('Client connected without targetUrl.');
+          clientWs.close(1008, 'targetUrl is required');
           return;
         }
 
-        console.log(`Attempting to proxy to TV at ${tvIp}`);
-        const tvWsUrl = `wss://${tvIp}:3001`;
+        console.log(`Attempting to proxy to ${targetUrl}`);
 
-        tvWs = new WebSocket(tvWsUrl, {
+        tvWs = new WebSocket(targetUrl, {
 
         });
 
