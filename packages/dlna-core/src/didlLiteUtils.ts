@@ -7,11 +7,13 @@ import type {
     DidlLiteContainer,
     DidlLiteItemBase,
     Resource,
-    BrowseResult
+    BrowseResult,
+    ParsedProtocolInfo,
+    DlnaParameters
 } from './types';
 
 const xmlParser = new xml2js.Parser({
-    explicitArray: true, // חשוב למערכים של container, item, res
+    explicitArray: false, // חשוב למערכים של container, item, res
     charkey: '_', // תוכן טקסטואלי יהיה תחת מפתח זה
     explicitCharkey: true, // יש להגדיר ל-true אם משתמשים ב-charkey
     mergeAttrs: true, // מיזוג תכונות לאובייקט (עם @ כקידומת)
@@ -21,6 +23,72 @@ const xmlParser = new xml2js.Parser({
     // attrValueProcessors נכלל ב-valueProcessors אם הוא לא מוגדר בנפרד,
     // אך ניתן להגדיר גם אותו במפורש אם יש צורך בעיבוד שונה לתכונות.
 });
+
+const parseProtocolInfo = (protocolInfoString: string): ParsedProtocolInfo | undefined => {
+    if (!protocolInfoString) return undefined;
+
+    const parseDlnaOrgFlags = (flagsStr: string): DlnaParameters['flags'] | undefined => {
+        if (!flagsStr || flagsStr.length !== 32) return undefined;
+        const flagsInt = parseInt(flagsStr.substring(0, 8), 16);
+        return {
+            raw: flagsStr,
+            senderPaced: (flagsInt & (1 << 31)) !== 0,
+            dlnaV1_5: (flagsInt & (1 << 24)) !== 0,
+            interactive: (flagsInt & (1 << 21)) !== 0,
+            playContainer: (flagsInt & (1 << 22)) !== 0,
+            timeBasedSeek: (flagsInt & (1 << 18)) !== 0,
+            byteBasedSeek: (flagsInt & (1 << 17)) !== 0,
+            s0Increasing: (flagsInt & (1 << 7)) !== 0,
+        };
+    };
+
+    const parseDlnaOrgOp = (opStr: string): DlnaParameters['operation'] => {
+        const opInt = parseInt(opStr, 16);
+        return {
+            timeSeekSupported: (opInt & 0x01) !== 0,
+            rangeSeekSupported: (opInt & 0x10) !== 0,
+        };
+    };
+
+    const parts = protocolInfoString.split(':');
+    const protocol = parts[0] || '';
+    const network = parts[1] || '';
+    const contentFormat = parts[2] || '';
+
+    const dlnaParameters: DlnaParameters = {
+        rawDlnaParams: {},
+    };
+
+    if (parts.length > 3 && parts[3]) {
+        const params = parts[3].split(';');
+        for (const param of params) {
+            const [key, value] = param.split('=');
+            if (key && value) {
+                dlnaParameters.rawDlnaParams[key] = value;
+
+                if (key === 'DLNA.ORG_OP') {
+                    dlnaParameters.operation = parseDlnaOrgOp(value);
+                }
+
+                if (key === 'DLNA.ORG_CI') {
+                    dlnaParameters.conversionIndication = (value === '1') ? 'transcoded' : 'original';
+                }
+
+                if (key === 'DLNA.ORG_FLAGS') {
+                    dlnaParameters.flags = parseDlnaOrgFlags(value);
+                }
+            }
+        }
+    }
+
+    return {
+        protocol,
+        network,
+        contentFormat,
+        dlnaParameters,
+    };
+};
+
 
 const logger = createModuleLogger('didlLiteUtils');
 
@@ -74,6 +142,24 @@ export function createSingleItemDidlLiteXml(item: DidlLiteObject, resource: Reso
     return root.end({ prettyPrint: false, headless: true });
 }
 
+const ignoreKeys = [
+    'dc:date',
+    'upnp:genre',
+    'dc:title',
+    'dc:creator',
+    'upnp:class',
+    'upnp:writeStatus',
+    'upnp:createClass',
+    'upnp:searchClass',
+    'upnp:albumArtURI',
+    'upnp:artist',
+    'upnp:album',
+    'upnp:originalTrackNumber',
+    'res',
+    'searchable',
+    'childCount',
+];
+
 /**
  * @async
  * @description מנתח מחרוזת XML של DIDL-Lite וממפה אותה למבני נתונים.
@@ -99,88 +185,118 @@ export async function parseDidlLite(didlLiteXmlString: string): Promise<Pick<Bro
             const baseItem: DidlLiteItemBase = {
                 id: node['@id'] || '',
                 parentId: node['@parentID'] || '',
-                title: node['dc:title']?.[0]?._ || node['dc:title']?.[0] || '',
-                class: node['upnp:class']?.[0]?._ || node['upnp:class']?.[0] || '',
+                title: node['dc:title']?._ || node['dc:title'] || '',
+                class: node['upnp:class']?._ || node['upnp:class'] || '',
                 restricted: node['@restricted'] === '1' || node['@restricted'] === true || node['@restricted'] === 'true',
-                writeStatus: node['upnp:writeStatus']?.[0]?._ || node['upnp:writeStatus']?.[0],
+                writeStatus: node['upnp:writeStatus']?._ || node['upnp:writeStatus'],
             };
-
-            // הוספת כל שאר התכונות והאלמנטים שלא מופו במפורש
-            for (const key in node) {
-                if (key.startsWith('@')) { // תכונות
-                    if (!(key.substring(1) in baseItem) && baseItem[key.substring(1) as keyof DidlLiteItemBase] === undefined) {
-                        baseItem[key.substring(1)] = node[key];
-                    }
-                } else if (node[key] && node[key][0] && node[key][0]._) { // אלמנטים עם תוכן טקסטואלי
-                    if (!(key in baseItem) && baseItem[key as keyof DidlLiteItemBase] === undefined) {
-                        baseItem[key] = node[key][0]._;
-                    }
-                } else if (Array.isArray(node[key]) && node[key].length === 1 && typeof node[key][0] === 'string') { // אלמנטים שהם מחרוזת פשוטה
-                    if (!(key in baseItem) && baseItem[key as keyof DidlLiteItemBase] === undefined) {
-                        baseItem[key] = node[key][0];
-                    }
-                }
-                // לא מטפלים כאן באלמנטים מורכבים יותר כמו <res> שדורשים מיפוי משלהם
-            }
-
 
             if (isContainer) {
                 const containerItem: DidlLiteContainer = {
                     ...baseItem,
                     childCount: node['@childCount'] !== undefined ? parseInt(node['@childCount'], 10) : undefined,
                     searchable: node['@searchable'] === '1' || node['@searchable'] === true || node['@searchable'] === 'true',
-                    createClass: node['upnp:createClass']?.[0]?._ || node['upnp:createClass']?.[0],
-                    searchClass: node['upnp:searchClass']?.[0]?._ || node['upnp:searchClass']?.[0],
+                    createClass: node['upnp:createClass']?._ || node['upnp:createClass'],
+                    searchClass: node['upnp:searchClass']?._ || node['upnp:searchClass'],
                 };
                 return containerItem;
             } else {
                 const objectItem: DidlLiteObject = {
                     ...baseItem,
-                    albumArtURI: node['upnp:albumArtURI']?.[0]?._ || node['upnp:albumArtURI']?.[0],
-                    artist: node['dc:creator']?.[0]?._ || node['dc:creator']?.[0] || node['upnp:artist']?.[0]?._ || node['upnp:artist']?.[0],
-                    album: node['upnp:album']?.[0]?._ || node['upnp:album']?.[0],
-                    genre: node['upnp:genre']?.[0]?._ || node['upnp:genre']?.[0],
-                    date: node['dc:date']?.[0]?._ || node['dc:date']?.[0],
-                    originalTrackNumber: node['upnp:originalTrackNumber']?.[0]?._ !== undefined ? parseInt(node['upnp:originalTrackNumber'][0]._, 10) : undefined,
+                    albumArtURI: node['upnp:albumArtURI']?._ || node['upnp:albumArtURI'],
+                    artist: node['dc:creator']?._ || node['dc:creator'] || node['upnp:artist']?._ || node['upnp:artist'],
+                    album: node['upnp:album']?._ || node['upnp:album'],
+                    genre: node['upnp:genre']?._ || node['upnp:genre'],
+                    date: node['dc:date']?._ || node['dc:date'],
+                    originalTrackNumber: node['upnp:originalTrackNumber']?._ !== undefined ? parseInt(node['upnp:originalTrackNumber']._, 10) : undefined,
                     resources: [],
                 };
+
+
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                if (node['res'] && Array.isArray(node['res'])) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    objectItem.resources = node['res'].map((rNode: any) => {
+                if (node.res) {
+
+                    const resNodeToResource = (resNode: any) => {
+                        const protocolInfoString = resNode['@protocolInfo'];
                         const resource: Resource = {
-                            uri: rNode._ || '', // תוכן טקסטואלי של res הוא ה-URI
-                            protocolInfo: rNode['@protocolInfo'],
-                            size: rNode['@size'] !== undefined ? parseInt(rNode['@size'], 10) : undefined,
-                            duration: rNode['@duration'],
-                            bitrate: rNode['@bitrate'] !== undefined ? parseInt(rNode['@bitrate'], 10) : undefined,
-                            sampleFrequency: rNode['@sampleFrequency'] !== undefined ? parseInt(rNode['@sampleFrequency'], 10) : undefined,
-                            bitsPerSample: rNode['@bitsPerSample'] !== undefined ? parseInt(rNode['@bitsPerSample'], 10) : undefined,
-                            nrAudioChannels: rNode['@nrAudioChannels'] !== undefined ? parseInt(rNode['@nrAudioChannels'], 10) : undefined,
-                            resolution: rNode['@resolution'],
-                            colorDepth: rNode['@colorDepth'] !== undefined ? parseInt(rNode['@colorDepth'], 10) : undefined,
-                            protection: rNode['@protection'],
-                            importUri: rNode['@importUri'],
-                            dlnaManaged: rNode['@dlnaManaged'],
+                            uri: resNode._ || '', // תוכן טקסטואלי של res הוא ה-URI
+                            protocolInfo: protocolInfoString,
+                            parsedProtocolInfo: parseProtocolInfo(protocolInfoString),
+                            size: resNode['@size'] !== undefined ? parseInt(resNode['@size'], 10) : undefined,
+                            duration: resNode['@duration'],
+                            bitrate: resNode['@bitrate'] !== undefined ? parseInt(resNode['@bitrate'], 10) : undefined,
+                            sampleFrequency: resNode['@sampleFrequency'] !== undefined ? parseInt(resNode['@sampleFrequency'], 10) : undefined,
+                            bitsPerSample: resNode['@bitsPerSample'] !== undefined ? parseInt(resNode['@bitsPerSample'], 10) : undefined,
+                            nrAudioChannels: resNode['@nrAudioChannels'] !== undefined ? parseInt(resNode['@nrAudioChannels'], 10) : undefined,
+                            resolution: resNode['@resolution'],
+                            colorDepth: resNode['@colorDepth'] !== undefined ? parseInt(resNode['@colorDepth'], 10) : undefined,
+                            protection: resNode['@protection'],
+                            importUri: resNode['@importUri'],
+                            dlnaManaged: resNode['@dlnaManaged'],
                         };
                         // הוספת תכונות נוספות שלא מופו במפורש ל-Resource
-                        for (const attrKey in rNode) {
-                            if (attrKey.startsWith('@') && !(attrKey.substring(1) in resource) && resource[attrKey.substring(1) as keyof Resource] === undefined) {
-                                resource[attrKey.substring(1)] = rNode[attrKey];
+                        for (const attrKey in resNode) {
+                            if (
+                                attrKey.startsWith('@')
+                                && !(attrKey.substring(1) in resource)
+                                && resource[attrKey.substring(1) as keyof Resource] === undefined
+                            ) {
+                                resource[attrKey.substring(1)] = resNode[attrKey];
                             }
                         }
                         return resource;
-                    });
+                    };
+
+                    if (Array.isArray(node.res)) {
+                        objectItem.resources = node.res.map(resNodeToResource);
+                    } else {
+                        objectItem.resources = [
+                            resNodeToResource(node.res)
+                        ];
+                    }
+
+                }
+
+                // הוספת כל שאר התכונות והאלמנטים שלא מופו במפורש
+                for (const key in node) {
+                    let attrName = key;
+
+                    if (key.startsWith('@')) { // תכונות
+                        attrName = key.substring(1);
+                    }
+
+                    if (!(attrName in objectItem) && !(ignoreKeys.includes(attrName))) {
+
+                        if (
+                            (objectItem[attrName as keyof DidlLiteItemBase] === undefined) &&
+                            (typeof node[key] === 'string')
+                        ) {
+                            objectItem[attrName as keyof DidlLiteItemBase] = node[key];
+
+                        } else if (node[key] && node[key]._) { // אלמנטים עם תוכן טקסטואלי
+                            if (!(key in objectItem) && objectItem[key as keyof DidlLiteItemBase] === undefined) {
+                                objectItem[key] = node[key]._;
+                            }
+                        } else if (Array.isArray(node[key]) && node[key].length === 1 && typeof node[key][0] === 'string') { // אלמנטים שהם מחרוזת פשוטה
+                            if (!(key in objectItem) && objectItem[key as keyof DidlLiteItemBase] === undefined) {
+                                objectItem[key] = node[key][0];
+                            }
+                        }
+                    }
+
+
                 }
                 return objectItem;
             }
         };
 
-        if (didlNode.container && Array.isArray(didlNode.container)) {
-            didlNode.container.forEach((cNode: any) => items.push(mapNodeToItem(cNode, true) as DidlLiteContainer)); // eslint-disable-line @typescript-eslint/no-explicit-any
+        if (didlNode.container) {
+            const containers = Array.isArray(didlNode.container) ? didlNode.container : [didlNode.container];
+            containers.forEach((cNode: any) => items.push(mapNodeToItem(cNode, true) as DidlLiteContainer));
         }
-        if (didlNode.item && Array.isArray(didlNode.item)) {
-            didlNode.item.forEach((iNode: any) => items.push(mapNodeToItem(iNode, false) as DidlLiteObject)); // eslint-disable-line @typescript-eslint/no-explicit-any
+        if (didlNode.item) {
+            const itemNodes = Array.isArray(didlNode.item) ? didlNode.item : [didlNode.item];
+            itemNodes.forEach((iNode: any) => items.push(mapNodeToItem(iNode, false) as DidlLiteObject));
         }
 
         return { items };
