@@ -12,11 +12,7 @@ import { WebOSRemote } from "lg-webos-remote";
         const clientKey = 'e6d865a8129fc69d17db75829985ad14';
 
 
-        const client = new WebOSRemote({ ip, pairingType: 'PIN' });
-
-        await client.connect();
-
-
+        const client = new WebOSRemote({ ip, pairingType: 'PIN', clientKey });
 
         client.on('connect', () => {
             console.log(`Connected to LG TV at ${ip}`);
@@ -38,12 +34,15 @@ import { WebOSRemote } from "lg-webos-remote";
             console.log('')
         });
 
-        await new Promise((resolve) => {
+        await client.connect();
+
+        /* await new Promise((resolve) => {
             client.on('registered', (clientKey) => {
                 console.log(`Registered with client key: ${clientKey}`);
                 resolve(true);
             });
-        });
+        }); */
+
 
 
         client.sendMessage({
@@ -57,7 +56,10 @@ import { WebOSRemote } from "lg-webos-remote";
 
         client.sendMessage({
             type: 'request',
-            uri: 'ssap://settings/getSystemSettings',
+            uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo',
+            payload:{
+                
+            }
         }).then((response) => {
             console.log(`One-shot command executed: ${JSON.stringify(response)}`);
 
@@ -70,4 +72,4 @@ import { WebOSRemote } from "lg-webos-remote";
         console.error('Error in main execution:', error);
 
     }
-})()
+})();

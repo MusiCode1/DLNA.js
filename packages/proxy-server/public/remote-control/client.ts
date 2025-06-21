@@ -53,7 +53,7 @@ async function connect() {
     updateStatus('מתחבר...', 'prompt');
 
     const wsProtocol = (window.location.protocol === 'http:') ? 'ws' : 'wss';
-    const proxyUrl= `${wsProtocol}://${window.location.hostname}/ws`;
+    const proxyUrl= `${wsProtocol}://${window.location.host}/ws`;
 
     // יצירת מופע חדש של השלט
     remote = new WebOSRemote({

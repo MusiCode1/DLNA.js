@@ -21,17 +21,17 @@ async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
         type: 'request',
         uri: 'ssap://com.webos.service.networkinput/getPointerInputSocket'
     });
-    
     if (!response.payload?.socketPath) {
         throw new Error('Failed to get pointer input socket path');
     }
 
     const socketPath = response.payload.socketPath;
-    const proxyUrl = remote.getConfig()?.proxyUrl;
-    const inputWs = await getWebSocketImplementation(socketPath, proxyUrl);
-    remote.inputWs = inputWs;
 
-    return new Promise((resolve, reject) => {
+
+    return new Promise(async (resolve, reject) => {
+
+        const inputWs = await getWebSocketImplementation(socketPath);
+        remote.inputWs = inputWs;
         const onOpen = () => {
             console.log('Connected to input socket');
             resolve();
