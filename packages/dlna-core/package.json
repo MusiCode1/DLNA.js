@@ -2,12 +2,36 @@
   "name": "dlna.js",
   "version": "0.1.0",
   "private": false,
-  "main": "src/index.ts",
+  "description": "A library for discovering and interacting with DLNA/UPnP devices on a local network.",
+  "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "bun test"
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "dlna",
+    "upnp",
+    "media-server",
+    "media-renderer",
+    "ssdp"
+  ],
+  "author": "Avi Britman Thzohar Halev <AviBr@Tzlev.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MusiCode1/DLNA.js"
+  },
+  "bugs": {
+    "url": "https://github.com/MusiCode1/DLNA.js/issues"
+  },
+  "homepage": "https://github.com/MusiCode1/DLNA.js#readme",
   "dependencies": {
     "@logtail/node": "^0.5.5",
     "@logtail/types": "^0.5.3",
