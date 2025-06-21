@@ -1,6 +1,16 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs'; // נייבא fs כדי לבדוק קיום קבצים
+import * as url from "url";
+
+if (!__dirname) {
+  // @ts-ignore
+  const filePathUrl = import.meta.url; // המרת import.meta.url לנתיב קובץ רגיל
+  const filePath = url.fileURLToPath(filePathUrl); // המרת URL לקובץ לנתיב קובץ רגיל
+  
+  const dirname = path.dirname(filePath); 
+  __dirname = dirname; 
+}
 
 // נתיב לקובץ .env בספריית האב של הפרויקט (השורש)
 const parentEnvPath = path.resolve(__dirname, '../../../.env');

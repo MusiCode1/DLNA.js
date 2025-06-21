@@ -1,9 +1,19 @@
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import * as url from "url";
 import { createModuleLogger } from 'dlna.js';
 import { config } from './config';
 import apiRouter from './routes'; // ייבוא ה-router הראשי
 import { startDiscovery as startDeviceDiscovery } from './deviceManager'; // שינוי שם הייבוא למניעת התנגשות פוטנציאלית
+
+if (!__dirname) {
+  // @ts-ignore
+  const filePathUrl = import.meta.url; // המרת import.meta.url לנתיב קובץ רגיל
+  const filePath = url.fileURLToPath(filePathUrl); // המרת URL לקובץ לנתיב קובץ רגיל
+  
+  const dirname = path.dirname(filePath); 
+  __dirname = dirname; 
+}
 
 const logger = createModuleLogger('AppServer'); // לוגר ספציפי לקובץ זה
 

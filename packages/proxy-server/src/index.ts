@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import axios from 'axios';
+import * as path from "path";
+import * as url from "url";
 
 
 import { createBunWebSocket } from 'hono/bun';
@@ -14,8 +16,19 @@ const { upgradeWebSocket, websocket } =
 const app = new Hono();
 const port = 3005;
 
+if (!__dirname) {
+  // @ts-ignore
+  const filePathUrl = import.meta.url; // המרת import.meta.url לנתיב קובץ רגיל
+  const filePath = url.fileURLToPath(filePathUrl); // המרת URL לקובץ לנתיב קובץ רגיל
+  
+  const dirname = path.dirname(filePath); 
+  __dirname = dirname; 
+}
+
+const publicPathDirectory = path.join(__dirname, '..', 'public');
+
 // Serve static files for the frontend
-app.use(serveStatic({ root: './public' }));
+app.use(serveStatic({ root: publicPathDirectory }));
 
 // Generic proxy for fetching resources from the TV to solve CORS issues.
 // This supports streaming the response body.
