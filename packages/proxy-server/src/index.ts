@@ -20,39 +20,39 @@ app.use(serveStatic({ root: './public' }));
 // Generic proxy for fetching resources from the TV to solve CORS issues.
 // This supports streaming the response body.
 app.get('/proxy', async (c) => {
-    const targetUrl = c.req.query('url');
-    if (!targetUrl) {
-        return c.text('URL parameter is required', 400);
-    }
+  const targetUrl = c.req.query('url');
+  if (!targetUrl) {
+    return c.text('URL parameter is required', 400);
+  }
 
-    try {
-        const response = await axios({
-            method: 'get',
-            url: targetUrl,
-            responseType: 'stream',
-        });
+  try {
+    const response = await axios({
+      method: 'get',
+      url: targetUrl,
+      responseType: 'stream',
+    });
 
-        // Although c.body(stream) handles piping implicitly,
-        // we can be more explicit for clarity.
-        const stream = response.data;
-        
-        c.status(response.status as any);
-        for (const key in response.headers) {
-            if (Object.prototype.hasOwnProperty.call(response.headers, key)) {
-                const value = response.headers[key];
-                if (value) {
-                    c.header(key, Array.isArray(value) ? value.join(', ') : value.toString());
-                }
-            }
+    // Although c.body(stream) handles piping implicitly,
+    // we can be more explicit for clarity.
+    const stream = response.data;
+
+    c.status(response.status as any);
+    for (const key in response.headers) {
+      if (Object.prototype.hasOwnProperty.call(response.headers, key)) {
+        const value = response.headers[key];
+        if (value) {
+          c.header(key, Array.isArray(value) ? value.join(', ') : value.toString());
         }
-        
-        // Hono's body method handles the stream piping.
-        return c.body(stream);
-
-    } catch (error: any) {
-        console.error(`Proxy error for ${targetUrl}:`, error.message);
-        return c.text(`Proxy error: ${error.message}`, 500);
+      }
     }
+
+    // Hono's body method handles the stream piping.
+    return c.body(stream);
+
+  } catch (error: any) {
+    console.error(`Proxy error for ${targetUrl}:`, error.message);
+    return c.text(`Proxy error: ${error.message}`, 500);
+  }
 });
 
 // Define the WebSocket proxy route
@@ -74,13 +74,11 @@ app.get(
 
         console.log(`Attempting to proxy to ${targetUrl}`);
 
-        tvWs = new WebSocket(targetUrl, {
-
-        });
+        tvWs = new WebSocket(targetUrl, {});
 
         // TV WebSocket event handlers
         tvWs.addEventListener('open', () => {
-          console.log('Proxy connected to TV.');
+          console.log('Proxy connected to TV.', { targetUrl });
           if (clientWs.readyState === 1) { // OPEN
             clientWs.send(JSON.stringify({ type: 'proxy_connected' }));
           }
@@ -89,11 +87,11 @@ app.get(
         tvWs.addEventListener('message', (event) => {
           // Forward message from TV to client
           if (clientWs.readyState === 1) { // OPEN
-            console.log('\n' + 'recived message from remote:');
+            console.log('\n' + 'recived message from remote:', { targetUrl });
             console.log(event.data);
 
             clientWs.send(event.data);
-            console.log('\n' + 'recived message from remote:');
+            console.log('\n' + 'recived message from remote:', { targetUrl });
             console.log(event.data);
 
             clientWs.send(event.data);
@@ -101,7 +99,7 @@ app.get(
         });
 
         tvWs.addEventListener('close', (event) => {
-          console.log(`Connection to TV closed. Code: ${event.code}`);
+          console.log(`Connection to TV closed. Code: ${event.code}`, { targetUrl });
           if (clientWs.readyState === 1) { // OPEN
             clientWs.close(event.code, event.reason);
           }
