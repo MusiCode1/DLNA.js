@@ -9,13 +9,14 @@ const config = {
         env: {
             NODE_ENV: "development",
         },
+        cwd: './packages/server'
     }, {
         name: 'rClone',
         script: 'C:/programs/rclone/rclone.exe',
         args: [
             'serve',
             'dlna',
-            'GoogleDrive:"תיקיית-סרטונים-למסך"',
+            'GoogleDrive:/תיקיית-סרטונים-למסך',
             '--read-only',
             '--vfs-cache-mode','full',
             '--config','C:/programs/rclone/rclone.conf',
@@ -25,7 +26,8 @@ const config = {
             '--name','"סרטונים מגוגל דרייב"',
             '--rc-addr',':5572',
             '--announce-interval','10s',
-            '--no-console',
+            /* '--log-level', 'DEBUG', */
+            /* '--no-console', */
             '--rc',
             '--rc-no-auth',
             '--rc-web-gui',
@@ -33,7 +35,8 @@ const config = {
     }, {
         name: "remoteControlServer",
         script: './packages/proxy-server/src/index.ts',
-        interpreter: "bun"
+        interpreter: "bun",
+        cwd: './packages/proxy-server'
     }]
 };
 
