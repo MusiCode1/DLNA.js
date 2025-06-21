@@ -1,6 +1,7 @@
-import type { PM2Config } from 'pm2-config';
-
-const config: PM2Config = {
+/**
+ * @type {import('pm2-config').PM2Config}
+ */
+const config = {
     apps: [{
         name: "backendServer",
         script: "./packages/server/src/index.ts",
@@ -47,6 +48,6 @@ const config: PM2Config = {
         script: './packages/proxy-server/src/index.ts',
         interpreter: "bun"
     }]
-}
+};
 
-export default config;
+module.exports = config;
