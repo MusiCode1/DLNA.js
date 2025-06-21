@@ -13,6 +13,7 @@
   "devDependencies": {
     "@types/bun": "^1.2.14",
     "@types/node-ssdp": "^4.0.4",
+    "pm2-config": "^0.0.8",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
@@ -20,5 +21,8 @@
   "dependencies": {
     "@inquirer/prompts": "^7.5.3",
     "inquirer": "^12.6.3"
+  },
+  "patchedDependencies": {
+    "pm2-config@0.0.8": "patches/pm2-config@0.0.8.patch"
   }
 }

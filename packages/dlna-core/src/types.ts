@@ -9,18 +9,18 @@ import * as os from 'os'; // הוספת ייבוא, למרות שכבר היה �
  * @hebrew מידע על הודעת SSDP גולמית שהתקבלה.
  */
 export interface RawSsdpMessagePayload {
-  /**
-   * @hebrew ההודעה הגולמית כפי שהתקבלה מהרשת.
-   */
-  message: Buffer;
-  /**
-   * @hebrew מידע על כתובת השולח.
-   */
-  remoteInfo: RemoteInfo;
-  /**
-   * @hebrew סוג הסוקט שקלט את ההודעה (למשל, 'ipv4-unicast', 'ipv6-multicast').
-   */
-  socketType: string;
+    /**
+     * @hebrew ההודעה הגולמית כפי שהתקבלה מהרשת.
+     */
+    message: Buffer;
+    /**
+     * @hebrew מידע על כתובת השולח.
+     */
+    remoteInfo: RemoteInfo;
+    /**
+     * @hebrew סוג הסוקט שקלט את ההודעה (למשל, 'ipv4-unicast', 'ipv6-multicast').
+     */
+    socketType: string;
 }
 
 /**
@@ -91,14 +91,14 @@ export interface DiscoveryOptions {
  * - `full`: כולל את כל המידע הנ"ל.
  */
 export enum DiscoveryDetailLevel {
-  /** @hebrew מחזיר רק מידע בסיסי מ-SSDP (כמו USN, location, server). */
-  Basic = 'basic',
-  /** @hebrew כולל ניתוח של קובץ התיאור של ההתקן (XML), אך לא את פרטי השירותים. */
-  Description = 'description',
-  /** @hebrew כולל ניתוח של קבצי התיאור של השירותים (SCPD), אך ללא יצירת פונקציות invoke/query. */
-  Services = 'services',
-  /** @hebrew כולל את כל המידע: תיאור התקן, תיאורי שירותים, ופונקציות invoke/query מוכנות לשימוש. */
-  Full = 'full',
+    /** @hebrew מחזיר רק מידע בסיסי מ-SSDP (כמו USN, location, server). */
+    Basic = 'basic',
+    /** @hebrew כולל ניתוח של קובץ התיאור של ההתקן (XML), אך לא את פרטי השירותים. */
+    Description = 'description',
+    /** @hebrew כולל ניתוח של קבצי התיאור של השירותים (SCPD), אך ללא יצירת פונקציות invoke/query. */
+    Services = 'services',
+    /** @hebrew כולל את כל המידע: תיאור התקן, תיאורי שירותים, ופונקציות invoke/query מוכנות לשימוש. */
+    Full = 'full',
 }
 
 /**
@@ -376,6 +376,59 @@ export enum BrowseFlag {
     BrowseDirectChildren = "BrowseDirectChildren"
 }
 
+
+export type ParsedProtocolInfo = {
+    protocol: string;
+    network: string;
+    contentFormat: string;
+    dlnaParameters: DlnaParameters;
+};
+
+export type DlnaParameters = {
+    // כל הפרמטרים המקוריים בצורה גולמית (key=value)
+    rawDlnaParams: Record<string, string>;
+
+    // DLNA.ORG_OP — תיאור התמיכה בפעולות חיפוש:
+    operation?: {
+        // תמיכה בקפיצה לפי זמן (Time Seek) — מאפשר לקפוץ לנקודת זמן בסרטון
+        timeSeekSupported: boolean;
+
+        // תמיכה בטווחים (Range Seek) — מאפשר להוריד חלקים מהקובץ לפי טווח בייטים
+        rangeSeekSupported: boolean;
+    };
+
+    // DLNA.ORG_CI — האם התוכן עבר המרה (Transcoded) או שהוא מקורי
+    // ערך אפשרי: "Original — הזרמה בפורמט המקורי" או "Transcoded — הזרמה הומרה על ידי השרת"
+    conversionIndication?: string;
+
+    // DLNA.ORG_FLAGS — הגדרות נוספות (32 סיביות)
+    flags?: {
+        // הערך הגולמי של השדה (32 תווים, הקסדצימלי)
+        raw: string;
+
+        // השרת שולט בקצב השידור (Sender Paced)
+        senderPaced: boolean;
+
+        // תמיכה בתקן DLNA 1.5
+        dlnaV1_5: boolean;
+
+        // תמיכה בתכנים אינטראקטיביים (Interactive)
+        interactive: boolean;
+
+        // תמיכה ב־PlayContainer — הזרמת רשימות השמעה
+        playContainer: boolean;
+
+        // תמיכה בקפיצה לפי זמן (Time-Based Seek)
+        timeBasedSeek: boolean;
+
+        // תמיכה בקפיצה לפי מיקום בבייטים (Byte-Based Seek)
+        byteBasedSeek: boolean;
+
+        // סדר קבצים עולה (S0 Increasing) — סדר יציב של פריטים
+        s0Increasing: boolean;
+    };
+};
+
 /**
  * @interface Resource
  * @description מייצג משאב של פריט DIDL-Lite (למשל, קובץ מדיה).
@@ -384,6 +437,7 @@ export enum BrowseFlag {
 export interface Resource {
     uri: string;
     protocolInfo?: string;
+    parsedProtocolInfo?: ParsedProtocolInfo;
     size?: number;
     duration?: string;
     bitrate?: number;
@@ -531,11 +585,11 @@ export const UPNP_ORG_SERVICE_SCHEMA = UPNP_ORG_SCHEMA + ":service";
 export const UPNP_ORG_DEVICE_SCHEMA = UPNP_ORG_SCHEMA + ":device";
 
 export function buildUpnpServiceTypeIdentifier(serviceType: string, version: number = 1): string {
-  return `${UPNP_ORG_SERVICE_SCHEMA}:${serviceType}:${version}`;
+    return `${UPNP_ORG_SERVICE_SCHEMA}:${serviceType}:${version}`;
 }
 
 export function buildUpnpDeviceTypeIdentifier(deviceType: string, version: number = 1): string {
-  return `${UPNP_ORG_DEVICE_SCHEMA}:${deviceType}:${version}`;
+    return `${UPNP_ORG_DEVICE_SCHEMA}:${deviceType}:${version}`;
 }
 
 export const AVTRANSPORT_SERVICE = buildUpnpServiceTypeIdentifier("AVTransport", 1);
@@ -557,10 +611,10 @@ export const MEDIA_RENDERER_DEVICE = buildUpnpDeviceTypeIdentifier("MediaRendere
  * - אם `detailLevel` הוא 'full', הטיפוס יהיה {@link FullDeviceDescription}.
  */
 export type ProcessedDevice =
-  | BasicSsdpDevice
-  | DeviceDescription
-  | DeviceWithServicesDescription
-  | FullDeviceDescription;
+    | BasicSsdpDevice
+    | DeviceDescription
+    | DeviceWithServicesDescription
+    | FullDeviceDescription;
 // =======================================================================
 // === טיפוסים עבור ActiveDeviceManager ===
 // =======================================================================

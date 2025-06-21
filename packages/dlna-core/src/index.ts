@@ -4,20 +4,17 @@ export {
 } from './contentDirectoryService';
 
 // From logger.ts
-export { default as createLogger, createModuleLogger } from './logger';
+export {
+    default as createLogger,
+    createModuleLogger
+} from './logger';
 
 // From types.ts
 export * from './types';
 
-/* export {
-    DeviceDescription as UpnpDevice, // type alias
-    ServiceDescription as UpnpService, // type alias
-} from './types' */
-
 // From upnpDeviceExplorer.ts
 export {
     discoverSsdpDevicesIterable,
-
 } from './upnpDeviceExplorer';
 
 // From upnpSoapClient.ts
@@ -26,7 +23,9 @@ export {
 } from './upnpSoapClient';
 
 // From didlLiteUtils.ts
-export { createSingleItemDidlLiteXml } from './didlLiteUtils';
+export {
+    createSingleItemDidlLiteXml
+} from './didlLiteUtils';
 
 export {
     processUpnpDevice,
@@ -34,6 +33,8 @@ export {
 } from './upnpDeviceProcessor';
 
 // From activeDeviceManager.ts
-export { ActiveDeviceManager } from './activeDeviceManager';
+export {
+    ActiveDeviceManager
+} from './activeDeviceManager';
 // RawSsdpPayload should be exported from types.ts if it's defined there and types.ts is already fully exported.
 // ActiveDeviceManagerOptions should also be exported from types.ts

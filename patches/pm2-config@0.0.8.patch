@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+index df74721c296dd5ce88f71045695907f3d4e86459..2e6f5300618a58d852fb4768b33435320025d7c8 100644
+--- a/package.json
++++ b/package.json
+@@ -3,6 +3,7 @@
+   "version": "0.0.8",
+   "description": "Autocomplete and documentation for your JSON, YAML and Javascript pm2 configs 🚀",
+   "author": "Edosa Kelvin <edosakelvin@gmail.com>",
++  "types": "pm2config.d.ts",
+   "keywords": [
+     "pm2",
+     "json",

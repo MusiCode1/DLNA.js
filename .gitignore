@@ -63,3 +63,4 @@ tsconfig.tsbuildinfo
 packages/dlna-core/tsconfig.tsbuildinfo
 packages/server/tsconfig.tsbuildinfo
 packages/wake-on-lan/tsconfig.tsbuildinfo
+documentation/סרטון/*

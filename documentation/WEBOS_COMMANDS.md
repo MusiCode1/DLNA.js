@@ -50,6 +50,7 @@
 
 ## שליטה בקלט (Input Control)
 
+אין משוב על שליחת פקודות קלט.
 ### פקודות מקלדת
 - `ssap://com.webos.service.ime/insertText` - הכנס טקסט
 - `ssap://com.webos.service.ime/deleteCharacters` - מחק תווים
@@ -117,6 +118,11 @@
         "socketPath":"wss://192.168.1.41:3001/resources/3cad29d9f95bf5ffe3f56ef744994298c7011b3c/netinput.pointer.sock"
     }
 }
+```
+
+`ssap://api/getServiceList`
+```json
+{"type":"response","id":"cc0e99e9-3e74-472c-9353-ac4138fe2d20","payload":{"returnValue":true,"services":[{"name":"api","version":1},{"name":"audio","version":1},{"name":"config","version":1},{"name":"externalpq","version":1},{"name":"media.controls","version":1},{"name":"media.viewer","version":1},{"name":"pairing","version":1},{"name":"settings","version":1},{"name":"system","version":1},{"name":"system.launcher","version":1},{"name":"system.notifications","version":1},{"name":"timer","version":1},{"name":"tv","version":1},{"name":"user","version":1},{"name":"webapp","version":2}]}}
 ```
 
 
