@@ -355,13 +355,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const iconSpan = document.createElement('span');
             iconSpan.className = 'item-icon';
             // קביעת אייקון בסיסי
-            if (item['upnp:class'] && item['upnp:class'].startsWith('object.container')) {
+            if (item['class'] && item['class'].startsWith('object.container')) {
                 iconSpan.textContent = '📁'; // אייקון תיקייה
-            } else if (item['upnp:class'] && item['upnp:class'].startsWith('object.item.imageItem')) {
+            } else if (item['class'] && item['class'].startsWith('object.item.imageItem')) {
                 iconSpan.textContent = '🖼️'; // אייקון תמונה
-            } else if (item['upnp:class'] && item['upnp:class'].startsWith('object.item.audioItem')) {
+            } else if (item['class'] && item['class'].startsWith('object.item.audioItem')) {
                 iconSpan.textContent = '🎵'; // אייקון שמע
-            } else if (item['upnp:class'] && item['upnp:class'].startsWith('object.item.videoItem')) {
+            } else if (item['class'] && item['class'].startsWith('object.item.videoItem')) {
                 iconSpan.textContent = '🎬'; // אייקון וידאו
                 hasVideoItems = true; // סמן שיש פריט וידאו
             } else {
@@ -371,26 +371,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const titleSpan = document.createElement('span');
             titleSpan.className = 'item-title';
-            titleSpan.textContent = item['dc:title'] || 'Untitled';
+            titleSpan.textContent = item['title'] || 'Untitled';
             listItem.appendChild(titleSpan);
 
             const detailsSpan = document.createElement('span');
             detailsSpan.className = 'item-details';
 
-            let detailsText = `(Class: ${item['upnp:class'] || 'N/A'})`;
+            let detailsText = `(Class: ${item['class'] || 'N/A'})`;
 
-            if (item['upnp:class'] && item['upnp:class'].startsWith('object.container')) {
+            if (item['class'] && item['class'].startsWith('object.container')) {
                 titleSpan.classList.add('container-title');
                 titleSpan.setAttribute('data-id', item.id); // שמירת ה-ID של התיקייה
-                titleSpan.setAttribute('data-title', item['dc:title'] || 'Untitled'); // שמירת שם התיקייה
+                titleSpan.setAttribute('data-title', item['title'] || 'Untitled'); // שמירת שם התיקייה
                 // הוספת event listener ללחיצה על שם התיקייה
                 titleSpan.addEventListener('click', (event) => {
                     event.preventDefault(); // מניעת פעולת ברירת מחדל אם זה היה קישור אמיתי
-                    navigateToFolder(item.id, item['dc:title'] || 'Untitled'); // item.id הוא כנראה מקודד
+                    navigateToFolder(item.id, item['title'] || 'Untitled'); // item.id הוא כנראה מקודד
                 });
                 detailsText += ` (ID: ${decodeURI(Array.isArray(item.id) ? item.id.join(',') : item.id)})`;
-            } else if (item['upnp:class'] && item['upnp:class'].startsWith('object.item')) { // זהו item
-                const itemClass = item['upnp:class'];
+            } else if (item['class'] && item['class'].startsWith('object.item')) { // זהו item
+                const itemClass = item['class'];
                 let resourceUrl = null;
 
                 if (item.res && typeof item.res === 'string') {

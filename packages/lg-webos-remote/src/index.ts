@@ -196,7 +196,8 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             throw new Error('Not connected to TV');
         }
 
-        message.id ?? (message.id = crypto.randomUUID()); // Use global crypto
+        const uuid = crypto.randomUUID? crypto.randomUUID(): String(Math.random()).replace('.', '');
+        message.id ?? (message.id = uuid); // Use global crypto
         this.ws.send(JSON.stringify(message));
         return message.id;
     }

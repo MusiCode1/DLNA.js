@@ -215,8 +215,8 @@ class WebOSRemoteClient extends EventTarget {
                 return reject(new Error("לא מחובר לטלוויזיה."));
             }
 
-            
-            const id = `${type}-${++this.messageId}-${crypto.randomUUID()}`;
+            const uuid = crypto.randomUUID? crypto.randomUUID(): String(Math.random()).replace('.', '');
+            const id = `${type}-${++this.messageId}-${uuid}`;
             const message = { id, type, uri, payload };
             const msgTxt = JSON.stringify(message);
 

@@ -4,14 +4,14 @@
 const config = {
     apps: [{
         name: "backendServer",
-        script: "./packages/server/src/index.ts",
-        interpreter: "bun",
+        script: "./src/index.ts", // נתיב יחסי לנתיב העבודה
+        interpreter: "C:/programs/bun.exe",
         env: {
-            NODE_ENV: "development",
         },
         cwd: './packages/server',
         interpreter_args: [
-            '--cwd=./packages/server',
+            /* '--inspect-brk' */
+            /*  '--cwd=./packages/server', */ // לא צריך. זה מיותר
         ]
     }, {
         name: 'rClone',
@@ -29,7 +29,7 @@ const config = {
             '--fast-list',
             '--name', '"סרטונים מגוגל דרייב"',
             '--rc-addr', ':5572',
-            '--announce-interval', '10s',
+            '--announce-interval', '1m',
             /* '--log-level', 'DEBUG', */
             /* '--no-console', */
             '--rc',
@@ -39,11 +39,11 @@ const config = {
         ]
     }, {
         name: "remoteControlServer",
-        script: './packages/proxy-server/src/index.ts',
-        interpreter: "bun",
+        script: './src/index.ts',
+        interpreter: "C:/programs/bun.exe",
         cwd: './packages/proxy-server',
         interpreter_args: [
-            '--cwd=./packages/proxy-server',
+            /* '--cwd=./packages/proxy-server', */
         ]
 
     }]
