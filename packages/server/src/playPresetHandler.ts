@@ -20,7 +20,7 @@ import type {
 } from 'dlna.js';
 
 import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
-import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem, isRendererPlaying } from './rendererHandler';
+import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem, isRendererPlaying, stopRenderer } from './rendererHandler';
 import { getActiveDevices } from './deviceManager';
 import { config } from './config';
 
@@ -225,14 +225,16 @@ export async function executePlayPresetLogic(
 
       if (respondsViaUrl) {
         logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') confirmed responsive. Using this device instance.`);
-        // --- תוספת חדשה ---
-        // בדיקה אם הרנדרר כבר מנגן משהו
+        // --- שינוי לוגיקה ---
+        // בדיקה אם הרנדרר כבר מנגן משהו, ואם כן - עוצרים אותו
         const isPlaying = await isRendererPlaying(deviceFromActiveList.UDN, activeDevices, logger);
         if (isPlaying) {
-          logger.warn(`Renderer ${deviceFromActiveList.UDN} is already playing. Halting preset '${presetName}'.`);
-          throw new PlaybackError(`Renderer is already playing. Halting preset execution.`, 409); // 409 Conflict
+          logger.info(`Renderer ${deviceFromActiveList.UDN} is currently playing. Sending stop command before proceeding with preset '${presetName}'.`);
+          await stopRenderer(deviceFromActiveList.UDN, activeDevices, logger);
+          // ניתן להוסיף השהייה קצרה אם יש צורך לוודא שהעצירה התבצעה
+          await new Promise(resolve => setTimeout(resolve, 500)); // השהייה של 500ms
         }
-        // --- סוף תוספת ---
+        // --- סוף שינוי ---
         return deviceFromActiveList;
 
       } else {
@@ -253,14 +255,15 @@ export async function executePlayPresetLogic(
     // אנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנו מצפים לו.
     const polledApiDevice = await waitForDeviceConfirmation(rendererPreset.udn, presetName);
 
-    // --- תוספת חדשה ---
-    // בדיקה אם הרנדרר כבר מנגן משהו
+    // --- שינוי לוגיקה ---
+    // בדיקה אם הרנדרר כבר מנגן משהו, ואם כן - עוצרים אותו
     const isPlayingAfterPoll = await isRendererPlaying(polledApiDevice.UDN, activeDevices, logger);
     if (isPlayingAfterPoll) {
-      logger.warn(`Renderer ${polledApiDevice.UDN} is already playing after poll. Halting preset '${presetName}'.`);
-      throw new PlaybackError(`Renderer is already playing. Halting preset execution.`, 409); // 409 Conflict
+      logger.info(`Renderer ${polledApiDevice.UDN} is currently playing after poll. Sending stop command for preset '${presetName}'.`);
+      await stopRenderer(polledApiDevice.UDN, activeDevices, logger);
+      await new Promise(resolve => setTimeout(resolve, 500)); // השהייה של 500ms
     }
-    // --- סוף תוספת ---
+    // --- סוף שינוי ---
     return polledApiDevice;
   };
 

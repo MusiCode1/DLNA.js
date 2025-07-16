@@ -3,7 +3,8 @@ import { Request, Response, NextFunction, Router, response } from 'express';
 import {
   createModuleLogger,
   ContentDirectoryService, BrowseFlag,
-  createSingleItemDidlLiteXml // ייבוא הפונקציה החדשה
+  createSingleItemDidlLiteXml, // ייבוא הפונקציה החדשה
+  retry
 } from 'dlna.js';
 import { getActiveDevices } from './deviceManager';
 // נניח שהטיפוסים DidlLiteObject ו-Resource מיוצאים גם הם מ-dlna.js
@@ -251,6 +252,65 @@ export async function isRendererPlaying(
     return false;
   }
 }
+/**
+ * @hebrew עוצר את הניגון הנוכחי ברנדרר.
+ * @returns {Promise<boolean>} מחזיר true אם פקודת העצירה נשלחה בהצלחה, אחרת false.
+ * @throws {Error} אם המכשיר או השירות לא נמצאו, מה שמאפשר טיפול בשגיאות ברמה העליונה.
+ */
+export async function stopRenderer(
+  rendererUdn: string,
+  activeDevices: Map<string, ApiDevice>,
+  parentLogger: typeof logger
+): Promise<boolean> {
+  parentLogger.info(`Attempting to stop playback on renderer ${rendererUdn}`);
+
+  const mockRes = createRenderMockRes(rendererUdn);
+
+  const renderer = getValidatedDevice(rendererUdn, 'Renderer', mockRes);
+  if (!renderer) {
+    // getValidatedDevice יזרוק שגיאה, אבל נוסיף בדיקה למקרה חירום
+    return false;
+  }
+
+  const avTransportService = getValidatedService(renderer, 'AVTransport', 'AVTransport', mockRes);
+  if (!avTransportService) {
+    return false;
+  }
+
+  const stopCommand = renderer.serviceList.get('AVTransport')?.actionList?.get('Stop')?.invoke;
+
+  if (!stopCommand) {
+    parentLogger.warn(`Renderer ${rendererUdn} does not support Stop action. Cannot stop playback.`);
+    return false;
+  }
+
+  try {
+    await retry(
+      async () => {
+        try {
+          await stopCommand({ InstanceID: '0' });
+          parentLogger.info(`Stop command sent successfully to renderer ${rendererUdn}.`);
+        } catch (error: any) {
+          // זורקים שגיאה כדי שמנגנון ה-retry יתפוס אותה וינסה שוב
+          throw new Error(`Attempt to send Stop command failed: ${error.message}`);
+        }
+      },
+      {
+        retries: 3,
+        delayMs: 10000, // 10 שניות
+        logger: parentLogger,
+        onRetry: (error, attempt) => {
+          parentLogger.warn(`Stop command attempt ${attempt} failed for renderer ${rendererUdn}. Retrying... Error: ${error.message}`);
+        },
+      }
+    );
+    return true; // אם ה-retry הצליח
+  } catch (error: any) {
+    parentLogger.error(`All Stop command attempts failed for renderer ${rendererUdn}. Final error: ${error.message}`);
+    return false; // אם כל ניסיונות ה-retry נכשלו
+  }
+}
+
 /**
  * @hebrew מנגן רשימת פריטים מעובדים על גבי renderer נתון.
  */
