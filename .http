@@ -22,6 +22,8 @@ GET http://192.168.1.117:8080/play
 
 GET http://localhost:3300/api/play-preset/moishy-tv
 ###
+GET http://localhost:3300/api/play-preset/BasementTV
+###
 GET {{vscodeTunnelUrl}}/api/play-preset/moishy-tv
 
 ###
