@@ -10,9 +10,9 @@ if (!__dirname) {
   // @ts-ignore
   const filePathUrl = import.meta.url; // המרת import.meta.url לנתיב קובץ רגיל
   const filePath = url.fileURLToPath(filePathUrl); // המרת URL לקובץ לנתיב קובץ רגיל
-  
-  const dirname = path.dirname(filePath); 
-  __dirname = dirname; 
+
+  const dirname = path.dirname(filePath);
+  __dirname = dirname;
 }
 
 const logger = createModuleLogger('AppServer'); // לוגר ספציפי לקובץ זה
@@ -53,12 +53,19 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 });
 
 export function startServer(): void {
-  app.listen(Number(config.server.port), () => {
-    logger.info(`Server listening on port ${config.server.port}`);
-    logger.info(`Access the UI at: http://localhost:${config.server.port}/`); // שינוי קל בהודעה
-    // התחל את גילוי המכשירים לאחר שהשרת התחיל להאזין
-    startDeviceDiscovery();
-  });
+  try {
+
+    app.listen(Number(config.server.port), () => {
+      logger.info(`Server listening on port ${config.server.port}`);
+      logger.info(`Access the UI at: http://localhost:${config.server.port}/`); // שינוי קל בהודעה
+      // התחל את גילוי המכשירים לאחר שהשרת התחיל להאזין
+      startDeviceDiscovery();
+    });
+
+  } catch (error) {
+    logger.error('Error starting the server:', error);
+    
+  }
 }
 
 export default app; // ייצוא האפליקציה לבדיקות או שימושים אחרים אם נדרש
