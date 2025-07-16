@@ -5,6 +5,7 @@ import {
   createModuleLogger,
   DiscoveryDetailLevel,
   processUpnpDeviceFromUrl,
+  retry,
 } from 'dlna.js';
 
 import type {
@@ -335,25 +336,38 @@ export async function executePlayPresetLogic(
   // אם שתי המשימות הצליחו, נגן את הפריטים
   logger.info(`Both tasks completed for preset '${presetName}'. Attempting to play ${processedItems.length} items on renderer ${finalRendererDevice.UDN}.`);
 
+  // עטיפת פקודת הניגון עם מנגנון ניסיונות חוזרים
   try {
-    const playbackResult = await playProcessedItemsOnRenderer(
-      finalRendererDevice.UDN,
-      processedItems,
-      activeDevices,
-      logger // שימוש בלוגר של PlayPresetHandler
+    const playbackResult = await retry(
+      async () => {
+        const result = await playProcessedItemsOnRenderer(
+          finalRendererDevice.UDN,
+          processedItems,
+          activeDevices,
+          logger // שימוש בלוגר של PlayPresetHandler
+        );
+        if (!result.success) {
+          // זריקת שגיאה כדי להפעיל את ה-retry
+          throw new PlaybackError(result.message, result.statusCode);
+        }
+        return result;
+      },
+      {
+        retries: 3,
+        delayMs: 10000, // המתנה של 10 שניות בין ניסיונות
+        logger: logger,
+        onRetry: (error, attempt) => {
+          logger.warn(`Playback attempt ${attempt} failed for preset '${presetName}'. Retrying... Error: ${error.message}`);
+        },
+      }
     );
 
-    if (playbackResult.success) {
-      logger.info(`Preset '${presetName}' playback command successful: ${playbackResult.message}`);
-      return { success: true, message: playbackResult.message };
-    } else {
-      // playProcessedItemsOnRenderer אמור לזרוק שגיאה במקרה של כשל, או להחזיר statusCode
-      logger.error(`Preset '${presetName}' playback command failed: ${playbackResult.message}`);
-      throw new PlaybackError(playbackResult.message, playbackResult.statusCode || 500);
-    }
+    logger.info(`Preset '${presetName}' playback command successful after retry logic: ${playbackResult.message}`);
+    return { success: true, message: playbackResult.message };
+
   } catch (error: any) {
-    logger.error(`Error during playProcessedItemsOnRenderer for preset '${presetName}': ${error.message}`, error);
+    logger.error(`All playback attempts failed for preset '${presetName}'. Final error: ${error.message}`, error);
     if (error instanceof PlaybackError) throw error; // זרוק מחדש אם זו כבר שגיאת PlaybackError
-    throw new PlaybackError(error.message || `Playback failed for preset '${presetName}'.`, error.statusCode || 500);
+    throw new PlaybackError(error.message || `Playback failed for preset '${presetName}' after multiple retries.`, error.statusCode || 500);
   }
 }
