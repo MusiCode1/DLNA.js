@@ -214,6 +214,17 @@ export async function executePlayPresetLogic(
 
   logger.info(`Found preset '${presetName}'. Renderer: ${rendererPreset.udn}, IP: ${rendererPreset.ipAddress}, MAC: ${rendererPreset.macAddress}, Media Server: ${mediaServerPreset.udn}, Folder ID: ${folderObjectId}`);
 
+  // פונקציית עזר פנימית לבדיקה ועצירה של ניגון קיים
+  const checkAndStopPlaybackIfNeeded = async (device: ApiDevice) => {
+    const isPlaying = await isRendererPlaying(device.UDN, activeDevices, logger);
+    if (isPlaying) {
+      logger.info(`Renderer ${device.UDN} is currently playing. Sending stop command and halting preset '${presetName}'.`);
+      await stopRenderer(device.UDN, activeDevices, logger);
+      // לאחר העצירה, עוצרים את ריצת הפריסט הנוכחי
+      throw new PlaybackError(`Preset '${presetName}' halted because the renderer was already playing. A stop command was sent.`, 409); // 409 Conflict
+    }
+  };
+
   // משימה 1: טיפול ב-Renderer (הערה והחייאה במידת הצורך)
   const handleRendererTask = async (): Promise<ApiDevice> => {
     let deviceFromActiveList = activeDevices.get(rendererPreset.udn); // Check initial active devices map
@@ -225,16 +236,7 @@ export async function executePlayPresetLogic(
 
       if (respondsViaUrl) {
         logger.info(`Renderer ${rendererPreset.udn} (preset '${presetName}') confirmed responsive. Using this device instance.`);
-        // --- שינוי לוגיקה ---
-        // בדיקה אם הרנדרר כבר מנגן משהו, ואם כן - עוצרים אותו
-        const isPlaying = await isRendererPlaying(deviceFromActiveList.UDN, activeDevices, logger);
-        if (isPlaying) {
-          logger.info(`Renderer ${deviceFromActiveList.UDN} is currently playing. Sending stop command before proceeding with preset '${presetName}'.`);
-          await stopRenderer(deviceFromActiveList.UDN, activeDevices, logger);
-          // ניתן להוסיף השהייה קצרה אם יש צורך לוודא שהעצירה התבצעה
-          await new Promise(resolve => setTimeout(resolve, 500)); // השהייה של 500ms
-        }
-        // --- סוף שינוי ---
+        await checkAndStopPlaybackIfNeeded(deviceFromActiveList);
         return deviceFromActiveList;
 
       } else {
@@ -255,15 +257,7 @@ export async function executePlayPresetLogic(
     // אנו משתמשים ב-rendererPreset.udn כי זה ה-UDN שאנו מצפים לו.
     const polledApiDevice = await waitForDeviceConfirmation(rendererPreset.udn, presetName);
 
-    // --- שינוי לוגיקה ---
-    // בדיקה אם הרנדרר כבר מנגן משהו, ואם כן - עוצרים אותו
-    const isPlayingAfterPoll = await isRendererPlaying(polledApiDevice.UDN, activeDevices, logger);
-    if (isPlayingAfterPoll) {
-      logger.info(`Renderer ${polledApiDevice.UDN} is currently playing after poll. Sending stop command for preset '${presetName}'.`);
-      await stopRenderer(polledApiDevice.UDN, activeDevices, logger);
-      await new Promise(resolve => setTimeout(resolve, 500)); // השהייה של 500ms
-    }
-    // --- סוף שינוי ---
+    await checkAndStopPlaybackIfNeeded(polledApiDevice);
     return polledApiDevice;
   };
 
