@@ -17,8 +17,9 @@ const logger = createLogger('ProxyHandler');
 export async function proxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   
   const currentActiveDevices = getActiveDevices();
-  const deviceId = req.params[0];
-  const resourcePath = req.params[1];
+  const { udn: deviceId, path: resourcePathArr } = req.params;
+
+  const resourcePath = Array.isArray(resourcePathArr) ? resourcePathArr.join('/') : resourcePathArr;
 
   if (!deviceId || !resourcePath) {
     logger.warn('Bad request: Device ID or resource path is missing.');
@@ -37,16 +38,13 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { baseURL } = device;
-    if (!baseURL) {
-      logger.error(`Device with ID "${deviceId}" does not have a baseURL.`);
-      res.status(404).send(`Device with ID "${deviceId}" does not have a baseURL.`);
+    const baseUrls = [device.presentationURL, device.baseURL].filter((url): url is string => typeof url === 'string' && url.length > 0);
+
+    if (baseUrls.length === 0) {
+      logger.error(`Device with ID "${deviceId}" does not have a presentationURL or baseURL.`);
+      res.status(404).send(`Device with ID "${deviceId}" does not have a valid URL.`);
       return;
     }
-
-    // הרכבת כתובת ה-URL המלאה למשאב
-    const targetUrl = new URL(resourcePath, baseURL).toString();
-    logger.info(`Forwarding request to: ${targetUrl}`);
 
     // העברת כל הכותרות הרלוונטיות מהבקשה המקורית
     const excludedHeaders = ['host', 'connection', 'referer', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest', 'accept-encoding', 'accept-language'];
@@ -58,7 +56,33 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
     }
     logger.info(`Forwarding headers: ${Object.keys(proxyHeaders).join(', ')}`);
 
-    const deviceResponse = await fetch(targetUrl, { headers: proxyHeaders });
+    let deviceResponse: globalThis.Response | null = null;
+
+    for (const baseUrl of baseUrls) {
+      try {
+        const targetUrl = new URL(resourcePath, baseUrl).toString();
+        logger.info(`Attempting to forward request to: ${targetUrl}`);
+        
+        const response = await fetch(targetUrl, { headers: proxyHeaders });
+        
+        if (response.ok) {
+          deviceResponse = response;
+          logger.info(`Successfully fetched from ${targetUrl}`);
+          break; // יציאה מהלולאה לאחר קבלת תשובה תקינה
+        } else {
+          logger.warn(`Request to ${targetUrl} failed with status: ${response.status}`);
+        }
+      } catch (error) {
+        logger.error(`Error fetching from ${baseUrl}:`, error);
+        // ממשיכים ל-URL הבא
+      }
+    }
+
+    if (!deviceResponse) {
+      logger.error(`Failed to fetch resource from all available URLs for device "${deviceId}".`);
+      res.status(502).send('Bad Gateway: Could not fetch resource from device.');
+      return;
+    }
 
     // העברת ה-headers מהתשובה של המכשיר לתשובה שלנו
     deviceResponse.headers.forEach((value, name) => {

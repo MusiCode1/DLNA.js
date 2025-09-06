@@ -24,9 +24,6 @@ import {
 const router = Router();
 
 try {
-
-
-
   // Device routes
   router.get('/api/devices', (req: Request, res: Response) => {
 
@@ -99,12 +96,14 @@ try {
   });
 
   // Proxy route
-  router.get(/\/proxy\/(.+?)\/(.*)/, proxyHandler);
+router.get('/proxy/:udn/*path', proxyHandler);
+
 
 } catch (error) {
-
-  console.error(error)
-
+  // We need to import createModuleLogger here or pass it down
+  // For simplicity, just console.error for now.
+  console.error('CRITICAL: Failed to setup routes:', error);
+  // Re-throw the error to prevent the server from starting in a broken state
   throw error;
 }
 

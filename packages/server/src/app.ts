@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import path from 'path';
 import * as url from "url";
 import { createModuleLogger } from 'dlna.js';
@@ -19,21 +20,45 @@ const logger = createModuleLogger('AppServer'); // לוגר ספציפי לקו�
 
 const app = express();
 
+// Enable CORS for a specific origin
+app.use(cors({
+  origin: 'http://localhost:5173'
+}));
+
 // Middleware to parse JSON bodies
 app.use(express.json());
 
-// הגשת קבצים סטטיים מהתיקייה public
-// ודא שהנתיב לתיקיית public נכון ביחס למיקום קובץ השרת
-// בהנחה שהקוד המקומפל יהיה ב-dist, והקובץ app.js יהיה ב-dist/app.js
-// אז __dirname יצביע ל-dist. לכן, נתיב ל-public צריך להיות '../public'
-// או אם public נמצאת ברמה של src/dist, אז path.join(__dirname, '..', 'public')
-// כרגע, בהנחה ש-public נמצאת ברמה של packages/server/public
-const publicPathDirectory = path.join(__dirname, '..', 'public');
-logger.info(`Serving static files from: ${publicPathDirectory}`);
-app.use(express.static(publicPathDirectory));
+try {
+  // שימוש ב-router הראשי שהגדרנו עבור ה-API
+  app.use(apiRouter);
 
-// שימוש ב-router הראשי שהגדרנו
-app.use(apiRouter);
+  // הגשת הממשק החדש של SvelteKit
+  const svelteGuiBuildPath = path.join(__dirname, '..', '..', 'svelte-gui', 'build');
+  logger.info(`Serving SvelteKit GUI from: ${svelteGuiBuildPath}`);
+
+  // הגשת הקבצים הסטטיים של SvelteKit (JS, CSS, וכו')
+  app.use(express.static(svelteGuiBuildPath));
+
+  // Fallback for SPA: כל בקשה אחרת שאינה API תגיש את ה-index.html של SvelteKit
+  app.get('*', (req, res, next) => {
+    // ודא שהבקשה אינה מיועדת ל-API כדי למנוע חטיפת בקשות
+    if (!req.originalUrl.startsWith('/api')) {
+      res.sendFile(path.resolve(svelteGuiBuildPath, 'index.html'), (err) => {
+        if (err) {
+          // אם יש שגיאה בשליחת הקובץ (למשל, לא נמצא), העבר אותה ל-error handler
+          next(err);
+        }
+      });
+    } else {
+      // אם הבקשה היא ל-API ולא נמצאה, תן ל-middleware הבא לטפל בה (שיוביל ל-404)
+      next();
+    }
+  });
+} catch (e) {
+    logger.error("Error setting up static file serving or SPA fallback:", e);
+    console.error("Error setting up static file serving or SPA fallback:", e);
+}
+
 
 // Error handling middleware - חייב להיות האחרון
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

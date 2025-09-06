@@ -20,15 +20,29 @@ if (!__dirname) {
   // @ts-ignore
   const filePathUrl = import.meta.url; // המרת import.meta.url לנתיב קובץ רגיל
   const filePath = url.fileURLToPath(filePathUrl); // המרת URL לקובץ לנתיב קובץ רגיל
-  
-  const dirname = path.dirname(filePath); 
-  __dirname = dirname; 
+
+  const dirname = path.dirname(filePath);
+  __dirname = dirname;
 }
 
 const publicPathDirectory = path.join(__dirname, '..', 'public');
 
 // Serve static files for the frontend
-app.use(serveStatic({ root: publicPathDirectory }));
+app.use(serveStatic({
+  root: publicPathDirectory,
+  onNotFound: (path, c) => {
+    const text = `Static file not found: ${path}` +
+      '\n' + `this path: ${publicPathDirectory}` +
+      '\n' + `__dirname: ${__dirname}`;
+
+    console.warn(text);
+
+    c.text(text, 404);
+
+  },
+
+  
+}));
 
 // Generic proxy for fetching resources from the TV to solve CORS issues.
 // This supports streaming the response body.

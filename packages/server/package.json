@@ -9,8 +9,10 @@
     "test": "bun test"
   },
   "dependencies": {
-    "dlna.js": "workspace:*",
     "@dlna-tv-play/wake-on-lan": "workspace:*",
+    "@types/cors": "^2.8.19",
+    "cors": "^2.8.5",
+    "dlna.js": "workspace:*",
     "dotenv": "^16.5.0",
     "express": "^5.1.0"
   },

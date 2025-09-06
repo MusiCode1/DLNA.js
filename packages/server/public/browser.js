@@ -1,4 +1,7 @@
 // @ts-check
+
+/** @typedef {import('../src/types').ApiDevice} ApiDevice */
+
 // קוד JavaScript
 document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);

@@ -622,7 +622,7 @@ export type ProcessedDevice =
 /**
  * @hebrew מייצג התקן כפי שהוא מנוהל על ידי ה-ActiveDeviceManager.
  */
-export interface ApiDevice extends FullDeviceDescription {
+export interface ServerApiDevice extends FullDeviceDescription {
     /** @hebrew חותמת זמן של הפעם האחרונה שההתקן נראה (במילישניות מאז ה-epoch). */
     lastSeen: number;
     /** @hebrew חותמת זמן של מתי ההתקן יפוג תוקף ויסולק (במילישניות מאז ה-epoch). */

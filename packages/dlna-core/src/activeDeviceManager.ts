@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import * as os from 'node:os'; // הוספת ייבוא למודול os
 import {
   ActiveDeviceManagerOptions,
-  ApiDevice,
+  ServerApiDevice,
   BasicSsdpDevice, // הוספת ייבוא
   DiscoveryDetailLevel,
   FullDeviceDescription, // הוספת ייבוא
@@ -29,7 +29,7 @@ type ReturnTypeOfCreateSocketManager = Awaited<ReturnType<typeof createSocketMan
  */
 export class ActiveDeviceManager extends EventEmitter {
   private options: Required<ActiveDeviceManagerOptions>;
-  private activeDevices: Map<string, ApiDevice>;
+  private activeDevices: Map<string, ServerApiDevice>;
   private socketManager: ReturnTypeOfCreateSocketManager | null;
   private mSearchIntervalId: NodeJS.Timeout | null;
   private cleanupIntervalId: NodeJS.Timeout | null;
@@ -49,7 +49,7 @@ export class ActiveDeviceManager extends EventEmitter {
       networkInterfaces: options?.networkInterfaces ?? [], // אתחול למערך ריק אם לא סופק
     };
 
-    this.activeDevices = new Map<string, ApiDevice>();
+    this.activeDevices = new Map<string, ServerApiDevice>();
     this.socketManager = null;
     this.mSearchIntervalId = null;
     this.cleanupIntervalId = null;
@@ -336,7 +336,7 @@ export class ActiveDeviceManager extends EventEmitter {
       try {
         const processedData = await processUpnpDevice(basicDevice, this.options.detailLevel);
         if (processedData) {
-          const newApiDevice: ApiDevice = {
+          const newApiDevice: ServerApiDevice = {
             // שדות מ-BasicSsdpDevice (דרך processedData)
             usn: processedData.usn, // ה-USN מההודעה שגרמה לגילוי/עיבוד
             UDN: basicDevice.UDN, // ה-UDN שחולץ מההודעה המקורית
@@ -400,7 +400,7 @@ export class ActiveDeviceManager extends EventEmitter {
 
         } else {
           if (this.options.detailLevel === DiscoveryDetailLevel.Basic) {
-            const basicApiDevice: ApiDevice = {
+            const basicApiDevice: ServerApiDevice = {
               ...basicDevice, // כל השדות מ-BasicSsdpDevice, כולל UDN
               deviceType: basicDevice.st,
               friendlyName: basicDevice.UDN, // שימוש ב-UDN אם אין שם ידידותי
@@ -601,7 +601,7 @@ export class ActiveDeviceManager extends EventEmitter {
      * @hebrew מחזירה עותק של רשימת המכשירים הפעילים שזוהו.
      * @returns Map&lt;string, ApiDevice&gt; - מפה של המכשירים הפעילים.
      */
-  public getActiveDevices(): Map<string, ApiDevice> {
+  public getActiveDevices(): Map<string, ServerApiDevice> {
     // החזרת עותק של המפה כדי למנוע שינויים חיצוניים ישירים
     return new Map(this.activeDevices);
   }
