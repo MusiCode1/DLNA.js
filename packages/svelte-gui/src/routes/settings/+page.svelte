@@ -373,10 +373,10 @@
 	<Modal
 		show={showFolderBrowser}
 		onClose={() => (showFolderBrowser = false)}
-		contentClass="w-[80vw] h-[80vh] bg-gray-900 text-white p-4 flex flex-col"
+		contentClass="w-[80vw] h-[80vh] bg-gray-900  p-2 flex flex-col"
 	>
 		{#snippet children()}
-			<h2 class="text-xl font-bold mb-4 flex-shrink-0">Select a Folder</h2>
+			<h2 class="text-xl font-bold mb-4 flex-shrink-0 text-gray-800">Select a Folder</h2>
 			<div class="flex-grow overflow-hidden">
 				<FileBrowser udn={mediaServerUdn} onFolderSelect={handleFolderSelect} />
 			</div>

@@ -28,7 +28,7 @@
     tabindex="-1"
   >
     <div class={`modal-content ${contentClass}`} onclick={(e) => e.stopPropagation()} onkeydown={handleKeydown} role="button" tabindex="0">
-      <button class="close-button" onclick={onClose}>X</button>
+      <button class="close-button text-gray-800" onclick={onClose}>X</button>
       {@render children()}
     </div>
   </div>
@@ -48,14 +48,14 @@
   }
   .modal-content {
     background: white;
-    padding: 2rem;
+    padding: 1.5rem;
     border-radius: 8px;
     position: relative;
   }
   .close-button {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
+    top: 1rem;
+    right: 1rem;
     background: none;
     border: none;
     font-size: 1.5rem;
