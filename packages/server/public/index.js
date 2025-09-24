@@ -1,11 +1,14 @@
 // @ts-check
+
+/** @typedef {import('../src/types').ApiDevice}  */
+
 // פונקציה לשליפת ועדכון רשימת המכשירים
 async function fetchDevices() {
     /** @type {HTMLElement | null} */
     const deviceListElement = document.getElementById('device-list');
     /** @type {HTMLElement | null} */
     const errorMessageElement = document.getElementById('error-message');
-    
+
     // הסתרת הודעת שגיאה בתחילת כל קריאה
     if (errorMessageElement) {
         errorMessageElement.style.display = 'none';
@@ -17,8 +20,10 @@ async function fetchDevices() {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        /** @type {ApiDevice[]| []} */
         const devices = await response.json();
-        
+
         // ניקוי הרשימה הקיימת
         if (deviceListElement) {
             deviceListElement.innerHTML = '';
@@ -49,7 +54,7 @@ async function fetchDevices() {
                     img.alt = device.friendlyName + ' logo';
                     deviceInfoContainer.appendChild(img);
                 }
-                
+
                 // הוספת הטקסט של שם המכשיר
                 const textNode = document.createTextNode(`${device.friendlyName} (${device.modelName || 'N/A'})`);
                 deviceInfoContainer.appendChild(textNode);
@@ -85,7 +90,7 @@ async function fetchDevices() {
                     controlButton.style.marginLeft = '10px';
                     deviceInfoContainer.appendChild(controlButton);
                 }
-                
+
                 listItem.appendChild(deviceInfoContainer);
 
                 // הצגת רשימת השירותים מתוך serviceList (שהוא אובייקט)
@@ -97,7 +102,7 @@ async function fetchDevices() {
                     servicesTitle.style.marginTop = '10px';
                     servicesTitle.style.marginBottom = '5px';
                     servicesContainer.appendChild(servicesTitle);
-                    
+
                     const servicesListElement = document.createElement('ul');
                     servicesListElement.className = 'services-list-inline'; // הוספת הקלאס החדש
                     Object.keys(device.serviceList).forEach(serviceId => {
@@ -111,7 +116,7 @@ async function fetchDevices() {
                     servicesContainer.appendChild(servicesListElement);
                     listItem.appendChild(servicesContainer);
                 }
-                
+
                 if (deviceListElement) {
                     deviceListElement.appendChild(listItem);
                 }

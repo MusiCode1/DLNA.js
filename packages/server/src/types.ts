@@ -2,7 +2,7 @@
 import type {
     ServiceDescription,
     DiscoveryOptions,
-    ApiDevice as CoreApiDevice,    // הוספנו ייבוא זה עם alias
+    ServerApiDevice as CoreApiDevice,    // הוספנו ייבוא זה עם alias
     DeviceIcon as CoreDeviceIcon  // הוספנו ייבוא זה עם alias
 } from 'dlna.js';
 

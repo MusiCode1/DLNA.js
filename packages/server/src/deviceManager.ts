@@ -1,4 +1,4 @@
-import { createModuleLogger, ActiveDeviceManager, type ActiveDeviceManagerOptions, type ApiDevice, type RawSsdpMessagePayload } from 'dlna.js';
+import { createModuleLogger, ActiveDeviceManager, type ActiveDeviceManagerOptions, type ServerApiDevice, type RawSsdpMessagePayload } from 'dlna.js';
 import type { RemoteInfo } from 'node:dgram';
 // import type { ApiDevice } from './types'; // ApiDevice יגיע מ-dlna-core
 import { config } from './config';
@@ -73,9 +73,9 @@ export async function stopDiscovery(): Promise<void> {
 
 /**
  * @hebrew מחזיר את רשימת המכשירים הפעילים הנוכחית.
- * @returns {Map<string, ApiDevice>} מפה של המכשירים הפעילים.
+ * @returns {Map<string, ServerApiDevice>} מפה של המכשירים הפעילים.
  */
-export function getActiveDevices(): Map<string, ApiDevice> {
+export function getActiveDevices(): Map<string, ServerApiDevice> {
   const manager = getCoreDeviceManager();
   return manager.getActiveDevices(); // כעת מחזיר Map<UDN, CoreApiDevice>
 }

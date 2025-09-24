@@ -43,7 +43,6 @@ app.use(serveStatic({
 
   },
 
-
 }));
 
 // Generic proxy for fetching resources from the TV to solve CORS issues.

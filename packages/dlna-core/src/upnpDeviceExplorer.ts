@@ -19,7 +19,7 @@ import {
   FullDeviceDescription,
   // RawSsdpMessagePayload, // הוסר, onRawSsdpMessage יועבר ל-ActiveDeviceManager
   // RawSsdpMessageHandler, // הוסר
-  ApiDevice, // ייבוא חדש
+  ServerApiDevice, // ייבוא חדש
   ActiveDeviceManagerOptions, // ייבוא חדש
 } from './types';
 
@@ -70,7 +70,7 @@ const logger = createModuleLogger('upnpDeviceExplorer');
  *     - 'basic': מניב {@link BasicSsdpDevice}.
  *     - 'description': מניב {@link DeviceDescription}.
  *     - 'services': מניב {@link DeviceWithServicesDescription}.
- *     - 'full': מניב {@link FullDeviceDescription} (או ליתר דיוק {@link ApiDevice} שהוא תת-טיפוס).
+ *     - 'full': מניב {@link FullDeviceDescription} (או ליתר דיוק {@link ServerApiDevice} שהוא תת-טיפוס).
  *   - `abortSignal` (AbortSignal, אופציונלי): אות לביטול תהליך הגילוי.
  *   - `onRawSsdpMessage` (פונקציה, אופציונלי): קולבק לקבלת הודעות SSDP גולמיות.
  *   - `networkInterfaces` (אובייקט, אופציונלי): ממשקי רשת ספציפיים לשימוש.
@@ -110,14 +110,14 @@ export async function* discoverSsdpDevicesIterable(
 
   const activeDeviceManager = new ActiveDeviceManager(deviceManagerOptions);
 
-  const deviceBuffer: ApiDevice[] = [];
-  let resolveDevicePromise: ((device: ApiDevice | undefined) => void) | null = null; // Allow undefined for timeout/abort
+  const deviceBuffer: ServerApiDevice[] = [];
+  let resolveDevicePromise: ((device: ServerApiDevice | undefined) => void) | null = null; // Allow undefined for timeout/abort
   let rejectDevicePromise: ((reason?: any) => void) | null = null;
   let discoveryEndedByTimeoutOrAbort = false;
   let managerStopped = false;
   let managerError: Error | null = null;
 
-  const onDeviceFound = (_usn: string, device: ApiDevice) => {
+  const onDeviceFound = (_usn: string, device: ServerApiDevice) => {
     if (managerStopped || discoveryEndedByTimeoutOrAbort) return;
 
     // כאן ניתן להוסיף לוגיקה לוודא שה-device.detailLevelAchieved
@@ -227,7 +227,7 @@ export async function* discoverSsdpDevicesIterable(
       if (deviceBuffer.length > 0) {
         yield deviceBuffer.shift()! as ProcessedDevice;
       } else {
-        const nextDevicePromise = new Promise<ApiDevice | undefined>((resolve, reject) => {
+        const nextDevicePromise = new Promise<ServerApiDevice | undefined>((resolve, reject) => {
           if (discoveryEndedByTimeoutOrAbort) { // בדיקה נוספת למקרה שהמצב השתנה בזמן יצירת ה-Promise
             resolve(undefined);
             return;
