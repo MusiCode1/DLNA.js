@@ -9,8 +9,6 @@ import { stopDiscovery as stopDeviceDiscovery } from './deviceManager';
 
 try {
 
-
-
   const logger = createModuleLogger('MainIndex'); // לוגר לקובץ הראשי
 
   logger.info('Application starting...');
