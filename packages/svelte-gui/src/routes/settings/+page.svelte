@@ -157,13 +157,6 @@
 </script>
 
 <div class="space-y-8">
-	<a
-		href="/"
-		class="inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
-	>
-		<ChevronLeft size="20" />
-		Back to Device List
-	</a>
 
 	{#if statusMessage.text}
 		<div
@@ -287,7 +280,7 @@
 		<h2 class="mb-4 border-b border-gray-700 pb-2 text-xl font-bold">Existing Presets</h2>
 		<ul class="space-y-4">
 			{#each presets as preset (preset.name)}
-				<li class="flex items-center justify-between rounded-md bg-gray-700 p-4">
+				<li class="flex items-center justify-between rounded-md bg-gray-700 p-4 hover:bg-gray-600">
 					<div class="mr-4 flex-grow overflow-hidden">
 						<p class="truncate font-bold" title={preset.name}>{preset.name}</p>
 						<div class="mt-2 space-y-1 text-xs text-gray-400">
@@ -320,19 +313,19 @@
 						<button
 							title="Play Preset"
 							onclick={() => handlePlayPreset(preset.name)}
-							class="rounded-md bg-green-600 p-2 text-sm font-bold text-white transition-colors hover:bg-green-500"
+							class="rounded-md bg-green-600 p-2 text-sm font-bold text-white transition-colors hover:bg-green-500 cursor-pointer "
 							><Play size="16" /></button
 						>
 						<button
 							title="Edit Preset"
 							onclick={() => loadPresetForEditing(preset)}
-							class="rounded-md bg-yellow-600 p-2 text-sm font-bold text-white transition-colors hover:bg-yellow-500"
+							class="rounded-md bg-yellow-600 p-2 text-sm font-bold text-white transition-colors hover:bg-yellow-500 cursor-pointer"
 							><Pencil size="16" /></button
 						>
 						<button
 							title="Delete Preset"
 							onclick={() => handleDeletePreset(preset.name)}
-							class="rounded-md bg-red-600 p-2 text-sm font-bold text-white transition-colors hover:bg-red-500"
+							class="rounded-md bg-red-600 p-2 text-sm font-bold text-white transition-colors hover:bg-red-500 cursor-pointer"
 							><Trash2 size="16" /></button
 						>
 					</div>

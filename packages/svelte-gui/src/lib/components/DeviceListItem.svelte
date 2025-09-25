@@ -16,7 +16,7 @@
 </script>
 
 <li
-	class="flex flex-col items-start justify-between gap-4 rounded-lg bg-gray-800 p-4 shadow-md sm:flex-row sm:items-center"
+	class="flex flex-col items-start justify-between gap-4 rounded-lg bg-gray-800 hover:bg-gray-600 p-4 shadow-md sm:flex-row sm:items-center"
 >
 	<div class="flex items-center gap-4">
 		{#if device.iconList && device.iconList.length > 0 && device.iconList[0].url}
