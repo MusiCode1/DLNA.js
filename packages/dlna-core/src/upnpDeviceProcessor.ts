@@ -1,6 +1,9 @@
 // קובץ זה מכיל את לוגיקת עיבוד וחקר התקני UPnP
 import axios from 'axios';
 import * as xml2js from 'xml2js';
+import * as arp from "node-arp";
+import { promisify } from "node:util";
+
 import type {
   BasicSsdpDevice,
   DeviceDescription,
@@ -21,6 +24,8 @@ import {
   tryCreateAVTransportService,
   tryCreateRenderingControlService,
 } from './upnpSpecificServiceFactory'; // ייבוא פונקציות ה-factory
+
+const getMacPromise = promisify(arp.getMAC);
 
 const logger = createModuleLogger('upnpDeviceProcessor');
 const DEFAULT_TIMEOUT_MS = 5000; // הועבר מ-upnpDeviceExplorer.ts
@@ -60,13 +65,13 @@ function normalizeServiceTypeToKey(serviceType: string): string {
     // החלק הלפני אחרון הוא בדרך כלל שם השירות, האחרון הוא הגרסה
     const potentialKey = parts[parts.length - 2];
     if (potentialKey && potentialKey !== 'service' && potentialKey !== 'schemas-upnp-org') {
-        // נוודא שהמפתח אינו רק מספר (גרסה)
-        if (isNaN(parseInt(potentialKey))) {
-            return potentialKey;
-        }
+      // נוודא שהמפתח אינו רק מספר (גרסה)
+      if (isNaN(parseInt(potentialKey))) {
+        return potentialKey;
+      }
     }
   }
-  
+
   // אם לא הצלחנו, נסיר את הקידומת "urn:schemas-upnp-org:service:" ונחזיר את השאר
   const prefixToRemove = "urn:schemas-upnp-org:service:";
   if (serviceType.startsWith(prefixToRemove)) {
@@ -74,7 +79,7 @@ function normalizeServiceTypeToKey(serviceType: string): string {
     // נסיר גם את הגרסה בסוף אם קיימת (למשל, ":1")
     return stripped.replace(/:\d+$/, '');
   }
-  
+
   // אם כלום לא עבד, נחזיר את ה-serviceType המקורי (או חלק ממנו)
   // לדוגמה, אם זה לא URN סטנדרטי
   const lastPart = serviceType.substring(serviceType.lastIndexOf(':') + 1);
@@ -131,7 +136,7 @@ async function fetchAndParseDeviceDescriptionXml(
       logger.warn(`fetchAndParseDeviceDescriptionXml: Invalid Content-Type for device description from ${locationUrl}. Expected XML, got ${contentType}.`);
       return null;
     }
-    
+
     const xmlData = response.data;
     // logger.trace(`fetchAndParseDeviceDescriptionXml: XML data received from ${locationUrl}:`, xmlData); // יכול להיות מאוד ורבלי
 
@@ -175,6 +180,16 @@ async function fetchAndParseDeviceDescriptionXml(
       }
     };
 
+    const getDeviceIpFromUrl = (locUrl: string): string | undefined => {
+      try {
+        const url = new URL(locUrl);
+        return url.hostname;
+      } catch (e) {
+        logger.warn(`fetchAndParseDeviceDescriptionXml: Invalid location URL for getDeviceIpFromUrl: ${locUrl}`, e);
+        return undefined;
+      }
+    };
+
     const resolveUrl = (base: string | undefined, relative?: string): string | undefined => {
       if (!relative) return undefined;
       if (!base) return relative; // אם אין בסיס, נחזיר את היחסי כפי שהוא (בהנחה שהוא כבר מלא)
@@ -188,10 +203,15 @@ async function fetchAndParseDeviceDescriptionXml(
 
     const baseUrl = getBaseUrl(locationUrl);
 
+    const deviceIp = getDeviceIpFromUrl(locationUrl);
+
+    const deviceMacAddress = await getMacPromise(deviceIp!); // ניתן למלא זאת אם יש דרך לאחזר את כתובת ה-MAC
+
     const description: DeviceDescription = {
       location: locationUrl,
       URLBase: deviceNode.URLBase || baseUrl, // אם URLBase לא קיים ב-XML, נשתמש בבסיס של locationUrl
       baseURL: deviceNode.URLBase || baseUrl, // הוספת השדה החסר
+      macAddress: deviceMacAddress || undefined, // כתובת MAC אם נמצאה
       deviceType: getText(deviceNode, 'deviceType') || '',
       friendlyName: getText(deviceNode, 'friendlyName') || '',
       manufacturer: getText(deviceNode, 'manufacturer') || '',
@@ -244,7 +264,7 @@ async function fetchAndParseDeviceDescriptionXml(
         const serviceId = getText(serviceNode, 'serviceId') || '';
         const scpdUrl = resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'SCPDURL')) || '';
         const controlUrl = resolveUrl(description.URLBase || baseUrl, getText(serviceNode, 'controlURL')) || '';
-        
+
         if (!serviceType || !serviceId || !scpdUrl || !controlUrl) {
           logger.warn(`fetchAndParseDeviceDescriptionXml: Missing mandatory fields for a service in ${locationUrl}. Skipping service.`, { serviceNode, serviceType, serviceId, scpdUrl, controlUrl });
           return; // דלג על שירות זה
@@ -261,7 +281,7 @@ async function fetchAndParseDeviceDescriptionXml(
           actionList: new Map<string, Action>(), // שינוי למפה
           stateVariableList: new Map<string, StateVariable>(), // שינוי למפה
         };
-        
+
         // בדיקה ששדות החובה קיימים ואם לא, רישום אזהרה (כבר נעשה למעלה, אבל נשאיר למקרה של eventSubURL)
         if (!service.eventSubURL) logger.debug(`fetchAndParseDeviceDescriptionXml: Missing eventSubURL for service ${service.serviceId} in ${locationUrl}`, { serviceNode });
 
@@ -360,7 +380,7 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
       logger.warn(`fetchScpdAndUpdateService: Failed to fetch SCPD for service ${service.serviceId} from ${service.SCPDURL}. Status: ${response.status}`);
       return;
     }
-    
+
     // בדיקת Content-Type
     const contentType = response.headers['content-type'] || response.headers['Content-Type'];
     if (contentType && typeof contentType === 'string' && !contentType.toLowerCase().includes('xml')) {
@@ -396,7 +416,7 @@ async function fetchScpdAndUpdateService(service: ServiceDescription, signal?: A
         const argsArray = actionNode.argumentList && actionNode.argumentList.argument ?
           (Array.isArray(actionNode.argumentList.argument) ? actionNode.argumentList.argument : [actionNode.argumentList.argument])
           : [];
-        
+
         const action: Action = {
           name: actionName, // השם כבר מנורמל
           arguments: argsArray.map((argNode: any): ActionArgument => ({

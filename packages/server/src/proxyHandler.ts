@@ -15,13 +15,21 @@ const logger = createLogger('ProxyHandler');
  * @param next - פונקציית ה-middleware הבאה של Express.
  */
 export async function proxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
-  
+
   const currentActiveDevices = getActiveDevices();
   const { udn: deviceId, path: resourcePathArr } = req.params;
 
+  // נתיב מלא כולל כל מה אחרי /proxy/:deviceId/ כולל פרמטרים של ?
+  const fullTargetPath = req.originalUrl.replace('/proxy/' + deviceId + '/', '');
+
+  logger.info(`Received proxy request: deviceId=${deviceId}, path=${resourcePathArr}`);
+
   const resourcePath = Array.isArray(resourcePathArr) ? resourcePathArr.join('/') : resourcePathArr;
 
-  if (!deviceId || !resourcePath) {
+  const params = new URLSearchParams(req.query as Record<string, string> | {});
+  const queryString = params.toString();
+
+  if (!deviceId || !resourcePath || !fullTargetPath) {
     logger.warn('Bad request: Device ID or resource path is missing.');
     res.status(400).send('Device ID and resource path are required.');
     return;
@@ -60,11 +68,12 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
 
     for (const baseUrl of baseUrls) {
       try {
-        const targetUrl = new URL(resourcePath, baseUrl).toString();
+        // const targetUrl = new URL(resourcePath, baseUrl).toString();
+        const targetUrl = new URL(fullTargetPath, baseUrl).toString();
         logger.info(`Attempting to forward request to: ${targetUrl}`);
-        
+
         const response = await fetch(targetUrl, { headers: proxyHeaders });
-        
+
         if (response.ok) {
           deviceResponse = response;
           logger.info(`Successfully fetched from ${targetUrl}`);

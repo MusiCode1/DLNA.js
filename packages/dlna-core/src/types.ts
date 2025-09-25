@@ -310,6 +310,8 @@ export interface DeviceDescription extends BasicSsdpDevice {
     URLBase?: string; // כתובת בסיס נוספת מה-XML לפתרון URL-ים יחסיים
     // שדות נוספים אפשריים מה-XML
     UPC?: string; // Universal Product Code
+
+    macAddress?: string; // כתובת MAC של ההתקן, אם זמינה
 }
 
 // =======================================================================
