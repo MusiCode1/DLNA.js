@@ -28,7 +28,9 @@ export type ApiDevice = Omit<ServerApiDevice, 'serviceList'> & {
 
 // --- API Functions ---
 
-const BASE_API_URL = import.meta.env.VITE_BASE_API_URL;
+const isMainServer = !(import.meta.env.DEV);
+
+const BASE_API_URL = (isMainServer) ? "" : import.meta.env.VITE_BASE_API_URL;
 
 /**
  * Fetches the list of discovered UPnP devices from the server.
@@ -248,12 +250,12 @@ export async function wakePreset(presetName: string): Promise<ApiResponse> {
 }
 
 export async function playPreset(presetName: string): Promise<ApiResponse> {
-    const response = await fetch(BASE_API_URL + `/api/play-preset/${encodeURIComponent(presetName)}`, {
-        method: 'GET',
-    });
-    const result = await response.json();
-    if (!response.ok) {
-        throw new Error(result.error || `HTTP error! status: ${response.status}`);
-    }
-    return result;
+  const response = await fetch(BASE_API_URL + `/api/play-preset/${encodeURIComponent(presetName)}`, {
+    method: 'GET',
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.error || `HTTP error! status: ${response.status}`);
+  }
+  return result;
 }

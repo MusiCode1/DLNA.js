@@ -40,7 +40,7 @@ try {
   app.use(express.static(svelteGuiBuildPath));
 
   // Fallback for SPA: כל בקשה אחרת שאינה API תגיש את ה-index.html של SvelteKit
-  app.get('*', (req, res, next) => {
+  app.get('*req', (req, res, next) => {
     // ודא שהבקשה אינה מיועדת ל-API כדי למנוע חטיפת בקשות
     if (!req.originalUrl.startsWith('/api')) {
       res.sendFile(path.resolve(svelteGuiBuildPath, 'index.html'), (err) => {

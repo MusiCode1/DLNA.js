@@ -6,11 +6,10 @@
 
 	const BASE_API_URL = import.meta.env.VITE_BASE_API_URL;
 
-
 	// Helper to get a proxied icon URL
-	function getIconUrl(iconUrl: string, baseURL: string | undefined, udn: string) {
-		const fullIconUrl = new URL(iconUrl, baseURL);
-		const iconUrlPath = fullIconUrl.pathname;
+	function getIconUrl(iconUrl: string, baseURL: string | undefined = '', udn: string) {
+		const fullIconUrl = typeof baseURL == 'string' ? new URL(iconUrl, baseURL) : new URL(iconUrl);
+		const iconUrlPath = fullIconUrl.pathname + (fullIconUrl.search ? fullIconUrl.search : '');
 		return BASE_API_URL + `/proxy/${udn}${iconUrlPath}`;
 	}
 </script>

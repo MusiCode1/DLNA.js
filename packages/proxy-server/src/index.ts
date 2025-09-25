@@ -25,14 +25,16 @@ if (!__dirname) {
   __dirname = dirname;
 }
 
-const publicPathDirectory = path.join(__dirname, '..', 'public');
+const publicAbsolutePathDirectory = path.join(__dirname, '..', 'public');
+const publicRelativePathDirectory = 'public';
 
 // Serve static files for the frontend
+// מיקום יחסי!!
 app.use(serveStatic({
-  root: publicPathDirectory,
+  root: publicRelativePathDirectory,
   onNotFound: (path, c) => {
     const text = `Static file not found: ${path}` +
-      '\n' + `this path: ${publicPathDirectory}` +
+      '\n' + `this path: ${publicAbsolutePathDirectory}` +
       '\n' + `__dirname: ${__dirname}`;
 
     console.warn(text);
@@ -41,7 +43,6 @@ app.use(serveStatic({
 
   },
 
-  
 }));
 
 // Generic proxy for fetching resources from the TV to solve CORS issues.
