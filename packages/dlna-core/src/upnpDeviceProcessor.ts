@@ -3,6 +3,7 @@ import axios from 'axios';
 import * as xml2js from 'xml2js';
 import * as arp from "node-arp";
 import { promisify } from "node:util";
+import NodeCache from "node-cache";
 
 import type {
   BasicSsdpDevice,
@@ -29,6 +30,11 @@ const getMacPromise = promisify(arp.getMAC);
 
 const logger = createModuleLogger('upnpDeviceProcessor');
 const DEFAULT_TIMEOUT_MS = 5000; // הועבר מ-upnpDeviceExplorer.ts
+
+const macAddressCache = new NodeCache({
+  stdTTL: 60 * 60 * 2,
+  checkperiod: 120
+});
 
 // ==========================================================================================
 // Helper Functions for Key Normalization
@@ -203,15 +209,36 @@ async function fetchAndParseDeviceDescriptionXml(
 
     const baseUrl = getBaseUrl(locationUrl);
 
-    const deviceIp = getDeviceIpFromUrl(locationUrl);
+    const deviceMacAddress = await (async () => {
 
-    const deviceMacAddress = await getMacPromise(deviceIp!); // ניתן למלא זאת אם יש דרך לאחזר את כתובת ה-MAC
+      try {
+
+        const deviceIp = getDeviceIpFromUrl(locationUrl);
+
+        if (deviceIp) {
+          const cacheAddr = macAddressCache.get(deviceIp);
+          if (cacheAddr) {
+            return cacheAddr as string;
+          } else {
+            return getMacPromise(deviceIp!) // ניתן למלא זאת אם יש דרך לאחזר את כתובת ה-MAC
+              .then(mac => {
+                macAddressCache.set(deviceIp, mac);
+                return mac;
+              });
+          }
+        }
+      } catch (error) {
+        logger.warn(`fetchAndParseDeviceDescriptionXml: Could not retrieve MAC address for device at ${locationUrl}`, error);
+        return '';
+      }
+
+    })();
 
     const description: DeviceDescription = {
       location: locationUrl,
       URLBase: deviceNode.URLBase || baseUrl, // אם URLBase לא קיים ב-XML, נשתמש בבסיס של locationUrl
       baseURL: deviceNode.URLBase || baseUrl, // הוספת השדה החסר
-      macAddress: deviceMacAddress || undefined, // כתובת MAC אם נמצאה
+      macAddress: deviceMacAddress || "", // כתובת MAC אם נמצאה
       deviceType: getText(deviceNode, 'deviceType') || '',
       friendlyName: getText(deviceNode, 'friendlyName') || '',
       manufacturer: getText(deviceNode, 'manufacturer') || '',
