@@ -73,6 +73,6 @@ export async function sendButton(remote: WebOSRemote, buttonName: string): Promi
         throw new Error('Could not connect to input socket');
     }
 
-    const message = `type:button\nname:${buttonName}\n`;
+    const message = `type:button\nname:${buttonName}\n\n`;
     remote.inputWs.send(message);
 }
