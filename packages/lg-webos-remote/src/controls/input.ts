@@ -30,7 +30,9 @@ async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
 
     return new Promise(async (resolve, reject) => {
 
-        const inputWs = await getWebSocketImplementation(socketPath);
+        const proxyUrl = remote.getConfig().proxyUrl;
+
+        const inputWs = await getWebSocketImplementation(socketPath, proxyUrl);
         remote.inputWs = inputWs;
         const onOpen = () => {
             console.log('Connected to input socket');
