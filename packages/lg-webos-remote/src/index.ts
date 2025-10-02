@@ -83,7 +83,10 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
 
         return new Promise(async (resolve, reject) => {
             // ה-Promise הראשי ימתין לאירוע הרישום הסופי או לשגיאה
-            this.once('registered', () => resolve());
+            this.once('registered', async () => {
+                await input.connectToInputSocket(this);
+                resolve();
+            });
             this.once('error', (err) => reject(err));
             this.once('disconnect', (code, reason) => reject(new Error(`Disconnected with code ${code}: ${reason}`)));
 
@@ -196,7 +199,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
             throw new Error('Not connected to TV');
         }
 
-        const uuid = crypto.randomUUID? crypto.randomUUID(): String(Math.random()).replace('.', '');
+        const uuid = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).replace('.', '');
         message.id ?? (message.id = uuid); // Use global crypto
         this.ws.send(JSON.stringify(message));
         return message.id;

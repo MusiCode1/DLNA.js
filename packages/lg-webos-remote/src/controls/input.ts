@@ -12,7 +12,7 @@ import { getWebSocketImplementation } from "../platform";
  * @param remote - מופע של WebOSRemote.
  * @returns הבטחה שמסתיימת כאשר החיבור נוצר.
  */
-async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
+export async function connectToInputSocket(remote: WebOSRemote): Promise<void> {
     if (remote.inputWs && remote.inputWs.readyState === 1) { // WebSocket.OPEN
         return;
     }
