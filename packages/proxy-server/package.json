@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun run --watch src/index.ts",
-    "build:client": "bun build ./public/remote-control/client.ts --outdir ./public/remote-control/dist"
+    "build:client": "bun build ./public/client.ts --outdir ./public/dist"
   },
   "devDependencies": {
     "@types/bun": "latest",

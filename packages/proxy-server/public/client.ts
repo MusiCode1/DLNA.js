@@ -10,7 +10,17 @@ const dom = {
     statusDiv: document.getElementById('status') as HTMLDivElement,
     certLink: document.getElementById('cert-link') as HTMLAnchorElement,
 
+    // אלמנטים חדשים - בחירת שיטת התחברות
+    manualConnection: document.getElementById('manual-connection') as HTMLDivElement,
+    listConnection: document.getElementById('list-connection') as HTMLDivElement,
+    tvSelect: document.getElementById('tv-select') as HTMLSelectElement,
+    selectedTvDetails: document.getElementById('selected-tv-details') as HTMLDivElement,
+    selectedTvName: document.getElementById('selected-tv-name') as HTMLSpanElement,
+    selectedTvIp: document.getElementById('selected-tv-ip') as HTMLSpanElement,
+    selectedTvMac: document.getElementById('selected-tv-mac') as HTMLSpanElement,
+
     // קונטיינרים ראשיים
+    controlsScreenshotWrapper: document.getElementById('controls-screenshot-wrapper') as HTMLDivElement,
     controlsDiv: document.getElementById('controls') as HTMLDivElement,
     screenshotContainer: document.getElementById('screenshot-container') as HTMLDivElement,
 
@@ -19,6 +29,7 @@ const dom = {
     screenshotButton: document.getElementById('screenshot-btn') as HTMLButtonElement,
     continuousScreenshotCb: document.getElementById('continuous-screenshot-cb') as HTMLInputElement,
     screenshotImg: document.getElementById('screenshot-img') as HTMLImageElement,
+    screenshotPlaceholder: document.getElementById('screenshot-placeholder') as HTMLDivElement,
 
     // הקלדה
     textInput: document.getElementById('text-input') as HTMLInputElement,
@@ -35,18 +46,152 @@ const dom = {
 let remote: WebOSRemote | null = null;
 let continuousScreenshotInterval: number | null = null;
 
+// משתנה גלובלי לשמירת רשימת הטלוויזיות
+let tvListData: Array<{ name: string; ip: string; 'mac-address': string; 'secert-key'?: string }> = [];
+
+// --- TV List Functions ---
+
+/**
+ * טוענת את רשימת הטלוויזיות מהשרת או מ-localStorage
+ */
+async function loadTVList(): Promise<typeof tvListData> {
+    try {
+        // טעינה מהשרת - הנתיב הנכון הוא ./tv-list.json כי הקובץ באותה תיקייה
+        const response = await fetch('./tv-list.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const tvList = await response.json();
+        localStorage.setItem('tv-list', JSON.stringify(tvList));
+        localStorage.setItem('tv-list-timestamp', Date.now().toString());
+        return tvList;
+    } catch (error) {
+        console.error('Error loading TV list from server:', error);
+        // ננסה לטעון מ-localStorage אם קיים
+        const cached = localStorage.getItem('tv-list');
+        if (cached) {
+            console.log('Using cached TV list');
+            return JSON.parse(cached);
+        }
+        console.warn('No TV list available');
+        return [];
+    }
+}
+
+/**
+ * מאתחלת את רשימת הבחירה של הטלוויזיות
+ */
+async function initializeTVSelect() {
+    tvListData = await loadTVList();
+    
+    if (tvListData.length === 0) {
+        dom.tvSelect.innerHTML = '<option value="">לא נמצאו טלוויזיות</option>';
+        dom.tvSelect.disabled = true;
+        return;
+    }
+    
+    dom.tvSelect.innerHTML = '<option value="">בחר טלוויזיה...</option>' +
+        tvListData.map(tv => `<option value="${tv.name}">${tv.name}</option>`).join('');
+    
+    dom.tvSelect.addEventListener('change', () => updateSelectedTVDetails());
+    
+    // אם יש בחירה שמורה, נטען אותה
+    const savedSelection = localStorage.getItem('selected-tv-name');
+    if (savedSelection && tvListData.find(tv => tv.name === savedSelection)) {
+        dom.tvSelect.value = savedSelection;
+        updateSelectedTVDetails();
+    }
+}
+
+/**
+ * מעדכנת את פרטי הטלוויזיה הנבחרת
+ */
+function updateSelectedTVDetails() {
+    const selectedTV = tvListData.find(tv => tv.name === dom.tvSelect.value);
+    
+    if (selectedTV) {
+        dom.selectedTvName.textContent = selectedTV.name;
+        dom.selectedTvIp.textContent = selectedTV.ip;
+        dom.selectedTvMac.textContent = selectedTV['mac-address'];
+        dom.selectedTvDetails.style.display = 'block';
+        
+        // שמירת הבחירה
+        localStorage.setItem('selected-tv-name', selectedTV.name);
+        
+        // עדכון קישור התעודה
+        dom.certLink.href = `https://${selectedTV.ip}:3001`;
+        dom.certLink.style.display = 'inline';
+    } else {
+        dom.selectedTvDetails.style.display = 'none';
+        localStorage.removeItem('selected-tv-name');
+    }
+}
+
+/**
+ * מנהלת מעבר בין שיטות התחברות (ידני / רשימה)
+ */
+function initializeConnectionTypeSwitching() {
+    const radios = document.getElementsByName('connection-type') as NodeListOf<HTMLInputElement>;
+    
+    radios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const target = e.target as HTMLInputElement;
+            if (target.value === 'manual') {
+                dom.manualConnection.style.display = 'block';
+                dom.listConnection.style.display = 'none';
+                updateCertLink(); // עדכון קישור לפי IP ידני
+            } else {
+                dom.manualConnection.style.display = 'none';
+                dom.listConnection.style.display = 'block';
+                updateSelectedTVDetails(); // עדכון קישור לפי בחירה מהרשימה
+            }
+            localStorage.setItem('preferred-connection-type', target.value);
+        });
+    });
+    
+    // טעינת ההעדפה האחרונה
+    const preferred = localStorage.getItem('preferred-connection-type');
+    if (preferred && preferred === 'list') {
+        const radio = document.querySelector('input[name="connection-type"][value="list"]') as HTMLInputElement;
+        if (radio) {
+            radio.checked = true;
+            dom.manualConnection.style.display = 'none';
+            dom.listConnection.style.display = 'block';
+        }
+    }
+}
+
 // --- Core Functions ---
 
 /**
  * מתחבר לטלוויזיה באמצעות ה-IP והמפתח שהוזנו
  */
 async function connect() {
-    const ip = dom.ipInput.value.trim();
-    const clientKey = dom.clientKeyInput.value.trim() || undefined;
-
-    if (!ip) {
-        alert('אנא הכנס כתובת IP של הטלוויזיה.');
-        return;
+    const connectionTypeRadio = document.querySelector('input[name="connection-type"]:checked') as HTMLInputElement;
+    const connectionType = connectionTypeRadio?.value || 'manual';
+    
+    let ip: string;
+    let clientKey: string | undefined;
+    
+    if (connectionType === 'manual') {
+        ip = dom.ipInput.value.trim();
+        clientKey = dom.clientKeyInput.value.trim() || undefined;
+        if (!ip) {
+            alert('אנא הכנס כתובת IP של הטלוויזיה.');
+            return;
+        }
+    } else {
+        const selectedTV = tvListData.find(tv => tv.name === dom.tvSelect.value);
+        if (!selectedTV) {
+            alert('אנא בחר טלוויזיה מהרשימה.');
+            return;
+        }
+        ip = selectedTV.ip;
+        clientKey = selectedTV['secert-key'];
+        
+        // עדכון השדות הידניים למקרה שהמשתמש ירצה לעבור להזנה ידנית
+        dom.ipInput.value = ip;
+        dom.clientKeyInput.value = clientKey || '';
     }
 
     saveSettings();
@@ -166,7 +311,8 @@ async function takeScreenshot() {
         const originalUrl = await remote.takeScreenshot();
         const proxyUrl = `/proxy?url=${encodeURIComponent(originalUrl)}`;
         dom.screenshotImg.src = `${proxyUrl}&t=${new Date().getTime()}`;
-        dom.screenshotContainer.style.display = 'flex';
+        dom.screenshotImg.style.display = 'block';
+        dom.screenshotPlaceholder.style.display = 'none';
     } catch (error) {
         handleRemoteError(error as Error);
         stopContinuousScreenshot();
@@ -257,9 +403,8 @@ function updateStatus(message: string, type: 'prompt' | 'connected' | 'disconnec
  */
 function updateUIForConnectionState(isConnected: boolean) {
     dom.connectButton.disabled = isConnected;
-    dom.controlsDiv.style.display = isConnected ? 'block' : 'none';
+    dom.controlsScreenshotWrapper.style.display = isConnected ? 'flex' : 'none';
     if (!isConnected) {
-        dom.screenshotContainer.style.display = 'none';
         stopContinuousScreenshot();
     }
 }
@@ -318,6 +463,10 @@ function handleRemoteError(err: Error) {
 function main() {
     loadSettings();
     setupUIEventListeners();
+    
+    // אתחול רכיבי הבחירה
+    initializeConnectionTypeSwitching();
+    initializeTVSelect();
 }
 
 // הרצת האפליקציה לאחר שה-DOM נטען במלואו

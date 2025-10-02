@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Turciz-Basement",
+    "ip": "192.168.1.41",
+    "mac-address": "48:9E:9D:FB:F7:98",
+    "secert-key": "e6d865a8129fc69d17db75829985ad14"
+  },
+  {
+    "name": "Turciz-Living-Room",
+    "ip": "192.168.1.42",
+    "mac-address": "48:9E:9D:FB:F7:CC",
+    "secert-key": "7971b54a460430a87ed9207ed314cada"
+  },
+  {
+    "name": "Galim-Living-Room",
+    "ip": "192.168.1.43",
+    "mac-address": "54:77:87:C7:C0:D8",
+    "secert-key": "b4ada0780d39a6bb5361deeabff6649c"
+  }
+]

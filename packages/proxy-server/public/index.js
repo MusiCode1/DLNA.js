@@ -1,8 +1,121 @@
-//import { WebOSRemoteClient } from "./client.js";
+import { WebOSRemoteClient } from "./client.js";
+// משתנה גלובלי לשמירת רשימת הטלוויזיות
+let tvListData = [];
+
+// טעינת רשימת הטלוויזיות מהשרת או מ-localStorage
+async function loadTVList() {
+    try {
+        // טעינה מהשרת - הנתיב הנכון הוא ./tv-list.json כי הקובץ באותה תיקייה
+        const response = await fetch('./tv-list.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const tvList = await response.json();
+        localStorage.setItem('tv-list', JSON.stringify(tvList));
+        localStorage.setItem('tv-list-timestamp', Date.now().toString());
+        return tvList;
+    } catch (error) {
+        console.error('Error loading TV list from server:', error);
+        // ננסה לטעון מ-localStorage אם קיים
+        const cached = localStorage.getItem('tv-list');
+        if (cached) {
+            console.log('Using cached TV list');
+            return JSON.parse(cached);
+        }
+        console.warn('No TV list available');
+        return [];
+    }
+}
+
+// אתחול הרשימה הנגללת
+async function initializeTVSelect() {
+    const select = document.getElementById('tv-select');
+    tvListData = await loadTVList();
+    
+    if (tvListData.length === 0) {
+        select.innerHTML = '<option value="">לא נמצאו טלוויזיות</option>';
+        select.disabled = true;
+        return;
+    }
+    
+    select.innerHTML = '<option value="">בחר טלוויזיה...</option>' +
+        tvListData.map(tv => `<option value="${tv.name}">${tv.name}</option>`).join('');
+    
+    select.addEventListener('change', () => updateSelectedTVDetails());
+    
+    // אם יש בחירה שמורה, נטען אותה
+    const savedSelection = localStorage.getItem('selected-tv-name');
+    if (savedSelection && tvListData.find(tv => tv.name === savedSelection)) {
+        select.value = savedSelection;
+        updateSelectedTVDetails();
+    }
+}
+
+// עדכון פרטי הטלוויזיה הנבחרת
+function updateSelectedTVDetails() {
+    const select = document.getElementById('tv-select');
+    const details = document.getElementById('selected-tv-details');
+    const certLink = document.getElementById('cert-link');
+    const selectedTV = tvListData.find(tv => tv.name === select.value);
+    
+    if (selectedTV) {
+        document.getElementById('selected-tv-name').textContent = selectedTV.name;
+        document.getElementById('selected-tv-ip').textContent = selectedTV.ip;
+        document.getElementById('selected-tv-mac').textContent = selectedTV['mac-address'];
+        details.style.display = 'block';
+        
+        // שמירת הבחירה
+        localStorage.setItem('selected-tv-name', selectedTV.name);
+        
+        // עדכון קישור התעודה
+        certLink.href = `https://${selectedTV.ip}:3001`;
+        certLink.style.display = 'inline';
+    } else {
+        details.style.display = 'none';
+        localStorage.removeItem('selected-tv-name');
+    }
+}
+
+// ניהול מעבר בין שיטות התחברות
+function initializeConnectionTypeSwitching() {
+    const radios = document.getElementsByName('connection-type');
+    const manualForm = document.getElementById('manual-connection');
+    const listForm = document.getElementById('list-connection');
+    
+    radios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (e.target.value === 'manual') {
+                manualForm.style.display = 'block';
+                listForm.style.display = 'none';
+                updateCertLink(); // עדכון קישור לפי IP ידני
+            } else {
+                manualForm.style.display = 'none';
+                listForm.style.display = 'block';
+                updateSelectedTVDetails(); // עדכון קישור לפי בחירה מהרשימה
+            }
+            localStorage.setItem('preferred-connection-type', e.target.value);
+        });
+    });
+    
+    // טעינת ההעדפה האחרונה
+    const preferred = localStorage.getItem('preferred-connection-type');
+    if (preferred && preferred === 'list') {
+        const radio = document.querySelector('input[name="connection-type"][value="list"]');
+        if (radio) {
+            radio.checked = true;
+            manualForm.style.display = 'none';
+            listForm.style.display = 'block';
+        }
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     
     const remote = new WebOSRemoteClient();
+
+    // אתחול רכיבי הבחירה
+    initializeConnectionTypeSwitching();
+    initializeTVSelect();
 
     const tvIpInput = document.getElementById('tv-ip');
     const clientKeyInput = document.getElementById('client-key');
@@ -59,12 +172,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- UI Event Listeners ---
     connectBtn.addEventListener('click', () => {
-        const ip = tvIpInput.value.trim();
-        const key = clientKeyInput.value.trim();
-        if (!ip) {
-            alert("אנא הכנס כתובת IP.");
-            return;
+        const connectionType = document.querySelector('input[name="connection-type"]:checked').value;
+        let ip, key;
+        
+        if (connectionType === 'manual') {
+            ip = tvIpInput.value.trim();
+            key = clientKeyInput.value.trim();
+            if (!ip) {
+                alert("אנא הכנס כתובת IP.");
+                return;
+            }
+        } else {
+            const select = document.getElementById('tv-select');
+            const selectedTV = tvListData.find(tv => tv.name === select.value);
+            if (!selectedTV) {
+                alert("אנא בחר טלוויזיה מהרשימה.");
+                return;
+            }
+            ip = selectedTV.ip;
+            key = selectedTV['secert-key'];
+            
+            // עדכון השדות הידניים למקרה שהמשתמש ירצה לעבור להזנה ידנית
+            tvIpInput.value = ip;
+            clientKeyInput.value = key;
         }
+        
         remote.connect(ip, key);
     });
 

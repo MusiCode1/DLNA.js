@@ -1,66 +1,671 @@
 <!DOCTYPE html>
-<html lang="he">
+<html lang="he" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LG WebOS Remote Control</title>
+    <title>LG WebOS - שלט רחוק</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
-        h1, h2 { color: #333; }
-        #controls, #status-container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        select, button { padding: 10px 15px; margin: 5px; border-radius: 5px; border: 1px solid #ddd; cursor: pointer; font-size: 16px; }
-        button { background-color: #007bff; color: white; border-color: #007bff; }
-        button:hover { background-color: #0056b3; }
-        .control-group { margin-bottom: 15px; }
-        .control-group h3 { margin-top: 0; color: #555; }
-        #status { border: 1px solid #eee; padding: 10px; min-height: 50px; background-color: #fafafa; border-radius: 5px; }
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            width: 100%;
+            /* max-width: 1000px; */
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        h1,
+        h2 {
+            color: #1c1e21;
+            text-align: center;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            background-color: #1877f2;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #166fe5;
+        }
+
+        button:disabled {
+            background-color: #e4e6eb;
+            color: #bcc0c4;
+            cursor: not-allowed;
+        }
+
+        .grid-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* D-pad עגול - Container */
+        .navigation-controls {
+            display: flex;
+            flex-direction: row;
+            gap: 40px;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .d-pad-circular-container {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .d-pad-circular-bg {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #f0f2f5 0%, #e4e6eb 100%);
+            border-radius: 50%;
+            position: relative;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .d-pad-btn {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #1877f2;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .d-pad-btn:hover:not(:disabled) {
+            background-color: #166fe5;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .d-pad-btn:active:not(:disabled) {
+            opacity: 0.8;
+        }
+
+        .d-pad-up {
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .d-pad-down {
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .d-pad-left {
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .d-pad-right {
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .d-pad-center {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 65px;
+            height: 65px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        /* Volume Controls */
+        .volume-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .volume-controls button {
+            min-width: 100px;
+            padding: 10px 16px;
+            font-size: 15px;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .status.connected {
+            background-color: #e7f3ff;
+            color: #1877f2;
+        }
+
+        .status.disconnected {
+            background-color: #fbe9e7;
+            color: #d32f2f;
+        }
+
+        .status.prompt {
+            background-color: #fff9c4;
+            color: #f57f17;
+        }
+
+        #toast-input {
+            display: none;
+            margin-top: 10px;
+        }
+
+        #main-content-wrapper {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            align-items: stretch;
+        }
+
+        #left-column {
+            width: 100%;
+        }
+
+        /* בדסקטופ - wrapper אופקי */
+        #controls-screenshot-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        @media (min-width: 769px) {
+            /* בדסקטופ - wrapper אופקי */
+            #controls-screenshot-wrapper {
+                flex-direction: row;
+            }
+
+            /* בדסקטופ - צילום מסך תופס יותר מקום */
+            #screenshot-container {
+                flex: 3 !important;
+            }
+
+            #controls {
+                flex: 1 !important;
+            }
+        }
+        /* === סגנונות לבחירת שיטת התחברות === */
+        .connection-type-selector {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .radio-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 10px 20px;
+            border-radius: 20px;
+            background-color: #f0f2f5;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            user-select: none;
+        }
+
+        .radio-button:hover {
+            background-color: #e4e6eb;
+        }
+
+        .radio-button input[type="radio"]:checked + span {
+            font-weight: bold;
+        }
+
+        .radio-button:has(input[type="radio"]:checked) {
+            background-color: #e7f3ff;
+            box-shadow: 0 0 0 2px #1877f2;
+        }
+
+        .radio-button input[type="radio"] {
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .connection-form {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .tv-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .tv-select:focus {
+            outline: none;
+            border-color: #1877f2;
+            box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
+        }
+
+        .tv-details {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f7f8fa;
+            border-radius: 6px;
+            border: 1px solid #dddfe2;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .detail-row {
+            display: flex;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .detail-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            min-width: 80px;
+            color: #1c1e21;
+        }
+
+        .detail-value {
+            color: #65676b;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* === סגנונות נוספים === */
+
+        /* כפתור כיבוי באדום */
+        .power-off-btn {
+            background-color: #d32f2f !important;
+        }
+
+        .power-off-btn:hover:not(:disabled) {
+            background-color: #c62828 !important;
+        }
+
+        /* פעולות מהירות */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* בקרת צילום מסך */
+        .screenshot-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .screenshot-controls button {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .screenshot-controls label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* === רספונסיביות למובייל === */
+        @media (max-width: 768px) {
+            button {
+                min-height: 48px;
+                min-width: 48px;
+                font-size: 18px;
+                padding: 12px 24px;
+            }
+
+            input[type="text"], .tv-select {
+                min-height: 48px;
+                font-size: 18px;
+                padding: 12px;
+            }
+
+            /* D-pad עגול גדול יותר למגע */
+            .navigation-controls {
+                flex-direction: column;
+                gap: 30px;
+            }
+
+            .d-pad-circular-container {
+                width: 250px;
+                height: 250px;
+            }
+
+            .d-pad-btn {
+                width: 65px;
+                height: 65px;
+                font-size: 28px;
+            }
+
+            .d-pad-center {
+                width: 80px;
+                height: 80px;
+                font-size: 20px;
+            }
+
+            .volume-controls {
+                width: 100%;
+                max-width: 250px;
+            }
+
+            .volume-controls button {
+                min-height: 55px;
+                font-size: 18px;
+                width: 100%;
+            }
+
+            /* כפתורי הפקדים */
+            .grid-controls button {
+                min-height: 48px;
+                font-size: 16px;
+            }
+
+            .quick-actions {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            /* מרווחים גדולים יותר */
+            .card {
+                padding: 16px;
+                margin-bottom: 16px;
+            }
+
+            .input-group {
+                gap: 12px;
+                margin-bottom: 16px;
+            }
+
+            /* במובייל - צילום מסך מעל פקדים */
+            #screenshot-container {
+                order: 1;
+            }
+
+            #controls {
+                order: 2;
+            }
+        }
+
+        /* טאבלטים */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .d-pad-circular-container {
+                width: 220px;
+                height: 220px;
+            }
+
+            .d-pad-btn {
+                width: 55px;
+                height: 55px;
+                font-size: 26px;
+            }
+
+            .d-pad-center {
+                width: 70px;
+                height: 70px;
+            }
+        }
+
+        /* שיפורי עיצוב כלליים */
+        .card {
+            transition: box-shadow 0.2s ease-in-out;
+        }
+
+        .card:hover {
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        button {
+            transition: all 0.2s ease-in-out;
+        }
+
+        button:hover:not(:disabled) {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        button:active:not(:disabled) {
+            opacity: 0.8;
+        }
+
+        input[type="text"]:focus, .tv-select:focus {
+            transform: scale(1.01);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .status {
+            transition: all 0.3s ease-in-out;
+        }
     </style>
 </head>
+
 <body>
-    <h1>LG WebOS Remote Control</h1>
+    <div class="container">
+        <h1>שלט רחוק WebOS</h1>
 
-    <div id="connection-setup">
-        <h2>בחר טלוויזיה</h2>
-        <select id="tv-select">
-            <option value="">-- בחר טלוויזיה --</option>
-        </select>
-        <button id="connect-btn">התחבר</button>
+        <div id="main-content-wrapper">
+            <div id="left-column" style="flex: 2; display: flex; flex-direction: column; max-width: 400px;">
+                <div class="card">
+                    <h2>התחברות</h2>
+                    
+                    <!-- כפתורי בחירת שיטת התחברות -->
+                    <div class="connection-type-selector">
+                        <label class="radio-button">
+                            <input type="radio" name="connection-type" value="manual" checked>
+                            <span>הזנה ידנית</span>
+                        </label>
+                        <label class="radio-button">
+                            <input type="radio" name="connection-type" value="list">
+                            <span>בחירה מרשימה</span>
+                        </label>
+                    </div>
+
+                    <!-- טופס הזנה ידנית -->
+                    <div id="manual-connection" class="connection-form">
+                        <div class="input-group">
+                            <input type="text" id="tv-ip" placeholder="הכנס כתובת IP של הטלוויזיה">
+                            <input type="text" id="client-key" placeholder="מפתח לקוח (אופציונלי)">
+                        </div>
+                    </div>
+
+                    <!-- טופס בחירה מרשימה -->
+                    <div id="list-connection" class="connection-form" style="display: none;">
+                        <div class="input-group">
+                            <select id="tv-select" class="tv-select">
+                                <option value="">בחר טלוויזיה...</option>
+                            </select>
+                        </div>
+                        <!-- פרטי הטלוויזיה הנבחרת -->
+                        <div id="selected-tv-details" class="tv-details" style="display: none;">
+                            <div class="detail-row">
+                                <span class="detail-label">שם:</span>
+                                <span class="detail-value" id="selected-tv-name"></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">IP:</span>
+                                <span class="detail-value" id="selected-tv-ip"></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">MAC:</span>
+                                <span class="detail-value" id="selected-tv-mac"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <button id="connect-btn">התחבר</button>
+                    </div>
+
+                    <p><strong>הערה:</strong> אם זו הפעם הראשונה, יש לאשר את החריגה האבטחתית בדפדפן.
+                        <a id="cert-link" href="#" target="_blank" style="display: none;">פתח קישור לאישור תעודה</a>.</p>
+                    <div id="status" class="status disconnected">לא מחובר</div>
+                </div>
+            </div>
+            
+            <!-- Wrapper משותף לפקדים וצילום מסך -->
+            <div id="controls-screenshot-wrapper" style="display: none; gap: 20px; flex: 1;">
+                <div id="screenshot-container" class="card" style="flex: 1; display: flex; flex-direction: column;">
+                    <h2>צילום מסך</h2>
+                    <div style="position: relative; flex-grow: 1; min-height: 200px; display: flex; align-items: center; justify-content: center; background-color: #f0f2f5; border-radius: 6px;">
+                        <img id="screenshot-img" src="" alt="צילום מסך"
+                            style="width: 100%; height: 100%; border-radius: 6px; object-fit: contain; position: absolute; top: 0; left: 0; display: none;">
+                        <div id="screenshot-placeholder" style="text-align: center; color: #65676b;">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                            <p style="margin-top: 10px;">צילום מסך יוצג כאן</p>
+                        </div>
+                    </div>
+                </div>
+                    
+                    <div id="controls" class="card" style="flex: 1;">
+                        <h2>ניווט ושמע</h2>
+                        <!-- אזור ניווט ראשי: D-pad + Volume -->
+                        <div class="navigation-controls">
+                            <!-- D-pad עגול -->
+                            <div class="d-pad-circular-container">
+                                <div class="d-pad-circular-bg">
+                                    <button data-button="UP" class="d-pad-btn d-pad-up">▲</button>
+                                    <button data-button="LEFT" class="d-pad-btn d-pad-left">◄</button>
+                                    <button data-button="ENTER" class="d-pad-btn d-pad-center">OK</button>
+                                    <button data-button="RIGHT" class="d-pad-btn d-pad-right">►</button>
+                                    <button data-button="DOWN" class="d-pad-btn d-pad-down">▼</button>
+                                </div>
+                            </div>
+
+                            <!-- לחצני ווליום -->
+                            <div class="volume-controls">
+                                <button data-uri="ssap://audio/volumeUp">Volume +</button>
+                                <button data-uri="ssap://audio/volumeDown">Volume -</button>
+                            </div>
+                        </div>
+
+                        <h2>פעולות מהירות</h2>
+                        <!-- חזור, בית, השתק, בטל השתקה -->
+                        <div class="quick-actions">
+                            <button data-button="BACK">חזור</button>
+                            <button data-button="HOME">בית</button>
+                            <button data-uri="ssap://audio/setMute" data-payload='{"mute": true}'>השתק</button>
+                            <button data-uri="ssap://audio/setMute" data-payload='{"mute": false}'>בטל השתקה</button>
+                        </div>
+
+                        <h2>מערכת ותצוגה</h2>
+                        <!-- צילום מסך, הודעה, כיבוי -->
+                        <div class="grid-controls">
+                            <div class="screenshot-controls">
+                                <button id="screenshot-btn">צלם מסך</button>
+                                <label for="continuous-screenshot-cb">
+                                    <input type="checkbox" id="continuous-screenshot-cb" title="צלם ברצף">
+                                    <span>רצף</span>
+                                </label>
+                            </div>
+                            <button id="show-toast-btn">הצג הודעה</button>
+                            <button data-uri="ssap://system/turnOff" class="power-off-btn">כיבוי</button>
+                        </div>
+
+                        <h2>הקלדה</h2>
+                        <div class="input-group">
+                            <input type="text" id="text-input" placeholder="הקלד כאן..." style="flex-grow: 1;">
+                            <button id="enter-btn">שלח Enter</button>
+                            <button id="delete-btn">מחק תו</button>
+                        </div>
+
+                        <div id="toast-input" class="input-group">
+                            <input type="text" id="toast-message" placeholder="הודעה להצגה">
+                            <button id="send-toast-btn">שלח</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div id="controls" style="display: none;">
-        <h2>פקדים</h2>
-        <div class="control-group">
-            <h3>שמע</h3>
-            <button data-command='{"type": "request", "uri": "ssap://audio/volumeUp"}'>הגבר שמע</button>
-            <button data-command='{"type": "request", "uri": "ssap://audio/volumeDown"}'>הנמך שמע</button>
-            <button data-command='{"type": "request", "uri": "ssap://audio/setMute", "payload": {"mute": true}}'>השתק</button>
-            <button data-command='{"type": "request", "uri": "ssap://audio/setMute", "payload": {"mute": false}}'>בטל השתקה</button>
-        </div>
-        <div class="control-group">
-            <h3>ניווט</h3>
-            <button data-command='{"type": "button", "name": "UP"}'>למעלה</button>
-            <button data-command='{"type": "button", "name": "DOWN"}'>למטה</button>
-            <button data-command='{"type": "button", "name": "LEFT"}'>שמאלה</button>
-            <button data-command='{"type": "button", "name": "RIGHT"}'>ימינה</button>
-            <button data-command='{"type": "button", "name": "ENTER"}'>אישור</button>
-            <button data-command='{"type": "button", "name": "BACK"}'>חזור</button>
-        </div>
-        <div class="control-group">
-            <h3>מערכת</h3>
-            <button data-command='{"type": "request", "uri": "ssap://system/turnOff"}'>כיבוי</button>
-            <button id="show-toast-btn">הצג הודעה</button>
-        </div>
-        <div class="control-group">
-            <h3>אפליקציות</h3>
-            <button data-command='{"type": "request", "uri": "ssap://system.launcher/launch", "payload": {"id": "youtube.leanback.v4"}}'>הפעל YouTube</button>
-        </div>
-    </div>
+    <script src="./dist/client.js" type="module"></script>
 
-    <div id="status-container">
-        <h2>סטטוס</h2>
-        <div id="status">לא מחובר</div>
-    </div>
-
-    <script src="main.js"></script>
 </body>
+
 </html>
