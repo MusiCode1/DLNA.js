@@ -123,12 +123,21 @@ class WebOSRemoteClient extends EventTarget {
         super.dispatchEvent(event);
     }
 
-    connect(ip, clientKey) {
+    connect(ip, clientKey, useProxy = false, proxyUrl = 'ws://localhost:3005/ws') {
         if (this.ws) {
             this.disconnect();
         }
 
-        const url = `wss://${ip}:3001`;
+        let url;
+        if (useProxy) {
+            // שימוש בפרוקסי - מעביר את כתובת הטלוויזיה כפרמטר
+            const targetUrl = `wss://${ip}:3001`;
+            url = `${proxyUrl}?targetUrl=${encodeURIComponent(targetUrl)}`;
+        } else {
+            // חיבור ישיר לטלוויזיה
+            url = `wss://${ip}:3001`;
+        }
+        
         this.dispatchEvent(new CustomEvent('status', { detail: { message: 'מתחבר...', type: 'prompt' } }));
 
         this.ws = new WebSocket(url);
@@ -216,7 +225,7 @@ class WebOSRemoteClient extends EventTarget {
             }
 
             const uuid = crypto.randomUUID? crypto.randomUUID(): String(Math.random()).replace('.', '');
-            const id = `${type}-${++this.messageId}-${uuid}`;
+            const id = uuid; // `${type}-${++this.messageId}-${uuid}`;
             const message = { id, type, uri, payload };
             const msgTxt = JSON.stringify(message);
 
@@ -226,7 +235,7 @@ class WebOSRemoteClient extends EventTarget {
                 timeout: setTimeout(() => {
                     this.pendingRequests.delete(id);
                     reject(new Error("Request timed out"));
-                }, 5000)
+                }, 20_000)
             });
 
             console.log('Sending message:', msgTxt);
