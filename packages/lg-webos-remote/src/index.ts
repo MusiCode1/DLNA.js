@@ -52,7 +52,7 @@ export class WebOSRemote extends EventEmitter<WebOSRemoteEvents> {
     constructor(config: WebOSRemoteConfig) {
         super();
         this.config = {
-            pairingType: 'PIN',
+            pairingType: 'PIN', // 'PIN' או 'PROMPT'
             timeout: 5000, // ברירת מחדל של 5 שניות
             ...config,
         };
