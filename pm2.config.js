@@ -5,13 +5,14 @@ const config = {
     apps: [
         {
             name: "backendServer",
-            script: "./src/index.ts", // נתיב יחסי לנתיב העבודה
-            cwd: './packages/server',
-            interpreter: "C:/programs/bun.exe",
-            /* script: "C:/programs/bun.exe", */
-            /* args: [
+            /*script: "./src/index.ts", // נתיב יחסי לנתיב העבודה
+            cwd: 'C:/programs/DLNA.js/DLNA.js/packages/server',
+            interpreter: "C:/programs/bun.exe",*/
+            script: "C:/programs/bun.exe",
+            cwd: 'C:/programs/DLNA.js/DLNA.js',
+            args: [
                 "run", "start"
-            ], */
+            ],
             env: {
             },
 
