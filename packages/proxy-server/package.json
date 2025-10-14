@@ -20,6 +20,7 @@
     "hono": "^4.7.11",
     "lg-webos-remote": "workspace:*",
     "ws": "^8.18.2",
-    "axios": "^1.7.2"
+    "axios": "^1.7.2",
+    "wake-on-lan": "workspace:*"
   }
 }
