@@ -235,21 +235,20 @@ app.post('/api/wake', async (c) => {
         };
       }
       console.log(`[wake:${requestId}] WoL packet dispatched successfully.`);
-      if (waitBeforePingSeconds > 0) {
-        await delay(waitBeforePingSeconds * 1000);
-      }
     } else {
       console.log(`[wake:${requestId}] Dry run enabled; skipping WoL packet.`);
     }
 
-    const pingOutcome = dryRun
-      ? true
-      : await checkPingWithRetries(
-          ipAddress,
-          pingTotalTimeoutSeconds,
-          pingIntervalSeconds,
-          pingSingleTimeoutSeconds
-        );
+    if (waitBeforePingSeconds > 0) {
+      await delay(waitBeforePingSeconds * 1000);
+    }
+
+    const pingOutcome = await checkPingWithRetries(
+      ipAddress,
+      pingTotalTimeoutSeconds,
+      pingIntervalSeconds,
+      pingSingleTimeoutSeconds
+    );
 
     console.log(`[wake:${requestId}] Ping outcome: ${pingOutcome ? 'alive' : 'offline'}.`);
     return {

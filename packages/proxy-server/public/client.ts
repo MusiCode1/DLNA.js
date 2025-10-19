@@ -6,9 +6,13 @@ const dom = {
     // התחברות וסטטוס
     ipInput: document.getElementById('tv-ip') as HTMLInputElement,
     clientKeyInput: document.getElementById('client-key') as HTMLInputElement,
+    macInput: document.getElementById('tv-mac') as HTMLInputElement,
     connectButton: document.getElementById('connect-btn') as HTMLButtonElement,
+    wakeButton: document.getElementById('wake-btn') as HTMLButtonElement,
     statusDiv: document.getElementById('status') as HTMLDivElement,
     certLink: document.getElementById('cert-link') as HTMLAnchorElement,
+    powerStatusIndicator: document.getElementById('power-status-indicator') as HTMLDivElement,
+    powerStatusText: document.getElementById('power-status-text') as HTMLSpanElement,
 
     // אלמנטים חדשים - בחירת שיטת התחברות
     manualConnection: document.getElementById('manual-connection') as HTMLDivElement,
@@ -49,6 +53,102 @@ let continuousScreenshotInterval: number | null = null;
 // משתנה גלובלי לשמירת רשימת הטלוויזיות
 let tvListData: Array<{ name: string; ip: string; 'mac-address': string; 'secert-key'?: string }> = [];
 
+type PowerState = 'unknown' | 'checking' | 'waking' | 'awake' | 'offline' | 'error';
+let currentPowerState: PowerState = 'unknown';
+let isWakeInProgress = false;
+let isPowerCheckInProgress = false;
+let powerStatusRefreshTimeout: number | null = null;
+
+const POWER_STATE_CLASSES: Record<PowerState, string> = {
+    unknown: 'power-status power-status--unknown',
+    checking: 'power-status power-status--loading',
+    waking: 'power-status power-status--loading',
+    awake: 'power-status power-status--on',
+    offline: 'power-status power-status--off',
+    error: 'power-status power-status--error',
+};
+
+const POWER_STATE_MESSAGES: Record<PowerState, string> = {
+    unknown: 'מצב המסך לא ידוע',
+    checking: 'בודק האם המסך פעיל...',
+    waking: 'מפעיל את המסך...',
+    awake: 'המסך כרגע דולק',
+    offline: 'המסך כבוי או לא מגיב',
+    error: 'שגיאה בבדיקת מצב המסך',
+};
+
+const MAC_REGEX = /^([0-9A-Fa-f]{2}([-:])){5}([0-9A-Fa-f]{2})$/;
+const IPV4_REGEX = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+
+function setPowerState(state: PowerState, message?: string) {
+    currentPowerState = state;
+    dom.powerStatusIndicator.className = POWER_STATE_CLASSES[state];
+    dom.powerStatusText.textContent = message ?? POWER_STATE_MESSAGES[state];
+}
+
+function getActiveConnectionType(): 'manual' | 'list' {
+    const radio = document.querySelector('input[name="connection-type"]:checked') as HTMLInputElement | null;
+    return radio?.value === 'list' ? 'list' : 'manual';
+}
+
+function normalizeMac(mac: string): string {
+    const cleaned = mac.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+    if (cleaned.length === 12) {
+        return cleaned.match(/.{1,2}/g)!.join(':');
+    }
+    return mac.replace(/-/g, ':').toUpperCase();
+}
+
+function isValidMac(mac: string | null | undefined): mac is string {
+    return !!mac && MAC_REGEX.test(mac);
+}
+
+function isValidIp(ip: string | null | undefined): ip is string {
+    if (!ip || !IPV4_REGEX.test(ip)) return false;
+    return ip.split('.').every((segment) => {
+        const value = Number(segment);
+        return value >= 0 && value <= 255;
+    });
+}
+
+function getCurrentTarget() {
+    const connectionType = getActiveConnectionType();
+    if (connectionType === 'list') {
+        const tv = tvListData.find((item) => item.name === dom.tvSelect.value);
+        if (!tv) {
+            return { ip: null, mac: null, name: null };
+        }
+        return {
+            ip: tv.ip.trim(),
+            mac: normalizeMac(tv['mac-address'] || ''),
+            name: tv.name,
+        };
+    }
+
+    const ip = dom.ipInput.value.trim();
+    const mac = normalizeMac(dom.macInput.value.trim());
+    return {
+        ip,
+        mac,
+        name: null,
+    };
+}
+
+function updateWakeButtonState() {
+    const { ip, mac } = getCurrentTarget();
+    const hasTarget = isValidIp(ip) && isValidMac(mac);
+    dom.wakeButton.disabled = !hasTarget || isWakeInProgress || isPowerCheckInProgress;
+}
+
+function schedulePowerStatusRefresh(delayMs: number = 0) {
+    if (powerStatusRefreshTimeout !== null) {
+        window.clearTimeout(powerStatusRefreshTimeout);
+    }
+    powerStatusRefreshTimeout = window.setTimeout(() => {
+        powerStatusRefreshTimeout = null;
+        checkPowerStatus();
+    }, delayMs);
+}
 // --- TV List Functions ---
 
 /**
@@ -87,6 +187,7 @@ async function initializeTVSelect() {
     if (tvListData.length === 0) {
         dom.tvSelect.innerHTML = '<option value="">לא נמצאו טלוויזיות</option>';
         dom.tvSelect.disabled = true;
+        updateWakeButtonState();
         return;
     }
     
@@ -101,6 +202,8 @@ async function initializeTVSelect() {
         dom.tvSelect.value = savedSelection;
         updateSelectedTVDetails();
     }
+
+    updateWakeButtonState();
 }
 
 /**
@@ -121,9 +224,22 @@ function updateSelectedTVDetails() {
         // עדכון קישור התעודה
         dom.certLink.href = `https://${selectedTV.ip}:3001`;
         dom.certLink.style.display = 'inline';
+
+        // עדכון שדות ידניים ושמירת כתובת MAC
+        dom.ipInput.value = selectedTV.ip;
+        const normalizedMac = normalizeMac(selectedTV['mac-address'] || '');
+        dom.macInput.value = normalizedMac;
+        localStorage.setItem('lg-tv-ip', dom.ipInput.value);
+        localStorage.setItem('lg-tv-mac', normalizedMac);
+
+        setPowerState('checking');
+        updateWakeButtonState();
+        schedulePowerStatusRefresh(150);
     } else {
         dom.selectedTvDetails.style.display = 'none';
         localStorage.removeItem('selected-tv-name');
+        setPowerState('unknown');
+        updateWakeButtonState();
     }
 }
 
@@ -140,6 +256,11 @@ function initializeConnectionTypeSwitching() {
                 dom.manualConnection.style.display = 'block';
                 dom.listConnection.style.display = 'none';
                 updateCertLink(); // עדכון קישור לפי IP ידני
+                setPowerState('unknown');
+                updateWakeButtonState();
+                if (isValidIp(dom.ipInput.value.trim()) && isValidMac(normalizeMac(dom.macInput.value.trim()))) {
+                    schedulePowerStatusRefresh(0);
+                }
             } else {
                 dom.manualConnection.style.display = 'none';
                 dom.listConnection.style.display = 'block';
@@ -157,6 +278,153 @@ function initializeConnectionTypeSwitching() {
             radio.checked = true;
             dom.manualConnection.style.display = 'none';
             dom.listConnection.style.display = 'block';
+            updateSelectedTVDetails();
+        }
+    }
+
+    updateWakeButtonState();
+}
+
+async function checkPowerStatus() {
+    const { ip, mac } = getCurrentTarget();
+    if (!isValidIp(ip) || !isValidMac(mac)) {
+        setPowerState('unknown');
+        return;
+    }
+
+    if (isWakeInProgress || isPowerCheckInProgress) {
+        return;
+    }
+
+    isPowerCheckInProgress = true;
+    updateWakeButtonState();
+    setPowerState('checking');
+
+    try {
+        const response = await fetch('/api/wake', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                ipAddress: ip,
+                macAddress: mac,
+                waitBeforePingSeconds: 0,
+                pingTotalTimeoutSeconds: 6,
+                pingIntervalSeconds: 1,
+                pingSingleTimeoutSeconds: 1,
+                dryRun: true,
+            }),
+        });
+
+        let data: any = null;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            console.warn('Failed to parse power status response as JSON.', jsonError);
+        }
+
+        if (!response.ok) {
+            const message = data?.message ?? 'שגיאה בבדיקת מצב המסך.';
+            setPowerState('error', message);
+            return;
+        }
+
+        switch (data?.status) {
+            case 'awake':
+                setPowerState('awake', data?.message ?? POWER_STATE_MESSAGES.awake);
+                break;
+            case 'offline':
+                setPowerState('offline', data?.message ?? POWER_STATE_MESSAGES.offline);
+                break;
+            case 'timeout':
+                setPowerState('offline', data?.message ?? 'הטלוויזיה לא הגיבה בזמן.');
+                break;
+            default:
+                setPowerState('error', data?.message ?? 'תגובה לא מוכרת מהשרת.');
+                break;
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setPowerState('error', `שגיאת רשת: ${message}`);
+    } finally {
+        isPowerCheckInProgress = false;
+        updateWakeButtonState();
+    }
+}
+
+async function wakeTv() {
+    if (isWakeInProgress || isPowerCheckInProgress) {
+        return;
+    }
+
+    const { ip, mac } = getCurrentTarget();
+    if (!isValidIp(ip)) {
+        alert('אנא הזן כתובת IP תקינה לפני הפעלת המסך.');
+        return;
+    }
+
+    if (!isValidMac(mac)) {
+        alert('אנא הזן כתובת MAC תקינה (לדוגמה AA:BB:CC:DD:EE:FF).');
+        return;
+    }
+
+    isWakeInProgress = true;
+    updateWakeButtonState();
+    setPowerState('waking');
+
+    try {
+        const response = await fetch('/api/wake', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                ipAddress: ip,
+                macAddress: mac,
+                waitBeforePingSeconds: 5,
+                pingTotalTimeoutSeconds: 45,
+                pingIntervalSeconds: 3,
+                pingSingleTimeoutSeconds: 3,
+                dryRun: false,
+            }),
+        });
+
+        let data: any = null;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            console.warn('Failed to parse wake response as JSON.', jsonError);
+        }
+
+        if (!response.ok) {
+            const message = data?.message ?? 'שליחת Wake-on-LAN נכשלה.';
+            setPowerState('error', message);
+            return;
+        }
+
+        switch (data?.status) {
+            case 'awake':
+                setPowerState('awake', data?.message ?? POWER_STATE_MESSAGES.awake);
+                break;
+            case 'offline':
+                setPowerState('offline', data?.message ?? POWER_STATE_MESSAGES.offline);
+                break;
+            case 'timeout':
+                setPowerState('error', data?.message ?? 'הפעולה חרגה ממגבלת הזמן.');
+                break;
+            default:
+                setPowerState('error', data?.message ?? 'תגובה לא מוכרת מהשרת.');
+                break;
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setPowerState('error', `שגיאת רשת: ${message}`);
+    } finally {
+        isWakeInProgress = false;
+        updateWakeButtonState();
+        if (currentPowerState !== 'awake' && !isPowerCheckInProgress) {
+            schedulePowerStatusRefresh(5000);
         }
     }
 }
@@ -192,6 +460,7 @@ async function connect() {
         // עדכון השדות הידניים למקרה שהמשתמש ירצה לעבור להזנה ידנית
         dom.ipInput.value = ip;
         dom.clientKeyInput.value = clientKey || '';
+        dom.macInput.value = normalizeMac(selectedTV['mac-address'] || '');
     }
 
     saveSettings();
@@ -234,6 +503,10 @@ function disconnect() {
 function setupUIEventListeners() {
     // התחברות
     dom.connectButton.addEventListener('click', connect);
+    dom.wakeButton.addEventListener('click', async () => {
+        saveSettings();
+        await wakeTv();
+    });
 
     // מאזין כללי לכל הכפתורים בתוך div הפקדים
     dom.controlsDiv.addEventListener('click', handleControlsClick);
@@ -257,9 +530,34 @@ function setupUIEventListeners() {
     dom.ipInput.addEventListener('input', () => {
         localStorage.setItem('lg-tv-ip', dom.ipInput.value);
         updateCertLink();
+        setPowerState('unknown');
+        updateWakeButtonState();
+    });
+    dom.ipInput.addEventListener('change', () => {
+        const normalizedMac = normalizeMac(dom.macInput.value.trim());
+        if (isValidIp(dom.ipInput.value.trim()) && isValidMac(normalizedMac)) {
+            schedulePowerStatusRefresh(0);
+        }
     });
     dom.clientKeyInput.addEventListener('change', () => {
         localStorage.setItem('lg-client-key', dom.clientKeyInput.value);
+    });
+    dom.macInput.addEventListener('input', () => {
+        updateWakeButtonState();
+    });
+    dom.macInput.addEventListener('change', () => {
+        dom.macInput.value = normalizeMac(dom.macInput.value.trim());
+        localStorage.setItem('lg-tv-mac', dom.macInput.value);
+        if (isValidIp(dom.ipInput.value.trim()) && isValidMac(dom.macInput.value)) {
+            schedulePowerStatusRefresh(0);
+        } else {
+            setPowerState('unknown');
+        }
+        updateWakeButtonState();
+    });
+
+    dom.powerStatusIndicator.addEventListener('click', () => {
+        schedulePowerStatusRefresh(0);
     });
 }
 
@@ -355,11 +653,13 @@ function addRemoteEventHandlers() {
     remote.on('connect', () => {
         // The proxyConnected event will handle the final connected state
         updateStatus('מחובר לפרוקסי, ממתין לחיבור לטלוויזיה...', 'prompt');
+        setPowerState('checking');
     });
 
     remote.on('proxyConnected', () => {
         updateStatus('מחובר!', 'connected');
         updateUIForConnectionState(true);
+        setPowerState('awake');
     }
     );
 
@@ -367,11 +667,14 @@ function addRemoteEventHandlers() {
         updateStatus('מנותק', 'disconnected');
         updateUIForConnectionState(false);
         remote = null;
+        setPowerState('unknown');
+        schedulePowerStatusRefresh(0);
     });
 
     remote.on('error', (error: Error) => {
         console.error('Remote Error:', error);
         updateStatus(`שגיאה: ${error.message}`, 'disconnected');
+        setPowerState('error', error.message);
     });
 
     remote.on('prompt', () => {
@@ -421,7 +724,16 @@ function loadSettings() {
     if (savedKey) {
         dom.clientKeyInput.value = savedKey;
     }
+    const savedMac = localStorage.getItem('lg-tv-mac');
+    if (savedMac) {
+        dom.macInput.value = normalizeMac(savedMac);
+    }
     updateCertLink();
+    updateWakeButtonState();
+    setPowerState('unknown');
+    if (isValidIp(dom.ipInput.value.trim()) && isValidMac(normalizeMac(dom.macInput.value.trim()))) {
+        schedulePowerStatusRefresh(150);
+    }
 }
 
 /**
@@ -430,6 +742,9 @@ function loadSettings() {
 function saveSettings() {
     localStorage.setItem('lg-tv-ip', dom.ipInput.value);
     localStorage.setItem('lg-client-key', dom.clientKeyInput.value);
+    const normalizedMac = normalizeMac(dom.macInput.value);
+    dom.macInput.value = normalizedMac;
+    localStorage.setItem('lg-tv-mac', normalizedMac);
 }
 
 /**

@@ -350,6 +350,70 @@
             font-family: 'Courier New', monospace;
         }
 
+        .power-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background-color: #f0f2f5;
+            color: #65676b;
+            font-weight: 600;
+        }
+
+        .power-status__dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #9e9e9e;
+            position: relative;
+        }
+
+        .power-status--unknown {
+            background-color: #f0f2f5;
+            color: #65676b;
+        }
+
+        .power-status--unknown .power-status__dot {
+            background-color: #9e9e9e;
+        }
+
+        .power-status--on {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .power-status--on .power-status__dot {
+            background-color: #2e7d32;
+        }
+
+        .power-status--off {
+            background-color: #fdecea;
+            color: #c62828;
+        }
+
+        .power-status--off .power-status__dot {
+            background-color: #c62828;
+        }
+
+        .power-status--loading {
+            background-color: #fff9c4;
+            color: #f57f17;
+        }
+
+        .power-status--loading .power-status__dot {
+            background-color: #f57f17;
+        }
+
+        .power-status--error {
+            background-color: #ffebee;
+            color: #b71c1c;
+        }
+
+        .power-status--error .power-status__dot {
+            background-color: #b71c1c;
+        }
+
         /* === סגנונות נוספים === */
 
         /* כפתור כיבוי באדום */
@@ -547,6 +611,7 @@
                         <div class="input-group">
                             <input type="text" id="tv-ip" placeholder="הכנס כתובת IP של הטלוויזיה">
                             <input type="text" id="client-key" placeholder="מפתח לקוח (אופציונלי)">
+                            <input type="text" id="tv-mac" placeholder="כתובת MAC (ל-WoL)">
                         </div>
                     </div>
 
@@ -574,7 +639,15 @@
                         </div>
                     </div>
 
+                    <div id="power-status-wrapper" style="margin: 10px 0;">
+                        <div id="power-status-indicator" class="power-status power-status--unknown">
+                            <span class="power-status__dot"></span>
+                            <span id="power-status-text">מצב המסך לא ידוע</span>
+                        </div>
+                    </div>
+
                     <div class="input-group">
+                        <button id="wake-btn" type="button">הפעל מסך (WoL)</button>
                         <button id="connect-btn">התחבר</button>
                     </div>
 
