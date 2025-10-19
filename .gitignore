@@ -42,6 +42,7 @@ dist/
 # Bun
 .bun/
 bun.lockb
+# bun.lock
 
 # IDE files
 .idea/
