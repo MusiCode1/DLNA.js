@@ -8,6 +8,7 @@ const dom = {
     clientKeyInput: document.getElementById('client-key') as HTMLInputElement,
     macInput: document.getElementById('tv-mac') as HTMLInputElement,
     connectButton: document.getElementById('connect-btn') as HTMLButtonElement,
+    disconnectButton: document.getElementById('disconnect-btn') as HTMLButtonElement,
     wakeButton: document.getElementById('wake-btn') as HTMLButtonElement,
     statusDiv: document.getElementById('status') as HTMLDivElement,
     certLink: document.getElementById('cert-link') as HTMLAnchorElement,
@@ -495,6 +496,11 @@ async function connect() {
 function disconnect() {
     if (remote) {
         remote.disconnect();
+    } else {
+        updateUIForConnectionState(false);
+        setPowerState('unknown');
+        schedulePowerStatusRefresh(0);
+        updateStatus('מנותק', 'disconnected');
     }
     stopContinuousScreenshot();
 }
@@ -504,6 +510,11 @@ function disconnect() {
 function setupUIEventListeners() {
     // התחברות
     dom.connectButton.addEventListener('click', connect);
+    dom.disconnectButton.addEventListener('click', () => {
+        dom.disconnectButton.disabled = true;
+        updateStatus('מנתק...', 'prompt');
+        disconnect();
+    });
     dom.wakeButton.addEventListener('click', async () => {
         saveSettings();
         await wakeTv();
@@ -707,6 +718,7 @@ function updateStatus(message: string, type: 'prompt' | 'connected' | 'disconnec
  */
 function updateUIForConnectionState(isConnected: boolean) {
     dom.connectButton.disabled = isConnected;
+    dom.disconnectButton.disabled = !isConnected;
     dom.controlsScreenshotWrapper.style.display = isConnected ? 'flex' : 'none';
     if (!isConnected) {
         stopContinuousScreenshot();
