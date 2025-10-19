@@ -193,6 +193,7 @@ async function initializeTVSelect() {
     
     dom.tvSelect.innerHTML = '<option value="">בחר טלוויזיה...</option>' +
         tvListData.map(tv => `<option value="${tv.name}">${tv.name}</option>`).join('');
+    dom.tvSelect.disabled = false;
     
     dom.tvSelect.addEventListener('change', () => updateSelectedTVDetails());
     
