@@ -672,6 +672,7 @@ function addRemoteEventHandlers() {
         updateStatus('מחובר!', 'connected');
         updateUIForConnectionState(true);
         setPowerState('awake');
+        takeScreenshot();
     }
     );
 
