@@ -1,5 +1,5 @@
 // קובץ: drafts/wake_and_check_device.ts
-import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
+import { wakeDeviceAndVerify } from 'wake-on-lan';
 
 /**
  * מעיר התקן באמצעות Wake-on-LAN וממתין להתעוררותו באמצעות בדיקות פינג.

@@ -19,7 +19,7 @@ import type {
   FullDeviceDescription, // ייבוא הטיפוסים מ-dlna.js
 } from 'dlna.js';
 
-import { wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan';
+import { wakeDeviceAndVerify } from 'wake-on-lan';
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem, isRendererPlaying, stopRenderer } from './rendererHandler';
 import { getActiveDevices } from './deviceManager';
 import { config } from './config';

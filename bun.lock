@@ -68,7 +68,7 @@
       "name": "@dlna-tv-play/server",
       "version": "0.1.0",
       "dependencies": {
-        "@dlna-tv-play/wake-on-lan": "workspace:*",
+        "wake-on-lan": "workspace:*",
         "@types/cors": "^2.8.19",
         "cors": "^2.8.5",
         "dlna.js": "workspace:*",
@@ -117,7 +117,7 @@
       },
     },
     "packages/wake-on-lan": {
-      "name": "@dlna-tv-play/wake-on-lan",
+      "name": "wake-on-lan",
       "version": "0.1.0",
       "dependencies": {
         "ping": "^0.4.4",
@@ -145,7 +145,7 @@
 
     "@dlna-tv-play/server": ["@dlna-tv-play/server@workspace:packages/server"],
 
-    "@dlna-tv-play/wake-on-lan": ["@dlna-tv-play/wake-on-lan@workspace:packages/wake-on-lan"],
+    "wake-on-lan": ["wake-on-lan@workspace:packages/wake-on-lan"],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.25.9", "", { "os": "aix", "cpu": "ppc64" }, "sha512-OaGtL73Jck6pBKjNIe24BnFE6agGl+6KxDtTfHhy1HmhthfKouEcOhqpSL64K4/0WCtbKFLOdzD/44cJ4k9opA=="],
 

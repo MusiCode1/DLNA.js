@@ -4,7 +4,7 @@
 
 import express from 'express'; // הוספת ייבוא ל-Express
 import { URL } from 'node:url';
-import { sendWakeOnLan, checkPingWithRetries } from '@dlna-tv-play/wake-on-lan'; // ייבוא מהחבילה החדשה עם שמות נכונים
+import { sendWakeOnLan, checkPingWithRetries } from 'wake-on-lan'; // ייבוא מהחבילה החדשה עם שמות נכונים
 import {
     processUpnpDeviceFromUrl,
     createLogger, // שם הפונקציה עודכן

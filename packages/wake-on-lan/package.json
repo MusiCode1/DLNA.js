@@ -1,5 +1,5 @@
 {
-  "name": "@dlna-tv-play/wake-on-lan",
+  "name": "wake-on-lan",
   "version": "0.1.0",
   "private": false,
   "main": "src/index.ts",
@@ -8,6 +8,11 @@
     "build": "tsc -p tsconfig.json",
     "test": "bun test"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "dependencies": {
     "ping": "^0.4.4"
   },

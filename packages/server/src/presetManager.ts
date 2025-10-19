@@ -15,7 +15,7 @@ import type {
 } from 'dlna.js';
 
 import { AllPresetSettings, PresetSettings, PresetEntry, RendererPreset, ApiDevice } from './types'; // ייבוא הטיפוסים הרלוונטיים, כולל PresetEntry ו-RendererPreset
-import { sendWakeOnLan, wakeDeviceAndVerify } from '@dlna-tv-play/wake-on-lan'; // שינוי: הוספת wakeDeviceAndVerify והסרת checkPingWithRetries
+import { sendWakeOnLan, wakeDeviceAndVerify } from 'wake-on-lan'; // שינוי: הוספת wakeDeviceAndVerify והסרת checkPingWithRetries
 import { getFolderItemsFromMediaServer, playProcessedItemsOnRenderer, ProcessedPlaylistItem } from './rendererHandler'; // ייבוא הפונקציות החדשות
 import { executePlayPresetLogic, PlaybackError } from './playPresetHandler'; // ייבוא מהקובץ החדש
 const logger = createModuleLogger('PresetManager'); // הגדרת לוגר למודול
