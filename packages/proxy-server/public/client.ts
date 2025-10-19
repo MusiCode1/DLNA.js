@@ -672,7 +672,7 @@ function addRemoteEventHandlers() {
         updateStatus('מחובר!', 'connected');
         updateUIForConnectionState(true);
         setPowerState('awake');
-        takeScreenshot();
+        
     }
     );
 
@@ -698,6 +698,7 @@ function addRemoteEventHandlers() {
         dom.clientKeyInput.value = key;
         localStorage.setItem('lg-client-key', key);
         updateStatus('נרשם בהצלחה! מפתח הלקוח נשמר.', 'connected');
+        takeScreenshot();
     });
 }
 
