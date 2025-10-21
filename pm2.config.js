@@ -28,10 +28,12 @@ const config = {
                 'serve',
                 'dlna',
                 'GoogleDrive:/תיקיית-סרטונים-למסך',
+                
                 '--read-only',
                 '--vfs-cache-mode', 'full',
                 '--config', 'C:/programs/rclone/rclone.conf',
                 '--vfs-cache-max-age', '999h0m0s',
+                '--vfs-cache-min-free-space', '20G',
                 '--cache-dir', 'C:/Cache',
                 '--fast-list',
                 '--name', '"סרטונים מגוגל דרייב"',
@@ -48,7 +50,7 @@ const config = {
             name: "remoteControlServer",
             script: './src/index.ts',
             interpreter: "C:/programs/bun.exe",
-            cwd: './packages/proxy-server',
+            cwd: 'C:/programs/DLNA.js/DLNA.js/packages/proxy-server',
             interpreter_args: [
                 // '--cwd=./packages/proxy-server',
             ]
