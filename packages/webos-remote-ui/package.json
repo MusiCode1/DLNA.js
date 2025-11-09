@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "svelte-kit dev",
-    "build": "svelte-kit build",
-    "preview": "svelte-kit preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && vitest run --coverage",
-    "test": "vitest"
+    "dev": "bunx --bun svelte-kit dev",
+    "build": "bunx --bun svelte-kit build",
+    "preview": "bunx --bun svelte-kit preview",
+    "check": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json && bunx --bun vitest run --coverage",
+    "test": "bunx --bun vitest"
   },
   "dependencies": {
     "lg-webos-remote": "workspace:*"
