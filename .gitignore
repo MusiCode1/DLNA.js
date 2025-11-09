@@ -35,6 +35,9 @@ temp/
 .cache/
 dist/
 
+# Svelte build output
+packages/proxy-server/public/ui-build/
+
 
 
 

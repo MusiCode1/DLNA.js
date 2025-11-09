@@ -28,23 +28,8 @@ if (!__dirname) {
 
 const publicAbsolutePathDirectory = path.join(__dirname, '..', 'public');
 const publicRelativePathDirectory = 'public';
-
-// Serve static files for the frontend
-// מיקום יחסי!!
-app.use(serveStatic({
-  root: publicRelativePathDirectory,
-  onNotFound: (path, c) => {
-    const text = `Static file not found: ${path}` +
-      '\n' + `this path: ${publicAbsolutePathDirectory}` +
-      '\n' + `__dirname: ${__dirname}`;
-
-    console.warn(text);
-
-    c.text(text, 404);
-
-  },
-
-}));
+const uiBuildRelativePath = path.join(publicRelativePathDirectory, 'ui-build');
+const uiIndexPath = path.join(publicAbsolutePathDirectory, 'ui-build', 'index.html');
 
 // Generic proxy for fetching resources from the TV to solve CORS issues.
 // This supports streaming the response body.
@@ -85,6 +70,11 @@ app.get('/proxy', async (c) => {
 });
 
 app.post('/api/wake', handleWakeRequest);
+
+// Serve the legacy public assets that are not part of the UI build (e.g. tv-list.json)
+app.use('/tv-list.json', serveStatic({
+  root: publicRelativePathDirectory
+}));
 
 // Define the WebSocket proxy route
 app.get(
@@ -186,6 +176,39 @@ app.get(
     };
   })
 );
+
+const uiStatic = serveStatic({
+  root: uiBuildRelativePath
+});
+
+async function serveUiIndex(c: any) {
+  try {
+    const file = Bun.file(uiIndexPath);
+    if (!(await file.exists())) {
+      console.warn(`UI build not found at ${uiIndexPath}`);
+      return c.text('UI build not found. Run `bun run --filter webos-remote-ui build`.', 503);
+    }
+    return new Response(file);
+  } catch (error) {
+    console.error('Failed to read UI build', error);
+    return c.text('Failed to load UI build', 500);
+  }
+}
+
+app.use('*', async (c, next) => {
+  const pathName = c.req.path;
+
+  if (pathName.startsWith('/api') || pathName.startsWith('/proxy') || pathName.startsWith('/ws') || pathName === '/tv-list.json') {
+    return await next();
+  }
+
+  const response = await uiStatic(c, next);
+  if (response.status !== 404) {
+    return response;
+  }
+
+  return serveUiIndex(c);
+});
 
 console.log(`Server is running on http://localhost:${port}`);
 console.log(`WebSocket proxy is available at ws://localhost:${port}/ws`);

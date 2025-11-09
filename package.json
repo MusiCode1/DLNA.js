@@ -6,7 +6,10 @@
   ],
   "scripts": {
     "start": "bun --cwd packages/server start",
+    "dev": "bun run --cwd packages/webos-remote-ui dev",
     "build": "bun run --filter=\"*\" build",
+    "preview": "bun run --cwd packages/webos-remote-ui preview",
+    "check": "bun run --cwd packages/webos-remote-ui check",
     "test": "bun -w run test",
     "clean": "powershell -ExecutionPolicy Bypass -File ./scripts/clean.ps1"
   },

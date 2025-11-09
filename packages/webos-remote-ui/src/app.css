@@ -1,10 +1,12 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color-scheme: light;
+}
+
 html,
 body {
   height: 100%;
   margin: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
   background-color: #f0f2f5;
 }
 
@@ -16,9 +18,54 @@ body {
   box-sizing: border-box;
 }
 
+button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background-color: #1877f2;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+button:hover:not(:disabled) {
+  background-color: #166fe5;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+button:disabled {
+  background-color: #e4e6eb;
+  color: #bcc0c4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button:active:not(:disabled) {
+  opacity: 0.8;
+}
+
+input[type='text'],
+select {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: all 0.2s ease-in-out;
+}
+
+input[type='text']:focus,
+select:focus {
+  outline: none;
+  transform: scale(1.01);
+  border-color: #1877f2;
+  box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
+}
+
 .container {
   width: 100%;
-  /* max-width: 1000px; */
   flex-grow: 1;
   display: flex;
   flex-direction: column;
@@ -30,12 +77,18 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 20px;
   margin-bottom: 20px;
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
 }
 
 h1,
 h2 {
   color: #1c1e21;
   text-align: center;
+  margin-top: 0;
 }
 
 .input-group {
@@ -45,36 +98,6 @@ h2 {
   flex-wrap: wrap;
 }
 
-input[type="text"] {
-  flex-grow: 1;
-  padding: 10px;
-  border: 1px solid #dddfe2;
-  border-radius: 6px;
-  font-size: 16px;
-}
-
-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  background-color: #1877f2;
-  color: white;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-button:hover {
-  background-color: #166fe5;
-}
-
-button:disabled {
-  background-color: #e4e6eb;
-  color: #bcc0c4;
-  cursor: not-allowed;
-}
-
 .grid-controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
@@ -82,7 +105,6 @@ button:disabled {
   margin-bottom: 20px;
 }
 
-/* D-pad עגול - Container */
 .navigation-controls {
   display: flex;
   flex-direction: row;
@@ -119,20 +141,9 @@ button:disabled {
   color: white;
   font-size: 24px;
   cursor: pointer;
-  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.d-pad-btn:hover:not(:disabled) {
-  background-color: #166fe5;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.d-pad-btn:active:not(:disabled) {
-  opacity: 0.8;
 }
 
 .d-pad-up {
@@ -169,7 +180,6 @@ button:disabled {
   font-weight: bold;
 }
 
-/* Volume Controls */
 .volume-controls {
   display: flex;
   flex-direction: column;
@@ -188,6 +198,7 @@ button:disabled {
   border-radius: 6px;
   text-align: center;
   font-weight: 500;
+  transition: all 0.3s ease-in-out;
 }
 
 .status.connected {
@@ -205,47 +216,41 @@ button:disabled {
   color: #f57f17;
 }
 
-#toast-input {
-  display: none;
-  margin-top: 10px;
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
-#main-content-wrapper {
-  flex-grow: 1;
+.screenshot-controls {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: 100%;
-  align-items: stretch;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-#left-column {
-  width: 100%;
+.screenshot-controls button {
+  flex: 1;
+  min-width: 120px;
 }
 
-/* בדסקטופ - wrapper אופקי */
-#controls-screenshot-wrapper {
+.screenshot-controls label {
   display: flex;
-  flex-direction: column;
-  width: 100%;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
 }
 
-@media (min-width: 769px) {
-  /* בדסקטופ - wrapper אופקי */
-  #controls-screenshot-wrapper {
-    flex-direction: row;
-  }
-
-  /* בדסקטופ - צילום מסך תופס יותר מקום */
-  #screenshot-container {
-    flex: 3 !important;
-  }
-
-  #controls {
-    flex: 1 !important;
-  }
+.power-off-btn {
+  background-color: #d32f2f !important;
 }
-/* === סגנונות לבחירת שיטת התחברות === */
+
+.power-off-btn:hover:not(:disabled) {
+  background-color: #c62828 !important;
+}
+
 .connection-type-selector {
   display: flex;
   gap: 20px;
@@ -262,9 +267,7 @@ button:disabled {
   padding: 10px 20px;
   border-radius: 20px;
   background-color: #f0f2f5;
-  transition:
-    background-color 0.2s,
-    box-shadow 0.2s;
+  transition: background-color 0.2s, box-shadow 0.2s;
   user-select: none;
 }
 
@@ -272,37 +275,18 @@ button:disabled {
   background-color: #e4e6eb;
 }
 
-.radio-button input[type="radio"]:checked + span {
-  font-weight: bold;
-}
-
-.radio-button:has(input[type="radio"]:checked) {
-  background-color: #e7f3ff;
-  box-shadow: 0 0 0 2px #1877f2;
-}
-
-.radio-button input[type="radio"] {
+.radio-button input[type='radio'] {
   margin: 0;
   cursor: pointer;
 }
 
-.connection-form {
-  transition: opacity 0.3s ease-in-out;
+.radio-button input[type='radio']:checked + span {
+  font-weight: bold;
 }
 
-.tv-select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #dddfe2;
-  border-radius: 6px;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.tv-select:focus {
-  outline: none;
-  border-color: #1877f2;
-  box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
+.radio-button:has(input[type='radio']:checked) {
+  background-color: #e7f3ff;
+  box-shadow: 0 0 0 2px #1877f2;
 }
 
 .tv-details {
@@ -343,7 +327,7 @@ button:disabled {
 
 .detail-value {
   color: #65676b;
-  font-family: "Courier New", monospace;
+  font-family: 'Courier New', monospace;
 }
 
 .power-status {
@@ -362,7 +346,6 @@ button:disabled {
   height: 12px;
   border-radius: 50%;
   background-color: #9e9e9e;
-  position: relative;
 }
 
 .power-status--unknown {
@@ -410,47 +393,44 @@ button:disabled {
   background-color: #b71c1c;
 }
 
-/* === סגנונות נוספים === */
-
-/* כפתור כיבוי באדום */
-.power-off-btn {
-  background-color: #d32f2f !important;
-}
-
-.power-off-btn:hover:not(:disabled) {
-  background-color: #c62828 !important;
-}
-
-/* פעולות מהירות */
-.quick-actions {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-/* בקרת צילום מסך */
-.screenshot-controls {
+#main-content-wrapper {
+  flex-grow: 1;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  align-items: stretch;
 }
 
-.screenshot-controls button {
-  flex: 1;
-  min-width: 120px;
-}
-
-.screenshot-controls label {
+#controls-screenshot-wrapper {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  user-select: none;
+  flex-direction: column;
+  width: 100%;
+  gap: 20px;
 }
 
-/* === רספונסיביות למובייל === */
+#left-column {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+  flex: 2;
+}
+
+@media (min-width: 769px) {
+  #controls-screenshot-wrapper {
+    flex-direction: row;
+  }
+
+  #screenshot-container {
+    flex: 3 !important;
+  }
+
+  #controls {
+    flex: 1 !important;
+  }
+}
+
 @media (max-width: 768px) {
   button {
     min-height: 48px;
@@ -459,14 +439,13 @@ button:disabled {
     padding: 12px 24px;
   }
 
-  input[type="text"],
-  .tv-select {
+  input[type='text'],
+  select {
     min-height: 48px;
     font-size: 18px;
     padding: 12px;
   }
 
-  /* D-pad עגול גדול יותר למגע */
   .navigation-controls {
     flex-direction: column;
     gap: 30px;
@@ -500,7 +479,6 @@ button:disabled {
     width: 100%;
   }
 
-  /* כפתורי הפקדים */
   .grid-controls button {
     min-height: 48px;
     font-size: 16px;
@@ -510,7 +488,6 @@ button:disabled {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  /* מרווחים גדולים יותר */
   .card {
     padding: 16px;
     margin-bottom: 16px;
@@ -521,7 +498,6 @@ button:disabled {
     margin-bottom: 16px;
   }
 
-  /* במובייל - צילום מסך מעל פקדים */
   #screenshot-container {
     order: 1;
   }
@@ -531,7 +507,6 @@ button:disabled {
   }
 }
 
-/* טאבלטים */
 @media (min-width: 769px) and (max-width: 1024px) {
   .d-pad-circular-container {
     width: 220px;
@@ -550,33 +525,7 @@ button:disabled {
   }
 }
 
-/* שיפורי עיצוב כלליים */
-.card {
-  transition: box-shadow 0.2s ease-in-out;
-}
-
-.card:hover {
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-}
-
-button {
-  transition: all 0.2s ease-in-out;
-}
-
-button:hover:not(:disabled) {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-button:active:not(:disabled) {
-  opacity: 0.8;
-}
-
-input[type="text"]:focus,
-.tv-select:focus {
-  transform: scale(1.01);
-  transition: all 0.2s ease-in-out;
-}
-
-.status {
-  transition: all 0.3s ease-in-out;
+#toast-input {
+  display: none;
+  margin-top: 10px;
 }
