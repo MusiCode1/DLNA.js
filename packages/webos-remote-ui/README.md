@@ -17,6 +17,13 @@ bun run dev
 
 > The root `package.json` exposes the commands `dev`, `build`, `preview`, and `check` that map to this workspace.
 
+## הוראות מהירות בעברית
+
+1. הרץ `bun install` בתיקיית השורש של הפרויקט כדי להוריד את כל התלויות (גם של ממשק המשתמש וגם של שאר החבילות).
+2. לאחר ההתקנה, הפעל את שרת הפיתוח של הממשק עם `bun run --cwd packages/webos-remote-ui dev` או פשוט `bun run dev` מתיקיית השורש.
+3. אם מתקבלת השגיאה `Invalid command: dev`, ודא שההתקנה הצליחה (כלומר שנוצרו תיקיות `node_modules` וקובץ `bun.lock`/`bun.lockb`). במקרה הצורך מחק את התיקיה `node_modules` והרץ שוב `bun install`.
+4. להפעלת הבקאנד במקביל (נדרש לחיבור לטלוויזיה), הרץ `bun run start` מתיקיית השורש בחלון טרמינל נוסף.
+
 ## Environment variables
 
 | Variable | Description |
