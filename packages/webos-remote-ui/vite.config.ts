@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     sveltekit(),
-    devtoolsJson()
+    /* devtoolsJson() */
   ],
     server: {
     proxy: {
