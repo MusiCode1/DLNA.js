@@ -1,4 +1,3 @@
-import { browser } from '$app/environment';
 import { derived, get, writable } from 'svelte/store';
 import { resolveProxyPath } from '$utils/env';
 import { normalizeMac } from '$utils/network';
@@ -21,6 +20,7 @@ interface TvListState {
 
 const STORAGE_KEY = 'webos-remote-ui:tv-list';
 const STORAGE_TIMESTAMP_KEY = 'webos-remote-ui:tv-list-timestamp';
+const hasStorage = typeof globalThis !== 'undefined' && 'localStorage' in globalThis;
 
 const initialState: TvListState = {
   status: 'idle',
@@ -28,7 +28,7 @@ const initialState: TvListState = {
 };
 
 function readCachedList(): TvInfo[] | null {
-  if (!browser) return null;
+  if (!hasStorage) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -60,7 +60,7 @@ async function fetchTvList(): Promise<TvInfo[]> {
 }
 
 function persistList(list: TvInfo[]) {
-  if (!browser) return;
+  if (!hasStorage) return;
   try {
     const payload = list.map((item) => ({
       name: item.name,
@@ -79,11 +79,11 @@ function createTvListStore() {
   const { subscribe, set, update } = writable<TvListState>(initialState);
 
   async function load(force = false) {
-    if (!browser) return;
+    if (!hasStorage) return;
 
     if (!force) {
       const cached = readCachedList();
-      if (cached && cached.length) {
+      if (cached && cached.length && hasStorage) {
         set({ status: 'ready', items: cached, lastUpdated: Number(localStorage.getItem(STORAGE_TIMESTAMP_KEY) ?? 0) });
       }
     }
@@ -108,7 +108,7 @@ function createTvListStore() {
     subscribe,
     load,
     clearCache() {
-      if (!browser) return;
+      if (!hasStorage) return;
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(STORAGE_TIMESTAMP_KEY);
       set(initialState);

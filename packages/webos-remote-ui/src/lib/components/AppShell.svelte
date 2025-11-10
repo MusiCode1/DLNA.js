@@ -170,9 +170,15 @@
           />
         {/if}
 
-        <div id="power-status-wrapper" style="margin: 10px 0;" on:click={refreshPowerStatus}>
+        <button
+          id="power-status-wrapper"
+          type="button"
+          class="power-status-refresh"
+          style="margin: 10px 0;"
+          on:click={refreshPowerStatus}
+        >
           <PowerStatusIndicator status={powerState.status} message={powerState.message} />
-        </div>
+        </button>
 
         <div class="input-group">
           <button id="wake-btn" type="button" disabled={wakeDisabled} on:click={wakeTv}>הפעל מסך (WoL)</button>

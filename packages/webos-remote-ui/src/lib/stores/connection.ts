@@ -1,4 +1,3 @@
-import { browser } from '$app/environment';
 import { derived, writable } from 'svelte/store';
 import { normalizeMac, type ConnectionMode } from '$utils/network';
 
@@ -22,6 +21,7 @@ export interface TvSummary {
 }
 
 const STORAGE_KEY = 'webos-remote-ui:connection';
+const hasStorage = typeof globalThis !== 'undefined' && 'localStorage' in globalThis;
 
 const defaultState: ConnectionState = {
   ipAddress: '',
@@ -34,7 +34,7 @@ const defaultState: ConnectionState = {
 };
 
 function loadFromStorage(): ConnectionState {
-  if (!browser) return defaultState;
+  if (!hasStorage) return defaultState;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultState;
@@ -51,7 +51,7 @@ function loadFromStorage(): ConnectionState {
 }
 
 function persistState(state: ConnectionState) {
-  if (!browser) return;
+  if (!hasStorage) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
@@ -61,7 +61,7 @@ function persistState(state: ConnectionState) {
 
 const internalStore = writable<ConnectionState>(loadFromStorage());
 
-if (browser) {
+if (hasStorage) {
   internalStore.subscribe((state) => {
     persistState(state);
   });
