@@ -6,7 +6,7 @@ export interface TvInfo {
   name: string;
   ip: string;
   macAddress?: string;
-  secretKey?: string;
+  clientKey?: string;
 }
 
 type TvListStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -32,12 +32,13 @@ function readCachedList(): TvInfo[] | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const parsed = JSON.parse(raw) as any[];
     return parsed.map((item) => ({
       name: item.name,
       ip: item.ip,
       macAddress: item['mac-address'] ?? item.macAddress,
-      secretKey: item['secert-key'] ?? item.secretKey
+      clientKey: item['client-key'] ?? item.clientKey
     } satisfies TvInfo));
   } catch (error) {
     console.warn('Failed to read cached TV list', error);
@@ -46,7 +47,7 @@ function readCachedList(): TvInfo[] | null {
 }
 
 async function fetchTvList(): Promise<TvInfo[]> {
-  const response = await fetch(resolveProxyPath('/tv-list.json'));
+  const response = await fetch(resolveProxyPath('./tv-list.json'));
   if (!response.ok) {
     throw new Error(`Failed to load TV list (${response.status})`);
   }
@@ -55,7 +56,7 @@ async function fetchTvList(): Promise<TvInfo[]> {
     name: item.name,
     ip: item.ip?.trim(),
     macAddress: item['mac-address'] ? normalizeMac(item['mac-address']) : undefined,
-    secretKey: item['secert-key'] ?? item['secret-key']
+    clientKey: item['client-key'] ?? item['client-key']
   } satisfies TvInfo));
 }
 
@@ -66,7 +67,7 @@ function persistList(list: TvInfo[]) {
       name: item.name,
       ip: item.ip,
       'mac-address': item.macAddress,
-      'secert-key': item.secretKey
+      'client-key': item.clientKey
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());

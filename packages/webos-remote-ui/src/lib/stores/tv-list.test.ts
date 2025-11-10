@@ -17,7 +17,7 @@ describe('tvListStore', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => [
-        { name: 'Living Room', ip: '10.0.0.20', 'mac-address': '00:11:22:33:44:55', 'secert-key': 'secret' }
+        { name: 'Living Room', ip: '10.0.0.20', 'mac-address': '00:11:22:33:44:55', 'client-key': 'secret' }
       ]
     });
 
@@ -32,7 +32,7 @@ describe('tvListStore', () => {
 
   it('falls back to cached data on failure', async () => {
     const cached = [
-      { name: 'Bedroom', ip: '10.0.0.30', 'mac-address': 'AA:BB:CC:DD:EE:FF', 'secert-key': 'cached' }
+      { name: 'Bedroom', ip: '10.0.0.30', 'mac-address': 'AA:BB:CC:DD:EE:FF', 'client-key': 'cached' }
     ];
     localStorage.setItem('webos-remote-ui:tv-list', JSON.stringify(cached));
 

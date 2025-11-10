@@ -13,10 +13,11 @@
     "resolveJsonModule": true // מאפשר ייבוא קבצי JSON
   },
   "include": [
-    "**/*.ts" // כולל את כל קבצי ה-TypeScript בפרויקט
-, "drafts/wake-on-lan-test.mjs"  ],
+    "**/*.ts", // כולל את כל קבצי ה-TypeScript בפרויקט
+    "drafts/wake-on-lan-test.mjs"
+  ],
   "exclude": [
-    "node_modules", // לא כולל את תיקיית node_modules
+    // "node_modules", // לא כולל את תיקיית node_modules
     "temp"
   ]
 }
