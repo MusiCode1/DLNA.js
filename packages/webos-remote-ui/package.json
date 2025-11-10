@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bunx --bun svelte-kit dev",
-    "build": "bunx --bun svelte-kit build",
-    "preview": "bunx --bun svelte-kit preview",
+    "dev": "bunx --bun svelte-kit sync && bunx --bun vite dev",
+    "build": "bunx --bun svelte-kit sync && bunx --bun vite build",
+    "preview": "bunx --bun vite preview",
     "check": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json && bunx --bun vitest run --coverage",
     "test": "bunx --bun vitest"
   },
