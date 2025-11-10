@@ -1,8 +1,12 @@
 <script lang="ts">
   import type { PowerStatus } from '$services/wake-service';
 
-  export let status: PowerStatus = 'unknown';
-  export let message = 'מצב המסך לא ידוע';
+  type Props = {
+    status?: PowerStatus;
+    message?: string;
+  };
+
+  let { status = 'unknown', message = 'מצב המסך לא ידוע' }: Props = $props();
 
   const classMap: Record<PowerStatus, string> = {
     unknown: 'power-status power-status--unknown',

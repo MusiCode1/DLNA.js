@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { browser } from '$app/environment';
+  import { fromStore } from 'svelte/store';
   import ConnectionModeSwitcher from '$components/ConnectionModeSwitcher.svelte';
   import ManualConnectionForm from '$components/ManualConnectionForm.svelte';
   import TvListConnectionForm from '$components/TvListConnectionForm.svelte';
@@ -17,37 +18,54 @@
   import { notificationStore } from '$stores/notifications';
   import { isValidIp, isValidMac, normalizeMac, type ConnectionMode } from '$utils/network';
 
-  $: connection = $connectionStore;
-  $: powerState = $powerStateStore;
-  $: screenshotState = $screenshotService;
-  $: tvOptions = $tvOptionsStore;
+  const connectionStoreValue = fromStore(connectionStore);
+  const powerStateStoreValue = fromStore(powerStateStore);
+  const screenshotStoreValue = fromStore(screenshotService);
+  const tvOptionsStoreValue = fromStore(tvOptionsStore);
+  const tvListStateValue = fromStore(tvListStore);
 
-  let wasConnected = false;
+  const connectionState = $derived(connectionStoreValue.current);
+  const powerState = $derived(powerStateStoreValue.current);
+  const screenshotState = $derived(screenshotStoreValue.current);
+  const tvOptions = $derived(tvOptionsStoreValue.current);
+  const tvListState = $derived(tvListStateValue.current);
 
-  $: {
-    const connected = connection.status === 'connected';
+  const wakeDisabled = $derived(
+    !isValidIp(connectionState.ipAddress) ||
+      !isValidMac(connectionState.macAddress) ||
+      powerState.isWakeInProgress ||
+      powerState.isCheckInProgress
+  );
+  const showControls = $derived(connectionState.status === 'connected');
+  const tvListError = $derived(
+    tvListState.status === 'error' ? tvListState.error ?? 'שגיאה בטעינת רשימת הטלוויזיות' : undefined
+  );
+
+  let wasConnected: boolean | undefined;
+  const unsubscribeConnection = connectionStore.subscribe(($connection) => {
+    const connected = $connection.status === 'connected';
     if (wasConnected && !connected) {
       screenshotService.reset();
     }
     wasConnected = connected;
-  }
+  });
 
-  $: certLink = connection.ipAddress ? `https://${connection.ipAddress}:3001` : '';
-  $: wakeDisabled = !isValidIp(connection.ipAddress) || !isValidMac(connection.macAddress) || powerState.isWakeInProgress || powerState.isCheckInProgress;
-  $: showControls = connection.status === 'connected';
+  onDestroy(() => {
+    unsubscribeConnection();
+  });
 
   onMount(() => {
     if (!browser) return;
     tvListStore.load();
-    if (isValidIp(connection.ipAddress) && isValidMac(connection.macAddress)) {
-      powerStateStore.scheduleCheck(connection.ipAddress, connection.macAddress, 150);
+    if (isValidIp(connectionState.ipAddress) && isValidMac(connectionState.macAddress)) {
+      powerStateStore.scheduleCheck(connectionState.ipAddress, connectionState.macAddress, 150);
     }
   });
 
   function handleModeChange(mode: ConnectionMode) {
     connectionStore.setConnectionMode(mode);
     if (mode === 'list') {
-      const selected = findTvByName(connection.selectedTvName);
+      const selected = findTvByName(connectionState.selectedTvName);
       if (selected) {
         connectionStore.selectTv(selected);
         powerStateStore.scheduleCheck(selected.ip, selected.macAddress ?? '', 150);
@@ -63,7 +81,7 @@
   }
 
   function handleManualIpBlur(value: string) {
-    const normalizedMac = normalizeMac(connection.macAddress ?? '');
+    const normalizedMac = normalizeMac(connectionState.macAddress ?? '');
     if (isValidIp(value.trim()) && isValidMac(normalizedMac)) {
       powerStateStore.scheduleCheck(value.trim(), normalizedMac, 0);
     }
@@ -80,8 +98,8 @@
   function handleMacBlur(value: string) {
     const normalized = normalizeMac(value);
     connectionStore.updateManual({ macAddress: normalized });
-    if (isValidIp(connection.ipAddress) && isValidMac(normalized)) {
-      powerStateStore.scheduleCheck(connection.ipAddress, normalized, 0);
+    if (isValidIp(connectionState.ipAddress) && isValidMac(normalized)) {
+      powerStateStore.scheduleCheck(connectionState.ipAddress, normalized, 0);
     } else {
       powerStateStore.setStatus('unknown', 'מצב המסך לא ידוע');
     }
@@ -97,7 +115,7 @@
 
   async function connect() {
     try {
-      await remoteService.connect(connection.ipAddress, connection.clientKey || undefined);
+      await remoteService.connect(connectionState.ipAddress, connectionState.clientKey || undefined);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'שגיאת התחברות';
       notificationStore.push('error', message);
@@ -111,7 +129,7 @@
 
   async function wakeTv() {
     try {
-      await powerStateStore.wake(connection.ipAddress, connection.macAddress);
+      await powerStateStore.wake(connectionState.ipAddress, connectionState.macAddress);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       notificationStore.push('error', message);
@@ -127,16 +145,8 @@
   }
 
   function refreshPowerStatus() {
-    powerStateStore.scheduleCheck(connection.ipAddress, connection.macAddress, 0);
+    powerStateStore.scheduleCheck(connectionState.ipAddress, connectionState.macAddress, 0);
   }
-
-  $: tvListError = (() => {
-    const state = $tvListStore;
-    if (state.status === 'error') {
-      return state.error ?? 'שגיאה בטעינת רשימת הטלוויזיות';
-    }
-    return undefined;
-  })();
 </script>
 
 <NotificationHost />
@@ -147,26 +157,26 @@
     <div id="left-column">
       <div class="card">
         <h2>התחברות</h2>
-        <ConnectionModeSwitcher mode={connection.connectionMode} on:change={(event) => handleModeChange(event.detail)} />
+        <ConnectionModeSwitcher mode={connectionState.connectionMode} onchange={handleModeChange} />
 
-        {#if connection.connectionMode === 'manual'}
+        {#if connectionState.connectionMode === 'manual'}
           <ManualConnectionForm
-            ipAddress={connection.ipAddress}
-            clientKey={connection.clientKey}
-            macAddress={connection.macAddress}
-            on:ipInput={(event) => handleManualIpInput(event.detail)}
-            on:ipBlur={(event) => handleManualIpBlur(event.detail)}
-            on:clientKeyInput={(event) => handleClientKeyInput(event.detail)}
-            on:macInput={(event) => handleMacInput(event.detail)}
-            on:macBlur={(event) => handleMacBlur(event.detail)}
+            ipAddress={connectionState.ipAddress}
+            clientKey={connectionState.clientKey}
+            macAddress={connectionState.macAddress}
+            onipInput={handleManualIpInput}
+            onipBlur={handleManualIpBlur}
+            onclientKeyInput={handleClientKeyInput}
+            onmacInput={handleMacInput}
+            onmacBlur={handleMacBlur}
           />
         {:else}
           <TvListConnectionForm
             options={tvOptions}
-            selectedName={connection.selectedTvName}
-            isLoading={$tvListStore.status === 'loading'}
+            selectedName={connectionState.selectedTvName}
+            isLoading={tvListState.status === 'loading'}
             error={tvListError}
-            on:select={(event) => handleSelectTv(event.detail)}
+            onselect={handleSelectTv}
           />
         {/if}
 
@@ -175,26 +185,20 @@
           type="button"
           class="power-status-refresh"
           style="margin: 10px 0;"
-          on:click={refreshPowerStatus}
+          onclick={refreshPowerStatus}
         >
           <PowerStatusIndicator status={powerState.status} message={powerState.message} />
         </button>
 
         <div class="input-group">
-          <button id="wake-btn" type="button" disabled={wakeDisabled} on:click={wakeTv}>הפעל מסך (WoL)</button>
-          <button id="connect-btn" disabled={connection.status === 'connected' || connection.status === 'connecting'} on:click={connect}>
-            {connection.status === 'connecting' ? 'מתחבר...' : 'התחבר'}
+          <button id="wake-btn" type="button" disabled={wakeDisabled} onclick={wakeTv}>הפעל מסך (WoL)</button>
+          <button id="connect-btn" disabled={connectionState.status === 'connected' || connectionState.status === 'connecting'} onclick={connect}>
+            {connectionState.status === 'connecting' ? 'מתחבר...' : 'התחבר'}
           </button>
-          <button id="disconnect-btn" type="button" disabled={connection.status !== 'connected'} on:click={disconnect}>התנתק</button>
+          <button id="disconnect-btn" type="button" disabled={connectionState.status !== 'connected'} onclick={disconnect}>התנתק</button>
         </div>
 
-        <p>
-          <strong>הערה:</strong> אם זו הפעם הראשונה, יש לאשר את החריגה האבטחתית בדפדפן.
-          {#if certLink}
-            <a id="cert-link" href={certLink} target="_blank" rel="noreferrer">פתח קישור לאישור תעודה</a>.
-          {/if}
-        </p>
-        <StatusBanner status={connection.status} message={connection.statusMessage} />
+        <StatusBanner status={connectionState.status} message={connectionState.statusMessage} />
       </div>
     </div>
 
@@ -205,8 +209,8 @@
           isContinuous={screenshotState.isContinuous}
           isConnected={showControls}
           isLoading={screenshotState.isLoading}
-          on:capture={takeScreenshot}
-          on:toggle={(event) => toggleContinuous(event.detail)}
+          oncapture={takeScreenshot}
+          ontoggle={toggleContinuous}
         />
         <RemoteControls isConnected={showControls} />
       </div>

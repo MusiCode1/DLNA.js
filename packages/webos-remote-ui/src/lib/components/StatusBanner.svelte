@@ -1,8 +1,12 @@
 <script lang="ts">
   import type { ConnectionStatus } from '$stores/connection';
 
-  export let status: ConnectionStatus = 'disconnected';
-  export let message = '';
+  type Props = {
+    status?: ConnectionStatus;
+    message?: string;
+  };
+
+  let { status = 'disconnected', message = '' }: Props = $props();
 
   const classMap: Record<ConnectionStatus, string> = {
     disconnected: 'status disconnected',

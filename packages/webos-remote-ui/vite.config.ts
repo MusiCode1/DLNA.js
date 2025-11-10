@@ -1,12 +1,19 @@
+import devtoolsJson from 'vite-plugin-devtools-json';
+import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from 'vitest/config';
+import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
 
 const proxyTarget = process.env.PROXY_SERVER_ORIGIN ?? 'http://localhost:3005';
 const proxyWsTarget = process.env.PROXY_SERVER_WS ?? 'ws://localhost:3005';
 
 export default defineConfig({
-  plugins: [sveltekit()],
-  server: {
+  plugins: [
+    tailwindcss(),
+    sveltekit(),
+    devtoolsJson()
+  ],
+    server: {
     proxy: {
       '/api': {
         target: proxyTarget,
@@ -24,14 +31,30 @@ export default defineConfig({
     }
   },
   test: {
-    environment: 'jsdom',
-    globals: true,
-    include: ['src/**/*.test.ts'],
-    setupFiles: ['src/setupTests.ts'],
-    coverage: {
-      provider: 'istanbul',
-      reporter: ['text', 'json', 'html'],
-      reportsDirectory: 'coverage'
-    }
+    expect: { requireAssertions: true },
+    projects: [
+      {
+        extends: './vite.config.ts',
+        test: {
+          name: 'client',
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            instances: [{ browser: 'chromium', headless: true }]
+          },
+          include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+          exclude: ['src/lib/server/**']
+        }
+      },
+      {
+        extends: './vite.config.ts',
+        test: {
+          name: 'server',
+          environment: 'node',
+          include: ['src/**/*.{test,spec}.{js,ts}'],
+          exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+        }
+      }
+    ]
   }
 });

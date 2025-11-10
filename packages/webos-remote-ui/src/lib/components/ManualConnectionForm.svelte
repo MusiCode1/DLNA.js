@@ -1,17 +1,27 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  type Props = {
+    ipAddress?: string;
+    clientKey?: string;
+    macAddress?: string;
+    onipInput?: (value: string) => void;
+    onipBlur?: (value: string) => void;
+    onclientKeyInput?: (value: string) => void;
+    onmacInput?: (value: string) => void;
+    onmacBlur?: (value: string) => void;
+  };
 
-  export let ipAddress = '';
-  export let clientKey = '';
-  export let macAddress = '';
+  const noop = () => {};
 
-  const dispatch = createEventDispatcher<{
-    ipInput: string;
-    ipBlur: string;
-    clientKeyInput: string;
-    macInput: string;
-    macBlur: string;
-  }>();
+  let {
+    ipAddress = '',
+    clientKey = '',
+    macAddress = '',
+    onipInput = noop,
+    onipBlur = noop,
+    onclientKeyInput = noop,
+    onmacInput = noop,
+    onmacBlur = noop
+  }: Props = $props();
 </script>
 
 <div class="connection-form" id="manual-connection">
@@ -21,23 +31,23 @@
       id="tv-ip"
       placeholder="הכנס כתובת IP של הטלוויזיה"
       value={ipAddress}
-      on:input={(event) => dispatch('ipInput', (event.target as HTMLInputElement).value)}
-      on:change={(event) => dispatch('ipBlur', (event.target as HTMLInputElement).value)}
+      oninput={(event) => onipInput((event.target as HTMLInputElement).value)}
+      onchange={(event) => onipBlur((event.target as HTMLInputElement).value)}
     />
     <input
       type="text"
       id="client-key"
       placeholder="מפתח לקוח (אופציונלי)"
       value={clientKey}
-      on:input={(event) => dispatch('clientKeyInput', (event.target as HTMLInputElement).value)}
+      oninput={(event) => onclientKeyInput((event.target as HTMLInputElement).value)}
     />
     <input
       type="text"
       id="tv-mac"
       placeholder="כתובת MAC (ל-WoL)"
       value={macAddress}
-      on:input={(event) => dispatch('macInput', (event.target as HTMLInputElement).value)}
-      on:change={(event) => dispatch('macBlur', (event.target as HTMLInputElement).value)}
+      oninput={(event) => onmacInput((event.target as HTMLInputElement).value)}
+      onchange={(event) => onmacBlur((event.target as HTMLInputElement).value)}
     />
   </div>
 </div>

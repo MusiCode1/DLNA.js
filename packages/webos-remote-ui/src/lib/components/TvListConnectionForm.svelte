@@ -1,15 +1,17 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { TvInfo } from '$stores/tv-list';
 
-  export let options: TvInfo[] = [];
-  export let selectedName: string | null = null;
-  export let isLoading = false;
-  export let error: string | undefined;
+  type Props = {
+    options?: TvInfo[];
+    selectedName?: string | null;
+    isLoading?: boolean;
+    error?: string;
+    onselect?: (name: string) => void;
+  };
 
-  const dispatch = createEventDispatcher<{ select: string }>();
+  let { options = [], selectedName = null, isLoading = false, error, onselect }: Props = $props();
 
-  $: selectedTv = options.find((item) => item.name === selectedName);
+  const selectedTv = $derived(options.find((item) => item.name === (selectedName ?? '')));
 </script>
 
 <div class="connection-form" id="list-connection">
@@ -17,12 +19,12 @@
     <select
       id="tv-select"
       class="tv-select"
-      bind:value={selectedName}
-      on:change={(event) => dispatch('select', (event.target as HTMLSelectElement).value)}
+      value={selectedName ?? ''}
+      onchange={(event) => onselect?.((event.target as HTMLSelectElement).value)}
       disabled={isLoading || options.length === 0}
     >
       <option value="">{isLoading ? 'טוען טלוויזיות...' : 'בחר טלוויזיה...'}</option>
-      {#each options as option}
+      {#each options as option (option.name)}
         <option value={option.name}>{option.name}</option>
       {/each}
     </select>

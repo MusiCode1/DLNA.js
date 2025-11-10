@@ -1,15 +1,23 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  type Props = {
+    screenshotUrl?: string | null;
+    isContinuous?: boolean;
+    isConnected?: boolean;
+    isLoading?: boolean;
+    oncapture?: () => void;
+    ontoggle?: (enabled: boolean) => void;
+  };
 
-  export let screenshotUrl: string | null = null;
-  export let isContinuous = false;
-  export let isConnected = false;
-  export let isLoading = false;
+  const noop = () => {};
 
-  const dispatch = createEventDispatcher<{
-    capture: void;
-    toggle: boolean;
-  }>();
+  let {
+    screenshotUrl = null,
+    isContinuous = false,
+    isConnected = false,
+    isLoading = false,
+    oncapture = noop,
+    ontoggle = noop
+  }: Props = $props();
 </script>
 
 <div id="screenshot-container" class="card" style="flex: 1; display: flex; flex-direction: column;">
@@ -35,16 +43,16 @@
   </div>
 
   <div class="screenshot-controls" style="margin-top: 16px;">
-    <button id="screenshot-btn" on:click={() => dispatch('capture')} disabled={!isConnected || isLoading}>
+    <button id="screenshot-btn" onclick={oncapture} disabled={!isConnected || isLoading}>
       {isLoading ? 'מצלם...' : 'צלם מסך'}
     </button>
     <label for="continuous-screenshot-cb">
       <input
         type="checkbox"
         id="continuous-screenshot-cb"
-        bind:checked={isContinuous}
+        checked={isContinuous}
         disabled={!isConnected}
-        on:change={(event) => dispatch('toggle', (event.target as HTMLInputElement).checked)}
+        onchange={(event) => ontoggle((event.target as HTMLInputElement).checked)}
       />
       <span>רצף</span>
     </label>

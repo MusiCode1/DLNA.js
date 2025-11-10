@@ -1,13 +1,17 @@
 <script lang="ts">
+  import { fromStore } from 'svelte/store';
   import { notificationStore } from '$stores/notifications';
+
+  const notificationsValue = fromStore(notificationStore);
+  const notifications = $derived(notificationsValue.current);
 </script>
 
-{#if $notificationStore.length}
+{#if notifications.length}
   <div class="notification-host">
-    {#each $notificationStore as notification}
+    {#each notifications as notification (notification.id)}
       <div class={`notification notification--${notification.type}`}>
         <span>{notification.message}</span>
-        <button type="button" on:click={() => notificationStore.dismiss(notification.id)}>×</button>
+        <button type="button" onclick={() => notificationStore.dismiss(notification.id)}>×</button>
       </div>
     {/each}
   </div>
