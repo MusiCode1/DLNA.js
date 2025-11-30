@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Remote UI Concept</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      :root {
+        font-family: "Segoe UI", sans-serif;
+        --primary: #2563eb;
+        --primary-dark: #1d4ed8;
+        --secondary: #0ea5e9;
+        --success: #10b981;
+        --danger: #ef4444;
+        --surface: #ffffff;
+        --muted: #6b7280;
+        --bg: #eef2f7;
+        --radius-lg: 1.25rem;
+        --radius-sm: 0.65rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at top, #f7faff 0%, #eef2f7 60%);
+        display: flex;
+        justify-content: center;
+        padding: 32px;
+        color: #111827;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(320px, 360px) minmax(360px, 480px);
+        gap: 28px;
+        width: min(1100px, 100%);
+      }
+
+      @media (max-width: 940px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      section {
+        background: var(--surface);
+        padding: 24px;
+        border-radius: var(--radius-lg);
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.4rem;
+        text-align: center;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #fff;
+      }
+
+      .pill--online {
+        background: linear-gradient(135deg, var(--success), #059669);
+      }
+
+      .pill::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.8;
+      }
+
+      .card {
+        background: #f8fafc;
+        border-radius: var(--radius-sm);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .card__title {
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+      }
+
+      .mode-switch {
+        display: flex;
+        background: #e2e8f0;
+        border-radius: var(--radius-sm);
+        padding: 4px;
+        gap: 4px;
+      }
+
+      .mode-switch button {
+        flex: 1;
+        border: none;
+        padding: 10px 12px;
+        border-radius: calc(var(--radius-sm) - 2px);
+        background: transparent;
+        font-weight: 600;
+        cursor: pointer;
+        color: #1f2937;
+        transition: 0.2s;
+      }
+
+      .mode-switch button.active {
+        background: var(--surface);
+        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+      }
+
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.85rem;
+        color: #4b5563;
+      }
+
+      input,
+      select {
+        border: 1px solid #e5e7eb;
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        font-size: 0.95rem;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        border: none;
+        border-radius: var(--radius-sm);
+        padding: 12px 16px;
+        font-weight: 600;
+        cursor: pointer;
+        color: #fff;
+        flex: 1;
+        min-width: 120px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
+      }
+
+      .btn--primary {
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      }
+
+      .btn--ghost {
+        background: rgba(37, 99, 235, 0.1);
+        color: var(--primary);
+      }
+
+      .btn--danger {
+        background: linear-gradient(135deg, var(--danger), #dc2626);
+      }
+
+      .layout-chip-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        border: none;
+        background: #e0f2fe;
+        color: #0369a1;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .control-panel {
+        border: 4px solid #111827;
+        border-radius: 32px;
+        padding: 36px 32px 28px;
+        background: #fff;
+        box-shadow: 0 25px 55px rgba(15, 23, 42, 0.18);
+        display: grid;
+        grid-template-columns: 110px 1fr 110px;
+        grid-template-rows: auto auto;
+        gap: 18px;
+        justify-items: center;
+        align-items: center;
+      }
+
+      .control-column {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .control-column--stretch {
+        height: 100%;
+        justify-content: space-between;
+      }
+
+      .pill-btn {
+        width: 72px;
+        height: 116px;
+        border-radius: 32px;
+        border: 3px solid #111827;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.3rem;
+        cursor: pointer;
+      }
+
+      .circle-btn {
+        width: 68px;
+        height: 68px;
+        border-radius: 50%;
+        border: 3px solid #111827;
+        background: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 1.2rem;
+        cursor: pointer;
+      }
+
+      .circle-btn.large {
+        width: 88px;
+        height: 88px;
+      }
+
+      .dpad {
+        width: 240px;
+        aspect-ratio: 1;
+        position: relative;
+        display: grid;
+        place-items: center;
+      }
+
+      .dpad::before,
+      .dpad::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        border: 3px solid #111827;
+      }
+
+      .dpad::before {
+        inset: 0;
+      }
+
+      .dpad::after {
+        inset: 70px;
+      }
+
+      .dpad__btn {
+        position: absolute;
+        width: 96px;
+        height: 96px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .dpad__btn span {
+        width: 0;
+        height: 0;
+        border-style: solid;
+      }
+
+      .dpad__btn--up {
+        top: 8px;
+        left: 50%;
+        transform: translate(-50%, 0);
+      }
+
+      .dpad__btn--up span {
+        border-width: 0 18px 28px 18px;
+        border-color: transparent transparent #111827 transparent;
+      }
+
+      .dpad__btn--down {
+        bottom: 8px;
+        left: 50%;
+        transform: translate(-50%, 0);
+      }
+
+      .dpad__btn--down span {
+        border-width: 28px 18px 0 18px;
+        border-color: #111827 transparent transparent transparent;
+      }
+
+      .dpad__btn--left {
+        left: 8px;
+        top: 50%;
+        transform: translate(0, -50%);
+      }
+
+      .dpad__btn--left span {
+        border-width: 18px 28px 18px 0;
+        border-color: transparent #111827 transparent transparent;
+      }
+
+      .dpad__btn--right {
+        right: 8px;
+        top: 50%;
+        transform: translate(0, -50%);
+      }
+
+      .dpad__btn--right span {
+        border-width: 18px 0 18px 28px;
+        border-color: transparent transparent transparent #111827;
+      }
+
+      .dpad__btn--center {
+        width: 104px;
+        height: 104px;
+        background: #fff;
+        border: 3px solid #111827;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: 1rem;
+        color: #111827;
+        transform: translate(-50%, -50%);
+        left: 50%;
+        top: 50%;
+      }
+
+      .dpad__btn--center span {
+        border: none;
+        width: auto;
+        height: auto;
+      }
+
+      .control-panel__footer {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-evenly;
+        width: 100%;
+        gap: 18px;
+      }
+
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .toast-box {
+        background: #fef9c3;
+        border-radius: var(--radius-sm);
+        padding: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .toast-box input {
+        flex: 1;
+        border: none;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <header style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
+          <h1>שלט WebOS קומפקטי</h1>
+          <span class="pill pill--online">מחובר למכשיר Living Room</span>
+        </header>
+
+        <div class="card">
+          <span class="card__title">מצב חיבור</span>
+          <div class="mode-switch">
+            <button class="active">רשימת טלוויזיות</button>
+            <button>חיבור ידני</button>
+          </div>
+          <div class="grid-2">
+            <label>
+              כתובת IP
+              <input value="192.168.1.15" />
+            </label>
+            <label>
+              Client Key
+              <input placeholder="הכנס מפתח" />
+            </label>
+          </div>
+          <label>
+            כתובת MAC
+            <input value="AA:BB:CC:DD:EE:FF" />
+          </label>
+        </div>
+
+        <div class="card">
+          <span class="card__title">ניהול התחברות</span>
+          <div class="actions">
+            <button class="btn btn--ghost">בדיקת מצב</button>
+            <button class="btn btn--primary">התחבר</button>
+            <button class="btn btn--danger">נתק</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <span class="card__title">תצוגת מכשיר</span>
+          <div class="layout-chip-group">
+            <button class="chip">Living Room</button>
+            <button class="chip">Kids TV</button>
+            <button class="chip">Studio Display</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="card control-panel">
+          <div class="control-column control-column--stretch">
+            <button class="pill-btn">
+              <span>🏠</span>
+            </button>
+            <button class="pill-btn">
+              <span style="font-size: 1.1rem;">↩</span>
+            </button>
+          </div>
+
+          <div class="dpad">
+            <button class="dpad__btn dpad__btn--up" aria-label="Up"><span></span></button>
+            <button class="dpad__btn dpad__btn--left" aria-label="Left"><span></span></button>
+            <button class="dpad__btn dpad__btn--center" aria-label="OK"><span>OK</span></button>
+            <button class="dpad__btn dpad__btn--right" aria-label="Right"><span></span></button>
+            <button class="dpad__btn dpad__btn--down" aria-label="Down"><span></span></button>
+          </div>
+
+          <div class="control-column control-column--stretch">
+            <button class="circle-btn">▲</button>
+            <button class="circle-btn">🔊</button>
+            <button class="circle-btn">▼</button>
+          </div>
+
+          <div class="control-panel__footer">
+            <button class="circle-btn large">⏻</button>
+            <button class="circle-btn large">⚙️</button>
+            <button class="circle-btn large">📁</button>
+            <button class="circle-btn large">🔇</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <span class="card__title">הקלדה והודעות</span>
+          <label>
+            הקלד לטלוויזיה
+            <input placeholder="חיפוש ב-YouTube..." />
+          </label>
+          <div class="actions">
+            <button class="btn btn--primary">שלח Enter</button>
+            <button class="btn btn--ghost">מחק תו</button>
+          </div>
+          <div class="toast-box">
+            <input placeholder="הכנס הודעת Toast" />
+            <button class="btn btn--primary" style="min-width: 96px;">שלח</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
