@@ -27,6 +27,28 @@ WebSend [myserver.com] /fancy/data.php?log=1234
 
 WebSend [192.168.1.102:3300] /api/play-preset/Moishy
 
+Template {"NAME":"Seeed Studio XIAO ESP32C6","GPIO":[1,1,1,1,0,0,1,1,0,0,1,1,1,1,1,320,3200,3232,704,736,672,768,640,608,0,0,0,0,0,0,0],"FLAG":0,"BASE":1}
+
+Template {"NAME":"Seeed Studio XIAO ESP32C6","GPIO":[1,1,1,1,0,0,1,1,0,0,1,1,1,1,1,320,3200,3232,1,736,1,768,640,608,0,0,0,0,0,0,0],"FLAG":0,"BASE":1}
+
+Backlog Ssid1 MakeLab-guest2; Password1 20182018; Template {"NAME":"Seeed Studio XIAO ESP32C6","GPIO":[1,1,1,1,0,0,1,1,0,0,1,1,1,1,1,320,3200,3232,1,736,1,768,640,608,0,0,0,0,0,0,0],"FLAG":0,"BASE":1}; Gpio18 18; Gpio20 18;
+
+BackLog Gpio18 18; Gpio20 18;
+
+Backlog Ssid1 HALNy-2.4G-01a2a1; Password1 wftWZZfc59;
+Backlog Ssid1 smart-home; Password1 4y48q4686l6ayh;
+
+Weblog 4
+SerialLog 4
+SetOption13 1
+
+WifiScan 1
+
+
+```
+
+```json
+{"NAME":"Seeed Studio XIAO ESP32C6","GPIO":[1,1,1,1,0,0,1,1,0,0,1,1,1,1,1,320,3200,3232,1,736,1,768,640,608,0,0,0,0,0,0,0],"FLAG":0,"BASE":1}
 ```
 
 # RClone
