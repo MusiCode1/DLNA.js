@@ -1,0 +1,27 @@
+{
+  "name": "mqtt-router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "mqtt": "^5.14.1",
+    "path-to-regexp": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.6",
+    "vitest": "^2.1.4"
+  }
+}
