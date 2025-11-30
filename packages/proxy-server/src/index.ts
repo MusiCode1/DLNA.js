@@ -26,10 +26,12 @@ if (!__dirname) {
   __dirname = dirname;
 }
 
-const publicAbsolutePathDirectory = path.join(__dirname, '..', 'public');
-const publicRelativePathDirectory = 'public';
-const uiBuildRelativePath = path.join(publicRelativePathDirectory, 'ui-build');
-const uiIndexPath = path.join(publicAbsolutePathDirectory, 'ui-build', 'index.html');
+const rootDir = path.join(__dirname, '..', '..', '..');
+
+const v1RelativePathDirectory = path.join(__dirname, '..', 'public');
+
+const uiBuildRelativePath = path.join(rootDir, 'packages', 'webos-remote-ui', 'build');
+const uiIndexPath = path.join(uiBuildRelativePath, 'index.html');
 
 // Generic proxy for fetching resources from the TV to solve CORS issues.
 // This supports streaming the response body.
@@ -73,7 +75,7 @@ app.post('/api/wake', handleWakeRequest);
 
 // Serve the legacy public assets that are not part of the UI build (e.g. tv-list.json)
 app.use('/tv-list.json', serveStatic({
-  root: publicRelativePathDirectory
+  root: v1RelativePathDirectory
 }));
 
 // Define the WebSocket proxy route
@@ -178,7 +180,7 @@ app.get(
 );
 
 const uiStatic = serveStatic({
-  root: uiBuildRelativePath
+  root: v1RelativePathDirectory
 });
 
 async function serveUiIndex(c: any) {
@@ -203,7 +205,7 @@ app.use('*', async (c, next) => {
   }
 
   const response = await uiStatic(c, next);
-  if (response.status !== 404) {
+  if (response?.status !== 404) {
     return response;
   }
 

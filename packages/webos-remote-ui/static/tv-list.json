@@ -1,18 +1,18 @@
 [
   {
-    "name": "Turciz-Basement",
+    "name": "טורקיז-מרתף",
     "ip": "192.168.1.41",
     "mac-address": "48:9E:9D:FB:F7:98",
     "client-key": "e6d865a8129fc69d17db75829985ad14"
   },
   {
-    "name": "Turciz-Living-Room",
+    "name": "טורקיז-סלון",
     "ip": "192.168.1.42",
     "mac-address": "48:9E:9D:FB:F7:CC",
     "client-key": "7971b54a460430a87ed9207ed314cada"
   },
   {
-    "name": "Galim-Living-Room",
+    "name": "גלים-סלון",
     "ip": "192.168.1.43",
     "mac-address": "54:77:87:C7:C0:D8",
     "client-key": "b4ada0780d39a6bb5361deeabff6649c"
